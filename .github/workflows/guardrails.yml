@@ -1,0 +1,9 @@
+name: Guardrails
+on: pull_request
+jobs:
+  guardrails:            # make this a required check in branch protection on main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/check-secrets.sh
+      - run: bash scripts/check-rls.sh
