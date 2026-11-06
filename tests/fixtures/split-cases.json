@@ -1,0 +1,15 @@
+{
+  "_note": "Shared by lib/money/split.test.ts and tests/db/money.test.ts so the TypeScript and SQL price split can never drift apart. Inputs are illustrative, not pricing decisions.",
+  "cases": [
+    { "pph": 2000, "minutes": 150, "type": "percent",  "value": 2500, "price": 5000, "fee": 1250, "earnings": 3750 },
+    { "pph": 2000, "minutes": 120, "type": "percent",  "value": 2500, "price": 4000, "fee": 1000, "earnings": 3000 },
+    { "pph": 1850, "minutes": 90,  "type": "percent",  "value": 2000, "price": 2775, "fee": 555,  "earnings": 2220 },
+    { "pph": 1999, "minutes": 70,  "type": "percent",  "value": 2250, "price": 2332, "fee": 525,  "earnings": 1807 },
+    { "pph": 1999, "minutes": 61,  "type": "percent",  "value": 3333, "price": 2032, "fee": 677,  "earnings": 1355 },
+    { "pph": 2000, "minutes": 150, "type": "per_hour", "value": 400,  "price": 5000, "fee": 1000, "earnings": 4000 },
+    { "pph": 1875, "minutes": 105, "type": "per_hour", "value": 375,  "price": 3281, "fee": 656,  "earnings": 2625 },
+    { "pph": 300,  "minutes": 60,  "type": "per_hour", "value": 500,  "price": 300,  "fee": 300,  "earnings": 0 },
+    { "pph": 2000, "minutes": 60,  "type": "percent",  "value": 0,    "price": 2000, "fee": 0,    "earnings": 2000 },
+    { "pph": 2000, "minutes": 60,  "type": "percent",  "value": 10000, "price": 2000, "fee": 2000, "earnings": 0 }
+  ]
+}

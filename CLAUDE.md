@@ -6,7 +6,8 @@ https://claude.ai/artifact/1WEp7QQgrj5dGn1wzooEWz (summary in intent/v1/spec.md)
 
 ## Commands
 - Dev: npm run dev (http://localhost:3000)
-- Test: npm test (unit), npm run test:e2e (Playwright, needs dev server)
+- Test: npm test (unit), npm run test:db (schema + RLS, every role, real Postgres, no Docker),
+  npm run test:e2e (Playwright, needs dev server)
 - Lint/types: npm run lint && npm run typecheck (run before every commit)
 - DB: npx supabase start | npx supabase db reset | npx supabase gen types typescript --local > lib/db/types.ts
 - Guardrails: bash scripts/check-secrets.sh && bash scripts/check-rls.sh
