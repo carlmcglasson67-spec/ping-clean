@@ -289,3 +289,27 @@ describe("security review fixes", () => {
       `update public.cleaner_documents set status = 'verified', reviewed_by = $1, reviewed_at = now() where cleaner_id = $2`, [U.tara, U.sam]))).toBe(DENIED);
   });
 });
+
+describe("functions added in future", () => {
+  it("aren't callable by anonymous or signed-in users unless they're granted on purpose", async () => {
+    const r = await as("superuser", async (q) => {
+      await q.rows(`create function public.future_rpc() returns int language sql as 'select 1'`);
+      const [row] = await q.rows<{ anon: boolean; authed: boolean; pub: boolean }>(`select
+        has_function_privilege('anon', 'public.future_rpc()', 'execute') as anon,
+        has_function_privilege('authenticated', 'public.future_rpc()', 'execute') as authed,
+        has_function_privilege('public', 'public.future_rpc()', 'execute') as pub`);
+      return row;
+    });
+    expect(r).toEqual({ anon: false, authed: false, pub: false });
+  });
+
+  it("logs a changed saved card without storing its ids", async () => {
+    const [row] = await as("superuser", async (q) => {
+      await q.rows(`insert into public.series_billing (series_id, stripe_customer_id, stripe_payment_method_id) values ($1, 'cus_x', 'pm_x')`, [IDS.annaSeries]);
+      await q.rows(`update public.series_billing set stripe_payment_method_id = 'pm_y' where series_id = $1`, [IDS.annaSeries]);
+      return q.rows<{ action: string; detail: object }>(`select action, detail from public.audit_log where entity = 'series_billing' and action = 'update'`);
+    });
+    expect(row?.detail).toEqual({ stripe_payment_method_id: "changed" });
+    expect(JSON.stringify(row)).not.toMatch(/cus_x|pm_x|pm_y/);
+  });
+});

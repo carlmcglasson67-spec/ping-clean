@@ -103,8 +103,10 @@ create policy profiles_update_self on public.profiles
 create table public.audit_log (
   id bigint generated always as identity primary key,
   actor_id uuid,
-  -- Who acted when it wasn't a signed-in person: 'stripe-webhook', 'cron', 'seed'…
-  -- Server code sets it with: select set_config('app.actor', 'stripe-webhook', true)
+  -- Who acted when it wasn't a signed-in person: 'stripe-webhook', 'cron'…
+  -- Set by the security-definer function doing the write, in the same transaction:
+  --   perform set_config('app.actor', 'stripe-webhook', true);
+  -- (A supabase-js call can't set it: each request is its own transaction.) Unset → 'system'.
   actor_label text,
   action text not null,
   entity text not null,
@@ -121,8 +123,9 @@ create policy audit_admin_read on public.audit_log
 
 create index audit_log_entity_idx on public.audit_log (entity, entity_id, created_at desc);
 
--- Generic row audit. Trigger args are columns to leave out of the diff (personal
--- data or file paths), so the log never stores names, addresses or documents.
+-- Generic row audit. Trigger args are redacted columns (personal data, file paths,
+-- payment ids): the log records that they changed, never what they changed to, so it
+-- never stores names, addresses, documents or card details.
 -- Every entry records who acted (a user id, or an app.actor label for the system)
 -- and, for anything tied to a visit, the visit id (ping-money-rules rule 6).
 create function private.audit_row() returns trigger
@@ -132,12 +135,15 @@ declare
   new_j jsonb := case when tg_op in ('INSERT', 'UPDATE') then to_jsonb(new) else '{}'::jsonb end;
   diff jsonb := '{}'::jsonb;
   k text;
-  skip text[] := coalesce(tg_argv::text[], '{}') || array['updated_at', 'created_at'];
+  redact text[] := coalesce(tg_argv::text[], '{}');      -- log that it changed, never the value
+  ignore text[] := array['updated_at', 'created_at'];
 begin
   for k in select jsonb_object_keys(old_j || new_j) loop
-    continue when k = any (skip);
+    continue when k = any (ignore);
     if (old_j -> k) is distinct from (new_j -> k) then
-      diff := diff || jsonb_build_object(k, jsonb_build_object('from', old_j -> k, 'to', new_j -> k));
+      diff := diff || jsonb_build_object(k,
+        case when k = any (redact) then '"changed"'::jsonb
+             else jsonb_build_object('from', old_j -> k, 'to', new_j -> k) end);
     end if;
   end loop;
 

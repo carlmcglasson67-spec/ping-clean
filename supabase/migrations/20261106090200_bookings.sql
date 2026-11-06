@@ -184,6 +184,9 @@ create table public.series_billing (
 alter table public.series_billing enable row level security;
 create trigger series_billing_touch before update on public.series_billing
   for each row execute function private.touch_updated_at();
+-- A changed card is worth knowing about; the ids themselves stay out of the log.
+create trigger series_billing_audit after insert or update on public.series_billing
+  for each row execute function private.audit_row('stripe_customer_id', 'stripe_payment_method_id');
 revoke all on public.series_billing from anon;
 revoke insert, update, delete on public.series_billing from authenticated;
 create policy series_billing_admin_read on public.series_billing

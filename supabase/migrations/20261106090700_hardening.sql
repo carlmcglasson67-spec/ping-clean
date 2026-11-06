@@ -7,6 +7,9 @@
 revoke truncate, references, trigger on all tables in schema public from anon, authenticated;
 alter default privileges in schema public revoke truncate, references, trigger on tables from anon, authenticated;
 
--- Functions are executable by PUBLIC by default in Postgres. Every public function
--- we've written grants its own access explicitly; make that the rule for new ones.
-alter default privileges in schema public revoke execute on functions from public;
+-- New functions: Postgres lets PUBLIC execute them, and Supabase also grants anon and
+-- authenticated directly. Remove both, so every future function must grant its own
+-- access on purpose (as every function so far already does). The PUBLIC default is
+-- global, so it can't be scoped "in schema"; the anon/authenticated one can.
+alter default privileges revoke execute on functions from public;
+alter default privileges in schema public revoke execute on functions from anon, authenticated;
