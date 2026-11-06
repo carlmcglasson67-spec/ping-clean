@@ -425,3 +425,41 @@ describe("engine re-check fixes", () => {
     }
   });
 });
+
+describe("engine final-check fixes", () => {
+  it("keeps booking visits for everyone else when one job fails, and tells the admin", async () => {
+    const c = await pool.connect();
+    try {
+      // A second claimed series (Ben's, held by Alex) that should still get its visits.
+      await c.query(`update public.series set status = 'claimed', cleaner_id = $1, claimed_at = now(), offering_since = null where id = $2`, [U.alex, IDS.benSeries]);
+      await c.query(`create function public.boom() returns trigger language plpgsql as $$ begin
+        if new.series_id = '${IDS.annaSeries}' then raise exception 'test failure'; end if; return new; end $$`);
+      await c.query(`create trigger boom before insert on public.visits for each row execute function public.boom()`);
+      await c.query(`call private.run_generate_visits()`);
+      await c.query(`reset search_path`);
+      const { rows: ben } = await c.query(`select count(*)::int as n from public.visits where series_id = $1`, [IDS.benSeries]);
+      const { rows: alerts } = await c.query(`select kind, series_id from public.engine_alerts where kind = 'generate_failed'`);
+      expect(ben[0].n).toBeGreaterThan(0);
+      expect(alerts).toEqual([{ kind: "generate_failed", series_id: IDS.annaSeries }]);
+    } finally {
+      await c.query(`reset search_path`);
+      await c.query(`drop trigger if exists boom on public.visits`);
+      await c.query(`drop function if exists public.boom()`);
+      await c.query(`delete from public.engine_alerts`);
+      await c.query(`delete from public.visits where series_id = $1`, [IDS.benSeries]);
+      await c.query(`update public.series set status = 'offering', cleaner_id = null, claimed_at = null, offering_since = now() - interval '30 minutes' where id = $1`, [IDS.benSeries]);
+      c.release();
+    }
+  });
+
+  it("audits an admin resolving an alert", async () => {
+    const [row] = await setupThen(async (su) => {
+      await su.rows(`insert into public.engine_alerts (kind, series_id, message) values ('release_failed', $1, 'x')`, [IDS.benSeries]);
+    }, U.admin, async (q) => {
+      await q.rows(`update public.engine_alerts set resolved_at = now(), resolved_by = $1`, [U.admin]);
+      return q.rows<{ actor_id: string; detail: Record<string, unknown> }>(`select actor_id, detail from public.audit_log where entity = 'engine_alerts'`);
+    });
+    expect(row?.actor_id).toBe(U.admin);
+    expect(Object.keys(row?.detail ?? {})).toEqual(expect.arrayContaining(["resolved_at", "resolved_by"]));
+  });
+});

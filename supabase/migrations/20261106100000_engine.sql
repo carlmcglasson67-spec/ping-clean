@@ -62,7 +62,7 @@ create trigger visits_audit_delete after delete on public.visits
 -- Things the engine needs a person to look at. Admin-only; written by the engine.
 create table public.engine_alerts (
   id uuid primary key default gen_random_uuid(),
-  kind text not null check (kind in ('release_failed', 'visit_needs_cover')),
+  kind text not null check (kind in ('release_failed', 'generate_failed', 'visit_needs_cover')),
   series_id uuid references public.series (id) on delete cascade,
   visit_id uuid references public.visits (id) on delete cascade,
   message text not null check (char_length(message) <= 500),
@@ -72,8 +72,11 @@ create table public.engine_alerts (
 );
 alter table public.engine_alerts enable row level security;
 create index engine_alerts_open_idx on public.engine_alerts (created_at desc) where resolved_at is null;
--- One open release-failure alert per series, not one every five minutes.
-create unique index engine_alerts_one_open_failure on public.engine_alerts (series_id) where kind = 'release_failed' and resolved_at is null;
+-- One open failure alert per series and kind, not one every run.
+create unique index engine_alerts_one_open_failure on public.engine_alerts (series_id, kind)
+  where kind in ('release_failed', 'generate_failed') and resolved_at is null;
+create trigger engine_alerts_audit after update on public.engine_alerts
+  for each row execute function private.audit_row('message');
 revoke all on public.engine_alerts from anon;
 revoke insert, update, delete on public.engine_alerts from authenticated;
 grant update (resolved_at, resolved_by) on public.engine_alerts to authenticated;
@@ -185,8 +188,12 @@ declare
 begin
   perform pg_catalog.set_config('search_path', '', false);  -- see run_release_offers
   for sid in select id from public.series where status = 'claimed' loop
-    perform set_config('app.actor', 'cron:generate-visits', true);
-    perform private.generate_visits_for_series(sid, private.london_today() + p_horizon_days);
+    begin
+      perform set_config('app.actor', 'cron:generate-visits', true);
+      perform private.generate_visits_for_series(sid, private.london_today() + p_horizon_days);
+    exception when others then
+      perform private.note_engine_failure('generate_failed', sid, sqlerrm);
+    end;
     commit;
   end loop;
 end $$;
@@ -234,14 +241,16 @@ begin
   end if;
 end $$;
 
--- Records a failed series for the admin (once, until resolved) instead of failing silently.
-create function private.note_release_failure(p_series uuid, p_error text)
+-- Records a failed series for the admin (once per kind, until resolved) instead of
+-- failing silently. p_kind: 'release_failed' or 'generate_failed'.
+create function private.note_engine_failure(p_kind text, p_series uuid, p_error text)
 returns void
 language plpgsql security definer set search_path = '' as $$
 begin
-  raise warning 'release_offers: series % skipped: %', p_series, p_error;
+  raise warning '%: series % skipped: %', p_kind, p_series, p_error;
   insert into public.engine_alerts (kind, series_id, message)
-  values ('release_failed', p_series, left('Couldn''t release offers: ' || p_error, 500))
+  values (p_kind, p_series, left(case p_kind when 'release_failed' then 'Couldn''t release offers: '
+                                             else 'Couldn''t book visits: ' end || p_error, 500))
   on conflict do nothing;
 end $$;
 
@@ -268,7 +277,7 @@ begin
       now_unclaimed := r.now_unclaimed;
       return next;
     exception when others then
-      perform private.note_release_failure(sid, sqlerrm);
+      perform private.note_engine_failure('release_failed', sid, sqlerrm);
     end;
   end loop;
 end $$;
@@ -283,7 +292,9 @@ declare
   sid uuid;
 begin
   -- Procedures that COMMIT can't carry a SET clause, so pin the search path here.
-  -- Every name below is schema-qualified anyway.
+  -- Every name below is schema-qualified anyway. Session-wide (a local setting would end
+  -- at the first COMMIT): harmless for pg_cron, which gives each run its own connection.
+  -- If you CALL this by hand in psql, run `reset search_path` afterwards.
   perform pg_catalog.set_config('search_path', '', false);
   if not private.settings_ready() then return; end if;
   for sid in select id from public.series where status in ('offering', 'unclaimed') order by offering_since loop
@@ -291,7 +302,7 @@ begin
       perform set_config('app.actor', 'cron:release-offers', true);
       perform private.release_one(sid);
     exception when others then
-      perform private.note_release_failure(sid, sqlerrm);
+      perform private.note_engine_failure('release_failed', sid, sqlerrm);
     end;
     commit;
   end loop;
@@ -484,7 +495,7 @@ revoke all on function private.generate_visits_for_series(uuid, date) from publi
 revoke all on function private.generate_visits(integer) from public;
 revoke all on function private.release_offers() from public;
 revoke all on function private.release_one(uuid) from public;
-revoke all on function private.note_release_failure(uuid, text) from public;
+revoke all on function private.note_engine_failure(text, uuid, text) from public;
 revoke all on procedure private.run_release_offers() from public;
 revoke all on procedure private.run_generate_visits(integer) from public;
 revoke all on function private.reopen_series(uuid) from public;
