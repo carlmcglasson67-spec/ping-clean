@@ -491,6 +491,7 @@ export type Database = {
           claimed_at: string | null;
           created_at: string;
           updated_at: string;
+          offering_since: string | null;
         };
         Insert: {
           id?: string;
@@ -511,6 +512,7 @@ export type Database = {
           claimed_at?: string | null;
           created_at?: string;
           updated_at?: string;
+          offering_since?: string | null;
         };
         Update: {
           id?: string;
@@ -531,6 +533,7 @@ export type Database = {
           claimed_at?: string | null;
           created_at?: string;
           updated_at?: string;
+          offering_since?: string | null;
         };
         Relationships: [];
       };
@@ -747,6 +750,36 @@ export type Database = {
       apply_as_cleaner: {
         Args: Record<PropertyKey, never>;
         Returns: Database["public"]["Tables"]["cleaners"]["Row"];
+      };
+      job_board: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          offer_id: string;
+          series_id: string;
+          offered_as: Database["public"]["Enums"]["cleaner_tier"];
+          opened_at: string;
+          town: string;
+          postcode_district: string;
+          bedrooms: number;
+          bathrooms: number;
+          has_pets: boolean;
+          frequency: Database["public"]["Enums"]["series_frequency"];
+          preferred_day: number;
+          window_start: string;
+          window_end: string;
+          duration_minutes: number;
+          starts_on: string;
+          earnings_per_visit_pence: number;
+          status: Database["public"]["Enums"]["series_status"];
+        }[];
+      };
+      claim_series: {
+        Args: { p_offer: string };
+        Returns: string;
+      };
+      admin_assign_series: {
+        Args: { p_series: string; p_cleaner: string };
+        Returns: undefined;
       };
     };
     Enums: {

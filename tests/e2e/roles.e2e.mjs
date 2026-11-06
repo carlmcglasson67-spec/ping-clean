@@ -22,10 +22,13 @@ const env = {
   PING_DIST_DIR: ".next-e2e",
 };
 
+// Anna's regular clean falls on today's weekday (see seed.sql), in London time.
+const todayName = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "long" }).format(new Date());
+
 const ROLES = [
   {
     who: "anna.customer", lands: "/account",
-    sees: ["Hello, Anna.", "12 Test Street", "Cleaner confirmed", "Mondays", "Paid cleans with receipts"],
+    sees: ["Hello, Anna.", "12 Test Street", "Cleaner confirmed", `${todayName}s`, "Paid cleans with receipts"],
     never: ["8 Sample Road", "Whitehaven CA28", "You earn", "Vetting queue"],
   },
   {
