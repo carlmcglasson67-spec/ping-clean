@@ -14,14 +14,19 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:db": "bash scripts/db-test.sh",
-    "guardrails": "bash scripts/check-secrets.sh && bash scripts/check-rls.sh"
+    "guardrails": "bash scripts/check-secrets.sh && bash scripts/check-rls.sh",
+    "test:e2e": "bash scripts/db-test.sh e2e",
+    "db:types": "bash scripts/db-test.sh types"
   },
   "dependencies": {
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource-variable/instrument-sans": "^5.3.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.119.0",
     "next": "^16.4.5",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "server-only": "^0.0.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -33,6 +38,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.4.5",
     "pg": "^8.23.1",
+    "playwright-core": "^1.65.0",
     "tailwindcss": "^4.3.5",
     "typescript": "^6.0.3",
     "vitest": "^5.1.0"

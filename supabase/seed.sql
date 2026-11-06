@@ -19,7 +19,7 @@ declare
 begin
   for u in
     select * from (values
-      ('00000000-0000-4000-a000-000000000001'::uuid, 'admin@ping.test',          'Ping Admin'),
+      ('00000000-0000-4000-a000-000000000001'::uuid, 'admin@ping.test',          'Jo Test'),
       ('00000000-0000-4000-a000-000000000002'::uuid, 'anna.customer@ping.test',  'Anna Test'),
       ('00000000-0000-4000-a000-000000000003'::uuid, 'ben.customer@ping.test',   'Ben Test'),
       ('00000000-0000-4000-a000-000000000004'::uuid, 'tara.cleaner@ping.test',   'Tara Test'),

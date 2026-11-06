@@ -31,7 +31,7 @@ describe("sign-up", () => {
         `insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-4000-a000-0000000000aa', 'sneaky@ping.test', '{"role":"admin","full_name":"Sneaky"}')`,
       );
       const [p] = await q.rows<{ role: string }>(`select role from public.profiles where id = '00000000-0000-4000-a000-0000000000aa'`);
-      return p.role;
+      return p!.role;
     });
     expect(role).toBe("customer");
   });
@@ -145,8 +145,8 @@ describe("the clean", () => {
     });
     expect(result.tick).toBe("ok");
     expect(result.fakeTime).toBe(DENIED);
-    expect(result.item.done).toBe(true);
-    expect(Date.now() - result.item.done_at.getTime()).toBeLessThan(60_000);
+    expect(result.item!.done).toBe(true);
+    expect(Date.now() - result.item!.done_at.getTime()).toBeLessThan(60_000);
   });
 
   it("stops another cleaner ticking someone else's visit", async () => {

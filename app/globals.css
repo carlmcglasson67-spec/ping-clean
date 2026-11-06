@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+/*
+  Ping Clean design tokens. One set for the site and all three apps.
+
+  Ink on warm paper, with a single signal colour for the thing to press.
+  The paper is never pure white: Pervonio rule, no text floating on white.
+*/
+@theme {
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+
+  /* Surfaces */
+  --color-paper: #f5f1e8;      /* page background */
+  --color-paper-2: #ece6d8;    /* recessed panels, skeletons */
+  --color-card: #fbf9f4;       /* raised cards */
+  --color-ink: #11181f;        /* text, dark panels */
+  --color-ink-2: #3a444e;      /* secondary text */
+  --color-ink-3: #6b747d;      /* hints, meta */
+  --color-line: #d9d1c0;       /* hairlines on paper */
+  --color-line-dark: #2a333c;  /* hairlines on ink */
+
+  /* Brand */
+  --color-signal: #ff5a2b;     /* primary action. The "ping". */
+  --color-signal-ink: #c2370f; /* signal text on paper (AA on paper) */
+  --color-signal-soft: #ffe3d8;
+  --color-mist: #dbe6ef;       /* cool accent panels */
+  --color-moss: #23493b;       /* deep green for trust moments */
+
+  /* Status */
+  --color-ok: #1f7a4d;
+  --color-ok-soft: #dcefe3;
+  --color-warn: #9a5b00;
+  --color-warn-soft: #fbeccb;
+  --color-bad: #b3261e;
+  --color-bad-soft: #f8dcd8;
+
+  /* Type scale: fluid, confident, never small. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.4;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.5;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.6;
+  --text-lg: clamp(1.125rem, 1.05rem + 0.3vw, 1.25rem);
+  --text-lg--line-height: 1.55;
+  --text-xl: clamp(1.375rem, 1.2rem + 0.7vw, 1.75rem);
+  --text-xl--line-height: 1.25;
+  --text-2xl: clamp(1.875rem, 1.5rem + 1.6vw, 2.75rem);
+  --text-2xl--line-height: 1.1;
+  --text-3xl: clamp(2.5rem, 1.8rem + 3vw, 4.5rem);
+  --text-3xl--line-height: 1;
+  --text-4xl: clamp(3.25rem, 2rem + 6vw, 8.5rem);
+  --text-4xl--line-height: 0.92;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.875rem;
+  --radius-lg: 1.375rem;
+  --radius-xl: 2rem;
+
+  --shadow-card: 0 1px 0 rgb(17 24 31 / 0.04), 0 8px 24px -12px rgb(17 24 31 / 0.18);
+  --shadow-lift: 0 2px 0 rgb(17 24 31 / 0.05), 0 20px 40px -20px rgb(17 24 31 / 0.35);
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  html {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    min-height: 100dvh;
+  }
+
+  @media (min-width: 64rem) {
+    body { font-size: 1.125rem; }  /* 18px body on desktop */
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 96;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+
+  p { text-wrap: pretty; }
+
+  ::selection { background: var(--color-signal); color: white; }
+
+  :focus-visible {
+    outline: 3px solid var(--color-signal);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Fine paper grain so large ink and paper panels never look flat. */
+  .grain {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  @keyframes ping-pulse {
+    0% { transform: scale(1); opacity: 0.55; }
+    80%, 100% { transform: scale(2.6); opacity: 0; }
+  }
+  .ping-pulse { animation: ping-pulse 2.4s var(--ease-out-soft) infinite; }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: none; }
+  }
+  .rise { animation: rise 0.9s var(--ease-out-soft) both; }
+}

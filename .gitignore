@@ -13,3 +13,5 @@ supabase/.branches/
 playwright-report/
 test-results/
 .DS_Store
+screenshots/
+.next-e2e/

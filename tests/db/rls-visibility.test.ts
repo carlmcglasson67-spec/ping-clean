@@ -54,7 +54,7 @@ describe.each(Object.keys(EXPECTED))("%s sees only their own data", (who) => {
     await as(who as keyof typeof EXPECTED & "anna", async (q) => {
       for (const t of TABLES) {
         seen[t] = await q.count(`public.${t}`);
-        want[t] = EXPECTED[who][t] ?? 0;
+        want[t] = EXPECTED[who]![t] ?? 0;
       }
     });
     expect(seen).toEqual(want);
@@ -108,8 +108,8 @@ describe("address privacy", () => {
 describe("public pricing", () => {
   it("lets anyone see the customer price but not the commission", async () => {
     const [p] = await as("anon", (q) => q.rows(`select * from public.public_pricing()`));
-    expect(Object.keys(p).sort()).toEqual(["launch_districts", "min_booking_minutes", "price_per_hour_pence", "ready"]);
-    expect(p.ready).toBe(true);
+    expect(Object.keys(p!).sort()).toEqual(["launch_districts", "min_booking_minutes", "price_per_hour_pence", "ready"]);
+    expect(p!.ready).toBe(true);
   });
 
   it("reports not ready while the real numbers are still unset", async () => {
@@ -117,6 +117,6 @@ describe("public pricing", () => {
       await q.rows(`update public.settings set price_per_hour_pence = null where id`);
       return q.rows<{ ready: boolean }>(`select * from public.public_pricing()`);
     });
-    expect(p.ready).toBe(false);
+    expect(p!.ready).toBe(false);
   });
 });

@@ -4,6 +4,7 @@
 #   2. loads tests/db/supabase-stub.sql (the bits of Supabase we depend on)
 #   3. applies every migration in order, then supabase/seed.sql
 #   4. runs tests/db/*.test.ts, which log in as each seeded role and check what it can see
+#      (argument "types": regenerate lib/db/types.ts instead; "e2e": run the app end to end)
 # Set PING_TEST_DATABASE_URL to reuse an existing empty database instead (CI does this).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -35,4 +36,10 @@ done
 "${PSQL[@]}" -f supabase/seed.sql
 echo "db: $(ls supabase/migrations/*.sql | wc -l) migrations + seed applied"
 
-npx vitest run --config vitest.db.config.ts
+if [ "${1:-}" = "types" ]; then
+  mkdir -p lib/db && node scripts/gen-db-types.mjs
+elif [ "${1:-}" = "e2e" ]; then
+  node tests/e2e/roles.e2e.mjs
+else
+  npx vitest run --config vitest.db.config.ts
+fi
