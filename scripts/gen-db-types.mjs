@@ -114,6 +114,10 @@ out += `${ind(2)}};
         Args: { p_series: string; p_cleaner: string };
         Returns: undefined;
       };
+      admin_reopen_series: {
+        Args: { p_series: string };
+        Returns: undefined;
+      };
     };
     Enums: {
 `;

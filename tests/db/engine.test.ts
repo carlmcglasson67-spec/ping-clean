@@ -27,7 +27,7 @@ describe("generate_visits", () => {
       const [again] = await q.rows<{ n: number }>(`select private.generate_visits() as n`);
       const visits = await q.rows<{ d: string; price_pence: number; ping_fee_pence: number; cleaner_earnings_pence: number; cleaner_id: string }>(
         `select scheduled_date::text as d, price_pence, ping_fee_pence, cleaner_earnings_pence, cleaner_id
-         from public.visits where series_id = $1 and scheduled_date > current_date + 7 order by 1`, [IDS.annaSeries]);
+         from public.visits where series_id = $1 and scheduled_date > private.london_today() + 7 order by 1`, [IDS.annaSeries]);
       return { first: first!.n, again: again!.n, visits };
     });
     expect(r.first).toBe(3); // +14, +21, +28 (today and +7 already exist)
@@ -42,16 +42,16 @@ describe("generate_visits", () => {
     const dates = await as("superuser", async (q) => {
       // Ben's Wednesday fortnightly clean, claimed by Alex, starting next Thursday-ish.
       await q.rows(`update public.series set status = 'claimed', cleaner_id = $1, claimed_at = now(), offering_since = null,
-                    starts_on = current_date + 1, preferred_day = extract(isodow from current_date + 3)::smallint where id = $2`, [U.alex, IDS.benSeries]);
-      await q.rows(`select private.generate_visits_for_series($1, current_date + 35)`, [IDS.benSeries]);
-      return (await q.rows<{ off: number }>(`select scheduled_date - current_date as off from public.visits where series_id = $1 order by 1`, [IDS.benSeries])).map((r) => r.off);
+                    starts_on = private.london_today() + 1, preferred_day = extract(isodow from private.london_today() + 3)::smallint where id = $2`, [U.alex, IDS.benSeries]);
+      await q.rows(`select private.generate_visits_for_series($1, private.london_today() + 35)`, [IDS.benSeries]);
+      return (await q.rows<{ off: number }>(`select scheduled_date - private.london_today() as off from public.visits where series_id = $1 order by 1`, [IDS.benSeries])).map((r) => r.off);
     });
     expect(dates).toEqual([3, 17, 31]);
   });
 
   it("never creates visits for a paused or ended series, or past its end date", async () => {
     const n = await as("superuser", async (q) => {
-      await q.rows(`update public.series set ends_on = current_date + 10 where id = $1`, [IDS.annaSeries]);
+      await q.rows(`update public.series set ends_on = private.london_today() + 10 where id = $1`, [IDS.annaSeries]);
       const [a] = await q.rows<{ n: number }>(`select private.generate_visits() as n`);
       await q.rows(`update public.series set status = 'paused' where id = $1`, [IDS.annaSeries]);
       const [b] = await q.rows<{ n: number }>(`select private.generate_visits() as n`);
@@ -163,7 +163,7 @@ describe("claim_series", () => {
   it("gives the job to the cleaner, unlocks the address, withdraws other offers and books visits", async () => {
     const r = await setupThen(async (su) => {
       await su.rows(`insert into public.job_offers (series_id, cleaner_id, tier, opens_at, status) values ($1, $2, 'approved', now(), 'open')`, [IDS.benSeries, U.alex]);
-      await su.rows(`update public.series set starts_on = current_date where id = $1`, [IDS.benSeries]);
+      await su.rows(`update public.series set starts_on = private.london_today() where id = $1`, [IDS.benSeries]);
     }, U.tara, async (q) => {
       const before = await q.count("public.properties");
       const [{ claim_series }] = (await q.rows<{ claim_series: string }>(`select public.claim_series(${taraOffer})`)) as [{ claim_series: string }];
@@ -205,6 +205,9 @@ describe("claim_series", () => {
     // Real race: two connections, committed setup, both claim concurrently.
     const setup = await pool.connect();
     try {
+      // Make both genuinely eligible: past the Top window, and Alex working Ben's day (Wed).
+      await setup.query(`update public.series set offering_since = now() - interval '3 hours' where id = $1`, [IDS.benSeries]);
+      await setup.query(`update public.cleaners set availability = '[{"day":3,"from":"09:00","to":"14:30"}]' where id = $1`, [U.alex]);
       await setup.query(`insert into public.job_offers (series_id, cleaner_id, tier, opens_at, status) values ($1, $2, 'approved', now(), 'open') on conflict do nothing`, [IDS.benSeries, U.alex]);
       const claim = async (who: string) => {
         const c = await pool.connect();
@@ -232,6 +235,7 @@ describe("claim_series", () => {
       await setup.query(`delete from public.visits where series_id = $1`, [IDS.benSeries]);
       await setup.query(`update public.series set status = 'offering', cleaner_id = null, claimed_at = null, offering_since = now() - interval '30 minutes' where id = $1`, [IDS.benSeries]);
       await setup.query(`delete from public.job_offers where series_id = $1 and cleaner_id = $2`, [IDS.benSeries, U.alex]);
+      await setup.query(`update public.cleaners set availability = '[{"day":2,"from":"09:00","to":"14:30"},{"day":4,"from":"09:00","to":"14:30"}]' where id = $1`, [U.alex]);
       await setup.query(`update public.job_offers set status = 'open', responded_at = null where series_id = $1 and cleaner_id = $2`, [IDS.benSeries, U.tara]);
       setup.release();
     }
@@ -255,5 +259,98 @@ describe("admin_assign_series", () => {
 
   it("won't assign to an applicant", async () => {
     expect(await as("admin", (q) => q.attempt(`select public.admin_assign_series($1, $2)`, [IDS.benSeries, U.sam]))).toBe("PC001");
+  });
+});
+
+// Fixes from the independent review of the engine.
+describe("engine review fixes", () => {
+  it("rejects malformed working days, so one cleaner can't break offers for everyone", async () => {
+    for (const bad of ['[{"day":"x"}]', '[{"day":1.5,"from":"09:00","to":"12:00"}]', '[{"day":8,"from":"09:00","to":"12:00"}]', '[{"day":1,"from":"12:00","to":"09:00"}]', '[{"day":1}]']) {
+      expect(await as("alex", (q) => q.attempt(`update public.cleaners set availability = $1::jsonb where id = $2`, [bad, U.alex]))).toBe("23514");
+    }
+    expect(await as("alex", (q) => q.attempt(`update public.cleaners set availability = '[{"day":2,"from":"09:00","to":"14:30"}]' where id = $1`, [U.alex]))).toBe("ok");
+  });
+
+  it("never books a visit for today, when the slot may already have passed", async () => {
+    const dates = await setupThen(async (su) => {
+      await su.rows(`update public.series set starts_on = private.london_today(), preferred_day = extract(isodow from private.london_today())::smallint, frequency = 'weekly' where id = $1`, [IDS.benSeries]);
+    }, U.tara, async (q) => {
+      await q.rows(`select public.claim_series((select id from public.job_offers where series_id = '${IDS.benSeries}' and cleaner_id = '${U.tara}'))`);
+      await q.rows(`reset role`);
+      return (await q.rows<{ off: number }>(`select scheduled_date - private.london_today() as off from public.visits where series_id = $1 order by 1`, [IDS.benSeries])).map((r) => r.off);
+    });
+    expect(dates).toEqual([7, 14, 21, 28]);
+  });
+
+  it("rechecks eligibility at the moment of claiming", async () => {
+    const offer = `(select id from public.job_offers where series_id = '${IDS.benSeries}' and cleaner_id = '${U.tara}')`;
+    expect(await setupThen(async (su) => { await su.rows(`update public.cleaners set tier = 'new' where id = $1`, [U.tara]); }, U.tara,
+      (q) => q.attempt(`select public.claim_series(${offer})`))).toBe("PC003"); // demoted during the Top window
+    expect(await setupThen(async (su) => { await su.rows(`update public.cleaners set areas = '{CA14}' where id = $1`, [U.tara]); }, U.tara,
+      (q) => q.attempt(`select public.claim_series(${offer})`))).toBe("PC003"); // no longer covers CA28
+  });
+
+  it("books no visits for a job held by a suspended cleaner", async () => {
+    const n = await as("superuser", async (q) => {
+      await q.rows(`update public.cleaners set status = 'suspended' where id = $1`, [U.tara]);
+      const [r] = await q.rows<{ n: number }>(`select private.generate_visits() as n`);
+      return r!.n;
+    });
+    expect(n).toBe(0);
+  });
+
+  it("won't assign a job to someone whose account isn't a cleaner's", async () => {
+    expect(await setupThen(async (su) => { await su.rows(`update public.profiles set role = 'customer' where id = $1`, [U.alex]); }, U.admin,
+      (q) => q.attempt(`select public.admin_assign_series($1, $2)`, [IDS.benSeries, U.alex]))).toBe("PC001");
+  });
+
+  it("audits a visit from the moment it's created, with its money", async () => {
+    const [row] = await as("superuser", async (q) => {
+      await q.rows(`select private.generate_visits()`);
+      return q.rows<{ actor_label: string; detail: Record<string, { to: unknown }> }>(
+        `select actor_label, detail from public.audit_log where entity = 'visits' and action = 'insert' order by id desc limit 1`);
+    });
+    expect(row?.actor_label).toBe("cron:generate-visits");
+    expect(row?.detail.price_pence?.to).toBe(5000);
+    expect(row?.detail.cleaner_earnings_pence?.to).toBe(3750);
+    expect(row?.detail.ping_fee_pence?.to).toBe(1250);
+  });
+
+  describe("putting a held job back on the board", () => {
+    it("starts a new round: future visits removed, the departing cleaner left out, everyone else offered again", async () => {
+      const r = await setupThen(async (su) => {
+        // Alex works Tue/Thu: make Anna's job a Tuesday in CA28 so both cleaners could do it.
+        await su.rows(`update public.properties set postcode = 'CA28 9AA' where id = $1`, [IDS.annaProperty]);
+        await su.rows(`update public.series set preferred_day = 2 where id = $1`, [IDS.annaSeries]);
+        await su.rows(`select private.generate_visits()`);
+      }, U.admin, async (q) => {
+        await q.rows(`select public.admin_reopen_series($1)`, [IDS.annaSeries]);
+        await q.rows(`reset role`);
+        await q.rows(`update public.series set offering_since = now() - interval '3 hours' where id = $1`, [IDS.annaSeries]);
+        await q.rows(`select * from private.release_offers()`);
+        const [s] = await q.rows<{ status: string; offer_round: number; cleaner_id: string | null }>(`select status, offer_round, cleaner_id from public.series where id = $1`, [IDS.annaSeries]);
+        const offers = await q.rows<{ cleaner_id: string; status: string }>(`select cleaner_id, status from public.job_offers where series_id = $1 and round = 2 order by status`, [IDS.annaSeries]);
+        const future = await q.count(`public.visits where series_id = '${IDS.annaSeries}' and scheduled_date > private.london_today()`);
+        const past = await q.count(`public.visits where series_id = '${IDS.annaSeries}' and scheduled_date <= private.london_today()`);
+        return { s, offers, future, past };
+      });
+      expect(r.s).toEqual({ status: "offering", offer_round: 2, cleaner_id: null });
+      expect(r.offers).toEqual([{ cleaner_id: U.alex, status: "open" }, { cleaner_id: U.tara, status: "withdrawn" }]);
+      expect(r.future).toBe(0);
+      expect(r.past).toBeGreaterThan(0); // history (done and today's) is kept
+    });
+
+    it("can then be claimed or assigned again", async () => {
+      const r = await as("admin", async (q) => {
+        await q.rows(`select public.admin_reopen_series($1)`, [IDS.annaSeries]);
+        return q.attempt(`select public.admin_assign_series($1, $2)`, [IDS.annaSeries, U.alex]);
+      });
+      expect(r).toBe("ok");
+    });
+
+    it("is admin-only", async () => {
+      expect(await as("tara", (q) => q.attempt(`select public.admin_reopen_series($1)`, [IDS.annaSeries]))).toBe(DENIED);
+      expect(await as("anna", (q) => q.attempt(`select private.reopen_series($1)`, [IDS.annaSeries]))).toBe(DENIED);
+    });
   });
 });

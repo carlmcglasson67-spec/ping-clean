@@ -212,6 +212,7 @@ export type Database = {
           status: Database["public"]["Enums"]["offer_status"];
           responded_at: string | null;
           created_at: string;
+          round: number;
         };
         Insert: {
           id?: string;
@@ -223,6 +224,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["offer_status"];
           responded_at?: string | null;
           created_at?: string;
+          round?: number;
         };
         Update: {
           id?: string;
@@ -234,6 +236,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["offer_status"];
           responded_at?: string | null;
           created_at?: string;
+          round?: number;
         };
         Relationships: [];
       };
@@ -492,6 +495,7 @@ export type Database = {
           created_at: string;
           updated_at: string;
           offering_since: string | null;
+          offer_round: number;
         };
         Insert: {
           id?: string;
@@ -513,6 +517,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           offering_since?: string | null;
+          offer_round?: number;
         };
         Update: {
           id?: string;
@@ -534,6 +539,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           offering_since?: string | null;
+          offer_round?: number;
         };
         Relationships: [];
       };
@@ -779,6 +785,10 @@ export type Database = {
       };
       admin_assign_series: {
         Args: { p_series: string; p_cleaner: string };
+        Returns: undefined;
+      };
+      admin_reopen_series: {
+        Args: { p_series: string };
         Returns: undefined;
       };
     };

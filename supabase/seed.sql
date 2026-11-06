@@ -9,6 +9,8 @@
 --   alex.cleaner@ping.test        cleaner, active, Approved tier
 --   sam.applicant@ping.test       cleaner applicant, not yet approved
 --
+-- Dates use London's calendar, as the app does.
+--
 -- The settings below are PLACEHOLDERS so the tests have numbers to work with. They are
 -- not pricing decisions: the real figures are open questions in intent/v1/spec.md.
 
@@ -69,7 +71,7 @@ insert into public.cleaner_documents (id, cleaner_id, kind, storage_path, expire
   ('00000000-0000-4000-d000-000000000001', '00000000-0000-4000-a000-000000000004', 'dbs',
      '00000000-0000-4000-a000-000000000004/dbs.pdf', null, 'verified', '00000000-0000-4000-a000-000000000001', now() - interval '60 days'),
   ('00000000-0000-4000-d000-000000000002', '00000000-0000-4000-a000-000000000004', 'insurance',
-     '00000000-0000-4000-a000-000000000004/insurance.pdf', current_date + 200, 'verified', '00000000-0000-4000-a000-000000000001', now() - interval '60 days'),
+     '00000000-0000-4000-a000-000000000004/insurance.pdf', (now() at time zone 'Europe/London')::date + 200, 'verified', '00000000-0000-4000-a000-000000000001', now() - interval '60 days'),
   ('00000000-0000-4000-d000-000000000003', '00000000-0000-4000-a000-000000000006', 'dbs',
      '00000000-0000-4000-a000-000000000006/dbs.pdf', null, 'pending', null, null);
 
@@ -82,11 +84,11 @@ insert into public.properties (id, customer_id, address_line1, town, postcode, b
 insert into public.series (id, property_id, customer_id, cleaner_id, frequency, preferred_day, window_start, window_end,
                            duration_minutes, price_per_hour_pence, commission_type, commission_value, status, starts_on, claimed_at) values
   ('00000000-0000-4000-c000-000000000001', '00000000-0000-4000-b000-000000000001', '00000000-0000-4000-a000-000000000002',
-     '00000000-0000-4000-a000-000000000004', 'weekly', extract(isodow from current_date)::smallint, '09:00', '12:00', 150, 2000, 'percent', 2500,
-     'claimed', current_date - 14, now() - interval '15 days'),
+     '00000000-0000-4000-a000-000000000004', 'weekly', extract(isodow from (now() at time zone 'Europe/London')::date)::smallint, '09:00', '12:00', 150, 2000, 'percent', 2500,
+     'claimed', (now() at time zone 'Europe/London')::date - 14, now() - interval '15 days'),
   ('00000000-0000-4000-c000-000000000002', '00000000-0000-4000-b000-000000000002', '00000000-0000-4000-a000-000000000003',
      null, 'fortnightly', 3, '10:00', '14:00', 120, 2000, 'percent', 2500,
-     'offering', current_date + 7, null);
+     'offering', (now() at time zone 'Europe/London')::date + 7, null);
 
 insert into public.job_offers (series_id, cleaner_id, tier, opens_at, expires_at, status, responded_at) values
   ('00000000-0000-4000-c000-000000000001', '00000000-0000-4000-a000-000000000004', 'top',
@@ -102,9 +104,9 @@ select v.id, '00000000-0000-4000-c000-000000000001', '00000000-0000-4000-a000-00
        v.d, '09:00', '12:00', 150, v.status::public.visit_status, v.started, v.completed,
        p.price_pence, p.cleaner_earnings_pence, p.ping_fee_pence
 from (values
-  ('00000000-0000-4000-e000-000000000001'::uuid, current_date - 7, 'completed', now() - interval '7 days', now() - interval '7 days' + interval '150 minutes'),
-  ('00000000-0000-4000-e000-000000000002'::uuid, current_date,     'scheduled', null::timestamptz, null::timestamptz),
-  ('00000000-0000-4000-e000-000000000003'::uuid, current_date + 7, 'scheduled', null, null)
+  ('00000000-0000-4000-e000-000000000001'::uuid, (now() at time zone 'Europe/London')::date - 7, 'completed', now() - interval '7 days', now() - interval '7 days' + interval '150 minutes'),
+  ('00000000-0000-4000-e000-000000000002'::uuid, (now() at time zone 'Europe/London')::date,     'scheduled', null::timestamptz, null::timestamptz),
+  ('00000000-0000-4000-e000-000000000003'::uuid, (now() at time zone 'Europe/London')::date + 7, 'scheduled', null, null)
 ) as v (id, d, status, started, completed)
 cross join lateral private.split_visit_price(2000, 150, 'percent', 2500) as p;
 
