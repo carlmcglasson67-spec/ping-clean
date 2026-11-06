@@ -1,7 +1,8 @@
 -- Ping Clean V1 — Marketplace engine.
 --
---   private.release_offers()         cron: offers open jobs Top → Approved → everyone, flags unclaimed
---   private.generate_visits()        cron: turns every claimed series into visits for the next 4 weeks
+--   private.run_release_offers()     cron: offers open jobs Top → Approved → everyone, flags unclaimed
+--   private.run_generate_visits()    cron: turns every claimed series into visits for the next 4 weeks
+--   public.engine_alerts             what the engine needs a person to look at (admin-only)
 --   public.job_board()               cleaner: their open offers, town and district only (no address)
 --   public.claim_series(offer)       cleaner: first eligible cleaner to claim wins, atomically
 --   public.admin_assign_series(…)    admin: give an open job to a cleaner by hand
@@ -55,6 +56,33 @@ create unique index job_offers_one_claim_per_round on public.job_offers (series_
 -- New visits are audited too (price, earnings and fee from the moment they exist).
 create trigger visits_audit_insert after insert on public.visits
   for each row execute function private.audit_row();
+create trigger visits_audit_delete after delete on public.visits
+  for each row execute function private.audit_row();
+
+-- Things the engine needs a person to look at. Admin-only; written by the engine.
+create table public.engine_alerts (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('release_failed', 'visit_needs_cover')),
+  series_id uuid references public.series (id) on delete cascade,
+  visit_id uuid references public.visits (id) on delete cascade,
+  message text not null check (char_length(message) <= 500),
+  created_at timestamptz not null default now(),
+  resolved_at timestamptz,
+  resolved_by uuid references public.profiles (id)
+);
+alter table public.engine_alerts enable row level security;
+create index engine_alerts_open_idx on public.engine_alerts (created_at desc) where resolved_at is null;
+-- One open release-failure alert per series, not one every five minutes.
+create unique index engine_alerts_one_open_failure on public.engine_alerts (series_id) where kind = 'release_failed' and resolved_at is null;
+revoke all on public.engine_alerts from anon;
+revoke insert, update, delete on public.engine_alerts from authenticated;
+grant update (resolved_at, resolved_by) on public.engine_alerts to authenticated;
+create policy engine_alerts_admin_read on public.engine_alerts
+  for select to authenticated using ((select private.is_admin()));
+create policy engine_alerts_admin_resolve on public.engine_alerts
+  for update to authenticated
+  using ((select private.is_admin()))
+  with check ((select private.is_admin()) and resolved_by = (select auth.uid()));
 
 create function private.london_today() returns date
 language sql stable set search_path = '' as $$
@@ -148,6 +176,22 @@ begin
   return inserted;
 end $$;
 
+-- What the scheduler runs nightly: commits after every series, so pauses, ends and
+-- reopens never wait for the whole run.
+create procedure private.run_generate_visits(p_horizon_days integer default 28)
+language plpgsql as $$
+declare
+  sid uuid;
+begin
+  perform pg_catalog.set_config('search_path', '', false);  -- see run_release_offers
+  for sid in select id from public.series where status = 'claimed' loop
+    perform set_config('app.actor', 'cron:generate-visits', true);
+    perform private.generate_visits_for_series(sid, private.london_today() + p_horizon_days);
+    commit;
+  end loop;
+end $$;
+
+-- Same work in one transaction (tests, and by hand).
 create function private.generate_visits(p_horizon_days integer default 28)
 returns integer
 language plpgsql security definer set search_path = '' as $$
@@ -163,51 +207,93 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- offers
--- Releases offers on the tier windows and flags jobs nobody has claimed. One series at a
--- time, each locked only while it's handled and isolated in its own sub-transaction, so a
--- claim waits milliseconds at most and one bad series can't stop the rest.
--- Offers stay open after a job goes unclaimed: anyone eligible can still take it.
+-- Releases offers for ONE series on its tier windows, and flags it unclaimed once every
+-- window has passed. Offers stay open after a job goes unclaimed: anyone eligible can
+-- still take it. Returns null if the series is locked (being claimed) or no longer open.
+create function private.release_one(p_series uuid, out offers_created integer, out now_unclaimed boolean)
+language plpgsql security definer set search_path = '' as $$
+declare
+  st public.settings;
+  s public.series;
+begin
+  select * into st from public.settings where id;
+  select * into s from public.series where id = p_series and status in ('offering', 'unclaimed') for update skip locked;
+  if not found then return; end if;
+
+  insert into public.job_offers (series_id, cleaner_id, tier, round, opens_at, status)
+  select s.id, e.cleaner_id, e.tier, s.offer_round, now(), 'open'
+  from private.eligible_cleaners(s.id) e
+  on conflict on constraint job_offers_one_per_round do nothing;
+  get diagnostics offers_created = row_count;
+
+  now_unclaimed := false;
+  if s.status = 'offering'
+     and now() - s.offering_since >= make_interval(mins => st.top_window_minutes + st.approved_window_minutes + st.unclaimed_alert_minutes) then
+    update public.series set status = 'unclaimed' where id = s.id;
+    now_unclaimed := true;
+  end if;
+end $$;
+
+-- Records a failed series for the admin (once, until resolved) instead of failing silently.
+create function private.note_release_failure(p_series uuid, p_error text)
+returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+  raise warning 'release_offers: series % skipped: %', p_series, p_error;
+  insert into public.engine_alerts (kind, series_id, message)
+  values ('release_failed', p_series, left('Couldn''t release offers: ' || p_error, 500))
+  on conflict do nothing;
+end $$;
+
+-- All open series, each in its own sub-transaction so one bad series can't stop the rest.
+-- Used by tests and by hand. Runs as one transaction, so a claim on a series already
+-- handled waits until it finishes; the scheduler uses the procedure below instead.
 create function private.release_offers()
 returns table (series_id uuid, offers_created integer, now_unclaimed boolean)
 language plpgsql security definer set search_path = '' as $$
 declare
-  st public.settings;
   sid uuid;
-  s public.series;
-  created integer;
-  flagged boolean;
+  r record;
 begin
   if not private.settings_ready() then
     return;  -- no guessing: nothing is offered until the real numbers are set
   end if;
-  select * into st from public.settings where id;
   perform set_config('app.actor', 'cron:release-offers', true);
-
   for sid in select id from public.series where status in ('offering', 'unclaimed') order by offering_since loop
     begin
-      select * into s from public.series where id = sid and status in ('offering', 'unclaimed') for update skip locked;
-      continue when not found;  -- being claimed right now, or no longer open
-
-      insert into public.job_offers (series_id, cleaner_id, tier, round, opens_at, status)
-      select s.id, e.cleaner_id, e.tier, s.offer_round, now(), 'open'
-      from private.eligible_cleaners(s.id) e
-      on conflict on constraint job_offers_one_per_round do nothing;
-      get diagnostics created = row_count;
-
-      flagged := false;
-      if s.status = 'offering'
-         and now() - s.offering_since >= make_interval(mins => st.top_window_minutes + st.approved_window_minutes + st.unclaimed_alert_minutes) then
-        update public.series set status = 'unclaimed' where id = s.id;
-        flagged := true;
-      end if;
-
-      series_id := s.id;
-      offers_created := created;
-      now_unclaimed := flagged;
+      select * into r from private.release_one(sid);
+      continue when r.offers_created is null;
+      series_id := sid;
+      offers_created := r.offers_created;
+      now_unclaimed := r.now_unclaimed;
       return next;
     exception when others then
-      raise warning 'release_offers: series % skipped: % (%)', sid, sqlerrm, sqlstate;
+      perform private.note_release_failure(sid, sqlerrm);
     end;
+  end loop;
+end $$;
+
+-- What the scheduler runs: same work, committing after every series, so each series is
+-- locked only for the moment it's handled and a claim never waits for the whole run.
+-- A procedure (not security definer and no SET clause: neither can commit); the
+-- scheduler runs it as the database owner.
+create procedure private.run_release_offers()
+language plpgsql as $$
+declare
+  sid uuid;
+begin
+  -- Procedures that COMMIT can't carry a SET clause, so pin the search path here.
+  -- Every name below is schema-qualified anyway.
+  perform pg_catalog.set_config('search_path', '', false);
+  if not private.settings_ready() then return; end if;
+  for sid in select id from public.series where status in ('offering', 'unclaimed') order by offering_since loop
+    begin
+      perform set_config('app.actor', 'cron:release-offers', true);
+      perform private.release_one(sid);
+    exception when others then
+      perform private.note_release_failure(sid, sqlerrm);
+    end;
+    commit;
   end loop;
 end $$;
 
@@ -352,9 +438,16 @@ declare
   s public.series;
 begin
   select * into s from public.series where id = p_series for update;
-  if not found or s.status not in ('claimed', 'paused') then
-    raise exception 'Only a job someone holds can go back on the board' using errcode = 'PC002';
+  if not found or s.status <> 'claimed' then
+    -- Not 'paused': the customer asked for a break, so it mustn't be offered to anyone.
+    raise exception 'Only a job a cleaner currently holds can go back on the board' using errcode = 'PC002';
   end if;
+
+  -- Today's visit (if any) stays booked but needs a person to sort cover.
+  insert into public.engine_alerts (kind, series_id, visit_id, message)
+  select 'visit_needs_cover', s.id, v.id, 'A regular clean went back on the board with a visit booked for today. Arrange cover or contact the customer.'
+  from public.visits v
+  where v.series_id = s.id and v.scheduled_date = private.london_today() and v.status = 'scheduled';
 
   update public.job_offers set status = 'expired', responded_at = coalesce(responded_at, now())
   where series_id = s.id and round = s.offer_round and status in ('open', 'pending');
@@ -390,6 +483,10 @@ revoke all on function private.eligible_cleaners(uuid) from public;
 revoke all on function private.generate_visits_for_series(uuid, date) from public;
 revoke all on function private.generate_visits(integer) from public;
 revoke all on function private.release_offers() from public;
+revoke all on function private.release_one(uuid) from public;
+revoke all on function private.note_release_failure(uuid, text) from public;
+revoke all on procedure private.run_release_offers() from public;
+revoke all on procedure private.run_generate_visits(integer) from public;
 revoke all on function private.reopen_series(uuid) from public;
 grant execute on function private.valid_availability(jsonb) to authenticated, service_role; -- used by a check constraint
 grant execute on function private.generate_visits(integer), private.release_offers() to service_role;
@@ -409,7 +506,7 @@ do $$
 begin
   if exists (select 1 from pg_available_extensions where name = 'pg_cron') then
     create extension if not exists pg_cron;
-    perform cron.schedule('ping-release-offers', '*/5 * * * *', 'select private.release_offers()');
-    perform cron.schedule('ping-generate-visits', '15 2 * * *', 'select private.generate_visits()');
+    perform cron.schedule('ping-release-offers', '*/5 * * * *', 'call private.run_release_offers()');
+    perform cron.schedule('ping-generate-visits', '15 2 * * *', 'call private.run_generate_visits()');
   end if;
 end $$;

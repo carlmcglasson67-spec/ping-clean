@@ -201,6 +201,39 @@ export type Database = {
         };
         Relationships: [];
       };
+      engine_alerts: {
+        Row: {
+          id: string;
+          kind: string;
+          series_id: string | null;
+          visit_id: string | null;
+          message: string;
+          created_at: string;
+          resolved_at: string | null;
+          resolved_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          kind: string;
+          series_id?: string | null;
+          visit_id?: string | null;
+          message: string;
+          created_at?: string;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          kind?: string;
+          series_id?: string | null;
+          visit_id?: string | null;
+          message?: string;
+          created_at?: string;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+        };
+        Relationships: [];
+      };
       job_offers: {
         Row: {
           id: string;

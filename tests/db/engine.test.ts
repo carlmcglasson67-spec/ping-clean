@@ -354,3 +354,74 @@ describe("engine review fixes", () => {
     });
   });
 });
+
+describe("engine re-check fixes", () => {
+  it("never puts a customer's paused clean back on the board", async () => {
+    expect(await setupThen(async (su) => { await su.rows(`update public.series set status = 'paused' where id = $1`, [IDS.annaSeries]); }, U.admin,
+      (q) => q.attempt(`select public.admin_reopen_series($1)`, [IDS.annaSeries]))).toBe("PC002");
+  });
+
+  it("audits the visits it clears, money included, and flags today's visit for cover", async () => {
+    const r = await as("superuser", async (q) => {
+      await q.rows(`select private.generate_visits()`);
+      await q.rows(`select private.reopen_series($1)`, [IDS.annaSeries]);
+      const deleted = await q.rows<{ detail: { price_pence: { from: number } } }>(
+        `select detail from public.audit_log where entity = 'visits' and action = 'delete' and detail -> 'series_id' ->> 'from' = $1`, [IDS.annaSeries]);
+      const alerts = await q.rows<{ kind: string; visit_id: string }>(`select kind, visit_id from public.engine_alerts`);
+      return { deleted, alerts };
+    });
+    expect(r.deleted.length).toBeGreaterThan(0);
+    expect(r.deleted[0]!.detail.price_pence.from).toBe(5000);
+    expect(r.alerts).toEqual([{ kind: "visit_needs_cover", visit_id: IDS.visitToday }]);
+  });
+
+  it("records a failing job once for the admin and carries on with the rest", async () => {
+    const r = await as("superuser", async (q) => {
+      // Break offers for Ben's series only.
+      await q.rows(`create function pg_temp.boom() returns trigger language plpgsql as $$ begin
+        if new.series_id = '${IDS.benSeries}' then raise exception 'test failure'; end if; return new; end $$`);
+      await q.rows(`create trigger boom before insert on public.job_offers for each row execute function pg_temp.boom()`);
+      // A second open job that should still be handled.
+      await q.rows(`update public.series set status = 'offering', cleaner_id = null, claimed_at = null, offering_since = now() where id = $1`, [IDS.annaSeries]);
+      await q.rows(`update public.series set offering_since = now() - interval '3 hours' where id = $1`, [IDS.benSeries]);
+      await q.rows(`delete from public.job_offers where series_id = $1`, [IDS.benSeries]);
+      const first = await q.rows<{ series_id: string }>(`select * from private.release_offers()`);
+      await q.rows(`select * from private.release_offers()`);
+      const alerts = await q.rows<{ kind: string; series_id: string }>(`select kind, series_id from public.engine_alerts where kind = 'release_failed'`);
+      return { handled: first.map((x) => x.series_id), alerts };
+    });
+    expect(r.handled).toEqual([IDS.annaSeries]);
+    expect(r.alerts).toEqual([{ kind: "release_failed", series_id: IDS.benSeries }]);
+  });
+
+  it("shows engine alerts to admins only", async () => {
+    const seen = async (who: "admin" | "tara" | "anna") =>
+      as("superuser", async (su) => {
+        await su.rows(`insert into public.engine_alerts (kind, series_id, message) values ('release_failed', $1, 'x')`, [IDS.benSeries]);
+        await su.rows(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: U[who], role: "authenticated" })]);
+        await su.rows(`set local role authenticated`);
+        return su.count("public.engine_alerts");
+      });
+    expect([await seen("admin"), await seen("tara"), await seen("anna")]).toEqual([1, 0, 0]);
+  });
+
+  it("runs on the scheduler as a procedure that commits after each job", async () => {
+    // CALL at top level (no surrounding transaction), exactly as pg_cron runs it.
+    const c = await pool.connect();
+    try {
+      await c.query(`update public.series set offering_since = now() - interval '3 hours', preferred_day = 2 where id = $1`, [IDS.benSeries]);
+      await c.query(`call private.run_release_offers()`);
+      const { rows } = await c.query(`select cleaner_id from public.job_offers where series_id = $1 and status = 'open' order by 1`, [IDS.benSeries]);
+      expect(rows.map((x) => x.cleaner_id)).toContain(U.alex); // Approved window open, Alex works Tuesdays
+      await c.query(`call private.run_generate_visits()`);
+      const { rows: sp } = await c.query(`show search_path`);
+      expect(sp[0].search_path).toBe(""); // pinned (empty) for the scheduler session
+      await c.query(`reset search_path`);
+    } finally {
+      await c.query(`delete from public.job_offers where series_id = $1 and cleaner_id = $2`, [IDS.benSeries, U.alex]);
+      await c.query(`delete from public.visits where series_id = $1 and scheduled_date > private.london_today() + 7`, [IDS.annaSeries]);
+      await c.query(`update public.series set offering_since = now() - interval '30 minutes', preferred_day = 3 where id = $1`, [IDS.benSeries]);
+      c.release();
+    }
+  });
+});
