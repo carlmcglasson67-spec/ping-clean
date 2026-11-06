@@ -84,7 +84,10 @@ create table public.visit_photos (
   room text check (char_length(room) <= 60),
   -- Path inside the private visit-photos bucket: <visit_id>/<file>.
   storage_path text not null unique check (storage_path ~ '^[0-9a-f-]{36}/[^/]+$'),
+  -- Server time the photo arrived. The phone's clock is never trusted for evidence.
   taken_at timestamptz not null default now(),
+  -- What the phone (or EXIF) claims, kept for reference only.
+  client_taken_at timestamptz,
   uploaded_by uuid not null references public.profiles (id),
   created_at timestamptz not null default now(),
   constraint photos_path_visit check (split_part(storage_path, '/', 1) = visit_id::text)
@@ -94,7 +97,7 @@ create index visit_photos_visit_idx on public.visit_photos (visit_id);
 
 revoke all on public.visit_photos from anon;
 revoke insert, update, delete on public.visit_photos from authenticated;
-grant insert (visit_id, kind, room, storage_path, taken_at, uploaded_by) on public.visit_photos to authenticated;
+grant insert (visit_id, kind, room, storage_path, client_taken_at, uploaded_by) on public.visit_photos to authenticated;
 
 create policy visit_photos_select on public.visit_photos
   for select to authenticated

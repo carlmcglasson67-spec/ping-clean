@@ -11,7 +11,10 @@ export default defineConfig([
     rules: {
       "no-restricted-imports": [
         "error",
-        { paths: [{ name: "@/lib/db/admin", message: "Service-role client is server-only. Use @/lib/db/server inside app/ (ping-data-security rule 2)." }] },
+        {
+          paths: [{ name: "@/lib/db/admin", message: "Service-role client is server-only. Use @/lib/db/server inside app/ (ping-data-security rule 2)." }],
+          patterns: [{ group: ["**/lib/db/admin", "**/lib/db/admin.*"], message: "Service-role client is server-only (ping-data-security rule 2)." }],
+        },
       ],
     },
   },

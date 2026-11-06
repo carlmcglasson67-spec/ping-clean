@@ -10,6 +10,7 @@ export type Database = {
         Row: {
           id: number;
           actor_id: string | null;
+          actor_label: string | null;
           action: string;
           entity: string;
           entity_id: string | null;
@@ -19,6 +20,7 @@ export type Database = {
         Insert: {
           id?: never;
           actor_id?: string | null;
+          actor_label?: string | null;
           action: string;
           entity: string;
           entity_id?: string | null;
@@ -28,6 +30,7 @@ export type Database = {
         Update: {
           id?: never;
           actor_id?: string | null;
+          actor_label?: string | null;
           action?: string;
           entity?: string;
           entity_id?: string | null;
@@ -486,8 +489,6 @@ export type Database = {
           starts_on: string;
           ends_on: string | null;
           claimed_at: string | null;
-          stripe_customer_id: string | null;
-          stripe_payment_method_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -508,8 +509,6 @@ export type Database = {
           starts_on: string;
           ends_on?: string | null;
           claimed_at?: string | null;
-          stripe_customer_id?: string | null;
-          stripe_payment_method_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -530,9 +529,28 @@ export type Database = {
           starts_on?: string;
           ends_on?: string | null;
           claimed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      series_billing: {
+        Row: {
+          series_id: string;
+          stripe_customer_id: string | null;
+          stripe_payment_method_id: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          series_id: string;
           stripe_customer_id?: string | null;
           stripe_payment_method_id?: string | null;
-          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          series_id?: string;
+          stripe_customer_id?: string | null;
+          stripe_payment_method_id?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -596,6 +614,7 @@ export type Database = {
           room: string | null;
           storage_path: string;
           taken_at: string;
+          client_taken_at: string | null;
           uploaded_by: string;
           created_at: string;
         };
@@ -606,6 +625,7 @@ export type Database = {
           room?: string | null;
           storage_path: string;
           taken_at?: string;
+          client_taken_at?: string | null;
           uploaded_by: string;
           created_at?: string;
         };
@@ -616,6 +636,7 @@ export type Database = {
           room?: string | null;
           storage_path?: string;
           taken_at?: string;
+          client_taken_at?: string | null;
           uploaded_by?: string;
           created_at?: string;
         };

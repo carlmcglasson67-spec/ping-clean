@@ -135,4 +135,4 @@ create policy documents_insert_own on public.cleaner_documents
 create policy documents_admin_review on public.cleaner_documents
   for update to authenticated
   using ((select private.is_admin()))
-  with check ((select private.is_admin()));
+  with check ((select private.is_admin()) and reviewed_by = (select auth.uid()));

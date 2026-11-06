@@ -31,8 +31,11 @@ create trigger settings_audit after update on public.settings
   for each row execute function private.audit_row();
 
 revoke all on public.settings from anon, authenticated;
-grant select, update on public.settings to authenticated;
-revoke update (id) on public.settings from authenticated;
+grant select on public.settings to authenticated;
+grant update (price_per_hour_pence, min_booking_minutes, commission_type, commission_value,
+              top_window_minutes, approved_window_minutes, unclaimed_alert_minutes,
+              cancel_notice_hours, late_cancel_fee_pence, late_cancel_cleaner_share_bps,
+              dispute_window_hours, launch_districts) on public.settings to authenticated;
 
 create policy settings_admin_read on public.settings
   for select to authenticated using ((select private.is_admin()));
@@ -147,8 +150,6 @@ create table public.series (
   starts_on date not null,
   ends_on date,
   claimed_at timestamptz,
-  stripe_customer_id text,
-  stripe_payment_method_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   foreign key (property_id, customer_id) references public.properties (id, customer_id),
@@ -166,11 +167,27 @@ create index series_open_idx on public.series (status) where status in ('offerin
 create trigger series_touch before update on public.series
   for each row execute function private.touch_updated_at();
 create trigger series_audit after insert or update on public.series
-  for each row execute function private.audit_row('stripe_customer_id', 'stripe_payment_method_id');
+  for each row execute function private.audit_row();
 
 -- Bookings, claims, pauses and ends all go through functions with business rules.
 revoke all on public.series from anon;
 revoke insert, update, delete on public.series from authenticated;
+
+-- Stripe identifiers for a series live apart from it, so the cleaner who can read
+-- the series never sees the customer's payment details. Admin read, server write.
+create table public.series_billing (
+  series_id uuid primary key references public.series (id) on delete cascade,
+  stripe_customer_id text,
+  stripe_payment_method_id text,
+  updated_at timestamptz not null default now()
+);
+alter table public.series_billing enable row level security;
+create trigger series_billing_touch before update on public.series_billing
+  for each row execute function private.touch_updated_at();
+revoke all on public.series_billing from anon;
+revoke insert, update, delete on public.series_billing from authenticated;
+create policy series_billing_admin_read on public.series_billing
+  for select to authenticated using ((select private.is_admin()));
 
 -- ---------------------------------------------------------------- visits
 create table public.visits (
@@ -246,14 +263,19 @@ create policy properties_customer_all on public.properties
   using (customer_id = (select auth.uid()))
   with check (customer_id = (select auth.uid()) and (select private.my_role()) = 'customer');
 
+-- Only while the cleaner holds the series AND is an active cleaner: a suspended
+-- cleaner loses the address, access notes and key code immediately.
 create policy properties_cleaner_claimed on public.properties
   for select to authenticated
-  using (exists (
-    select 1 from public.series s
-    where s.property_id = properties.id
-      and s.cleaner_id = (select auth.uid())
-      and s.status in ('claimed', 'paused')
-  ));
+  using (
+    (select private.is_active_cleaner())
+    and exists (
+      select 1 from public.series s
+      where s.property_id = properties.id
+        and s.cleaner_id = (select auth.uid())
+        and s.status in ('claimed', 'paused')
+    )
+  );
 
 create policy properties_admin on public.properties
   for select to authenticated using ((select private.is_admin()));

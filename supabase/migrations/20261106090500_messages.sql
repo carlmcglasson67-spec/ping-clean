@@ -16,14 +16,15 @@ revoke insert, update, delete on public.messages from authenticated;
 grant insert (series_id, sender_id, body) on public.messages to authenticated;
 grant update (read_at) on public.messages to authenticated;
 
--- Participants: the customer, and the cleaner while they hold the series.
+-- Participants: the customer, and the cleaner while they hold the series and are active.
 create function private.is_series_participant(sid uuid) returns boolean
 language sql stable security definer set search_path = '' as $$
   select exists (
     select 1 from public.series s
     where s.id = sid
       and (s.customer_id = (select auth.uid())
-           or (s.cleaner_id = (select auth.uid()) and s.status in ('claimed', 'paused')))
+           or (s.cleaner_id = (select auth.uid()) and s.status in ('claimed', 'paused')
+               and private.is_active_cleaner()))
   )
 $$;
 revoke all on function private.is_series_participant(uuid) from public;

@@ -6,7 +6,7 @@ import { as, IDS, pool } from "./helpers";
 afterAll(() => pool.end());
 
 const TABLES = [
-  "profiles", "cleaners", "cleaner_documents", "settings", "properties", "series", "visits",
+  "profiles", "cleaners", "cleaner_documents", "settings", "properties", "series", "series_billing", "visits",
   "job_offers", "checklist_templates", "checklist_items", "visit_photos", "reviews", "visit_qc",
   "payments", "payouts", "messages", "audit_log",
 ] as const;

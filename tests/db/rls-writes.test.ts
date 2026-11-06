@@ -205,3 +205,87 @@ describe("storage", () => {
     expect(await seen("anna")).toBe(0);
   });
 });
+
+// Fixes from the independent security review of the Phase 1 branch.
+describe("security review fixes", () => {
+  const asTaraAfter = async <T>(setup: string[], fn: (q: Parameters<Parameters<typeof as>[1]>[0]) => Promise<T>) =>
+    as("superuser", async (su) => {
+      for (const sql of setup) await su.rows(sql);
+      await su.rows(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: U.tara, role: "authenticated" })]);
+      await su.rows(`set local role authenticated`);
+      return fn(su);
+    });
+
+  it("takes the address, key code and messages away from a suspended cleaner at once", async () => {
+    const r = await asTaraAfter([`update public.cleaners set status = 'suspended' where id = '${U.tara}'`], async (q) => ({
+      properties: await q.count("public.properties"),
+      messages: await q.count("public.messages"),
+      send: await q.attempt(`insert into public.messages (series_id, sender_id, body) values ($1, $2, 'hi')`, [IDS.annaSeries, U.tara]),
+    }));
+    expect(r).toEqual({ properties: 0, messages: 0, send: DENIED });
+  });
+
+  it("keeps Stripe customer and card ids away from cleaners and customers", async () => {
+    const cols = await as("superuser", (q) => q.rows<{ column_name: string }>(
+      `select column_name from information_schema.columns where table_schema = 'public' and table_name = 'series' and column_name like 'stripe%'`));
+    expect(cols).toEqual([]);
+    const seen = async (who: "tara" | "anna" | "admin") =>
+      as("superuser", async (su) => {
+        await su.rows(`insert into public.series_billing (series_id, stripe_customer_id, stripe_payment_method_id) values ($1, 'cus_test', 'pm_test')`, [IDS.annaSeries]);
+        await su.rows(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: U[who], role: "authenticated" })]);
+        await su.rows(`set local role authenticated`);
+        return su.count("public.series_billing");
+      });
+    expect(await seen("tara")).toBe(0);
+    expect(await seen("anna")).toBe(0);
+    expect(await seen("admin")).toBe(1);
+  });
+
+  it("logs every money change with the visit and who made it", async () => {
+    const [row] = await as("superuser", async (q) => {
+      await q.rows(`select set_config('app.actor', 'stripe-webhook', true)`);
+      await q.rows(`update public.payments set status = 'refunded', refunded_pence = amount_pence where visit_id = $1`, [IDS.visitDone]);
+      return q.rows<{ actor_id: string | null; actor_label: string; detail: { visit_id: string; status: unknown } }>(
+        `select actor_id, actor_label, detail from public.audit_log where entity = 'payments' and action = 'update' order by id desc limit 1`);
+    });
+    expect(row).toMatchObject({ actor_id: null, actor_label: "stripe-webhook", detail: { visit_id: IDS.visitDone, status: { from: "succeeded", to: "refunded" } } });
+  });
+
+  it("labels unattributed system changes rather than leaving them blank", async () => {
+    const [row] = await as("superuser", async (q) => {
+      await q.rows(`update public.payouts set status = 'cancelled' where visit_id = $1`, [IDS.visitDone]);
+      return q.rows<{ actor_label: string; detail: { visit_id: string } }>(`select actor_label, detail from public.audit_log where entity = 'payouts' order by id desc limit 1`);
+    });
+    expect(row).toMatchObject({ actor_label: "system", detail: { visit_id: IDS.visitDone } });
+  });
+
+  it("stamps photo times on the server; the phone's clock can't backdate evidence", async () => {
+    const r = await asTaraAfter([`update public.visits set status = 'in_progress', started_at = now() where id = '${IDS.visitToday}'`], async (q) => {
+      const backdate = await q.attempt(
+        `insert into public.visit_photos (visit_id, kind, storage_path, uploaded_by, taken_at) values ($1, 'before', $2, $3, now() - interval '30 days')`,
+        [IDS.visitToday, `${IDS.visitToday}/a.jpg`, U.tara]);
+      const ok = await q.attempt(
+        `insert into public.visit_photos (visit_id, kind, storage_path, uploaded_by, client_taken_at) values ($1, 'before', $2, $3, now() - interval '30 days')`,
+        [IDS.visitToday, `${IDS.visitToday}/b.jpg`, U.tara]);
+      const [p] = await q.rows<{ age: number }>(`select extract(epoch from now() - taken_at)::int as age from public.visit_photos where storage_path = $1`, [`${IDS.visitToday}/b.jpg`]);
+      return { backdate, ok, age: p?.age };
+    });
+    expect(r.backdate).toBe(DENIED);
+    expect(r.ok).toBe("ok");
+    expect(r.age).toBeLessThan(60);
+  });
+
+  it("never lets an API role truncate a table", async () => {
+    expect(await as("anna", (q) => q.attempt(`truncate public.visits`))).toBe(DENIED);
+    expect(await as("admin", (q) => q.attempt(`truncate public.settings`))).toBe(DENIED);
+  });
+
+  it("lets admins change settings values but not the settings row's id", async () => {
+    expect(await as("admin", (q) => q.attempt(`update public.settings set id = true where id`))).toBe(DENIED);
+  });
+
+  it("records the admin who actually reviewed a document", async () => {
+    expect(await as("admin", (q) => q.attempt(
+      `update public.cleaner_documents set status = 'verified', reviewed_by = $1, reviewed_at = now() where cleaner_id = $2`, [U.tara, U.sam]))).toBe(DENIED);
+  });
+});

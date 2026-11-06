@@ -103,6 +103,9 @@ create policy profiles_update_self on public.profiles
 create table public.audit_log (
   id bigint generated always as identity primary key,
   actor_id uuid,
+  -- Who acted when it wasn't a signed-in person: 'stripe-webhook', 'cron', 'seed'…
+  -- Server code sets it with: select set_config('app.actor', 'stripe-webhook', true)
+  actor_label text,
   action text not null,
   entity text not null,
   entity_id uuid,
@@ -120,6 +123,8 @@ create index audit_log_entity_idx on public.audit_log (entity, entity_id, create
 
 -- Generic row audit. Trigger args are columns to leave out of the diff (personal
 -- data or file paths), so the log never stores names, addresses or documents.
+-- Every entry records who acted (a user id, or an app.actor label for the system)
+-- and, for anything tied to a visit, the visit id (ping-money-rules rule 6).
 create function private.audit_row() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -140,9 +145,15 @@ begin
     return new;
   end if;
 
-  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  if (new_j ? 'visit_id') or (old_j ? 'visit_id') then
+    diff := diff || jsonb_build_object('visit_id', coalesce(new_j -> 'visit_id', old_j -> 'visit_id'));
+  end if;
+
+  insert into public.audit_log (actor_id, actor_label, action, entity, entity_id, detail)
   values (
     (select auth.uid()),
+    case when (select auth.uid()) is null
+         then coalesce(nullif(current_setting('app.actor', true), ''), 'system') end,
     lower(tg_op),
     tg_table_name,
     case when coalesce(new_j ->> 'id', old_j ->> 'id') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
