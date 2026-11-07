@@ -5,6 +5,9 @@ export const MARK_VIEWBOX = "-16.8 -0.5 152 152";
 export const ARC_WIDTH = 13;
 export const LETTER_WEIGHT = 2.5;
 
+/** Full-colour wordmark: one gradient across the letters (userSpaceOnUse, logo coordinates). */
+export const WORD_GRADIENT = { x1: 157, x2: 622, from: "#0052FE", to: "#00C2D1" } as const;
+
 /** Outer upper, inner upper, inner lower, outer lower. */
 export const ARCS = [
   { d: "M-5.09 71.41A56.3 56.3 0 0 1 52.96 10.23", colour: "#0F2DF6" },
@@ -15,7 +18,8 @@ export const ARCS = [
 
 export const SPARKLE = { d: "M61.95 52.4Q64.9 73.3 85.4 76.25Q64.9 79.2 61.95 100.1Q59 79.2 38.5 76.25Q59 73.3 61.95 52.4Z", colour: "#00C2D1" } as const;
 
-/** P i n g C l e a n. `stroked`: thickened with a round-joined stroke of LETTER_WEIGHT. */
+/** P i n g C l e a n. `stroked`: thickened with a round-joined stroke of LETTER_WEIGHT.
+ *  `colour`: the artwork's flat two-tone colour, kept for reference; full colour uses WORD_GRADIENT. */
 export const LETTERS = [
   { d: "M163.83 115.25Q161.47 115.25 159.86 113.73Q158.25 112.22 158.25 109.99V41.51Q158.25 39.18 159.86 37.72Q161.47 36.25 163.83 36.25H185.29Q193.33 36.25 199.55 39.59Q205.78 42.93 209.26 48.84Q212.75 54.76 212.75 62.45Q212.75 69.83 209.26 75.6Q205.78 81.36 199.55 84.6Q193.33 87.84 185.29 87.84H169.41V109.99Q169.41 112.22 167.85 113.73Q166.3 115.25 163.83 115.25ZM169.41 78.13H185.29Q190.22 78.13 193.98 76.1Q197.73 74.08 199.88 70.54Q202.02 67 202.02 62.45Q202.02 57.59 199.88 53.9Q197.73 50.21 193.98 48.08Q190.22 45.96 185.29 45.96H169.41Z", colour: "#0052FE", stroked: true },
   { d: "M226.26 115.25Q224.26 115.25 222.94 113.78Q221.62 112.32 221.62 110.09V65.08Q221.62 62.75 222.94 61.34Q224.26 59.92 226.26 59.92Q228.35 59.92 229.63 61.34Q230.9 62.75 230.9 65.08V110.09Q230.9 112.32 229.63 113.78Q228.35 115.25 226.26 115.25ZM226.26 50.92Q223.8 50.92 222.03 48.94Q220.25 46.97 220.25 44.24Q220.25 41.51 222.03 39.54Q223.8 37.56 226.26 37.56Q228.72 37.56 230.49 39.54Q232.27 41.51 232.27 44.24Q232.27 46.97 230.49 48.94Q228.72 50.92 226.26 50.92Z", colour: "#0052FE", stroked: true },

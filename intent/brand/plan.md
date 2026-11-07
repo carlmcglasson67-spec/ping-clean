@@ -7,7 +7,8 @@ Route-group pages stay with their tracks and re-skin through the token aliases.
 - **Logo**: rebuilt as SVG from Carl's crop (scripts/brand/gen-logo.py). Four arcs and the
   sparkle fitted to the crop by overlap (88%); wordmark is Comfortaa Bold (OFL), placed
   letter by letter on the original and thickened to its weight (87%), with a straight "l".
-  Colours flat per element, as in the artwork: "Ping" blue #0052FE, "Clean" teal #00C2D1.
+  The mark keeps the artwork's flat colours; the full-colour wordmark is one smooth gradient,
+  #0052FE to #00C2D1 left to right (Carl's choice after review). White and navy stay flat.
   Comparison: logo-comparison.png.
 - **Tokens**: new names (canvas, mist, card, navy-*, on-navy-*, blue, teal, teal-ink...).
   The earlier names (paper, ink, signal, moss...) are aliases onto them, so unmerged track

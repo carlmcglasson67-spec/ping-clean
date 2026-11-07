@@ -47,7 +47,8 @@ https://claude.ai/artifact/1WEp7QQgrj5dGn1wzooEWz (summary in intent/v1/spec.md)
 - Colours (tokens in app/globals.css, contrast tested in components/ui/tokens.test.ts):
   navy #010C26 / #011A3A / text #001D44, brand blue #0052FE, bright blue #1B7EFA,
   teal #00C2D1 (glow #18F5E8), teal-deep #0C93AC, teal-ink #08707F, mist #E2E7E9 / #F2F1F1.
-  Signature gradient blue #0052FE to teal #00C2D1, left to right, big type only.
+  Signature gradient blue #0052FE to teal #00C2D1, left to right: the full-colour wordmark
+  and big type only.
   Teal is never small text on light: use teal-ink. Use the token names, never hex in pages.
 - Feel: deep navy heroes with fine teal signal waves (`signal-waves`, `NavyPanel`), white
   and mist content sections, bold Sora headings, Figtree body.

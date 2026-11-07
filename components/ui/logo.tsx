@@ -1,13 +1,15 @@
 import Link from "next/link";
+import { useId } from "react";
 import { cn } from "./cn";
-import { ARC_WIDTH, ARCS, LETTER_WEIGHT, LETTERS, LOGO_VIEWBOX, MARK_VIEWBOX, SPARKLE } from "./logo-paths";
+import { ARC_WIDTH, ARCS, LETTER_WEIGHT, LETTERS, LOGO_VIEWBOX, MARK_VIEWBOX, SPARKLE, WORD_GRADIENT } from "./logo-paths";
 
 /**
  * The Ping Clean logo: signal arcs and sparkle, with the PingClean wordmark.
  * Drawn inline from the same paths as public/brand/*.svg (scripts/brand/gen-logo.py), so it
  * is crisp at every size and needs no request. Never retype the name as text instead.
  *
- * colour: "full" works on light and on navy (Carl's banners put it on navy);
+ * colour: "full" works on light and on navy (Carl's banners put it on navy): the mark in its
+ *         own colours, the wordmark one gradient from brand blue to teal;
  *         "white" for photos, the teal panels and anywhere the full colours fight;
  *         "navy" for single-colour print on light.
  * Size it with height (or font size: it is 1.4em tall by default).
@@ -29,6 +31,8 @@ export function Logo({
   decorative?: boolean;
 }) {
   const one = colour === "full" ? null : SINGLE[colour];
+  const gradientId = `pc-word-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const word = one ?? `url(#${gradientId})`;
   return (
     <svg
       viewBox={LOGO_VIEWBOX}
@@ -41,12 +45,20 @@ export function Logo({
         {ARCS.map((a) => <path key={a.d} d={a.d} stroke={one ?? a.colour} />)}
       </g>
       <path d={SPARKLE.d} fill={one ?? SPARKLE.colour} />
+      {one ? null : (
+        <defs>
+          <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1={WORD_GRADIENT.x1} y1={0} x2={WORD_GRADIENT.x2} y2={0}>
+            <stop offset="0" stopColor={WORD_GRADIENT.from} />
+            <stop offset="1" stopColor={WORD_GRADIENT.to} />
+          </linearGradient>
+        </defs>
+      )}
       {LETTERS.map((l) => (
         <path
           key={l.d}
           d={l.d}
-          fill={one ?? l.colour}
-          {...(l.stroked ? { stroke: one ?? l.colour, strokeWidth: LETTER_WEIGHT, strokeLinejoin: "round" as const } : {})}
+          fill={word}
+          {...(l.stroked ? { stroke: word, strokeWidth: LETTER_WEIGHT, strokeLinejoin: "round" as const } : {})}
         />
       ))}
     </svg>
