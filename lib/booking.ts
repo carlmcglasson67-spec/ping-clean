@@ -23,7 +23,16 @@ export const bookSeriesInput = z
     requestId: z.uuid(), // made once per checkout, so a double tap books once
   })
   .strict()
-  .refine((b) => b.windowEnd > b.windowStart, { message: "The window must end after it starts", path: ["windowEnd"] });
+  .refine((b) => b.windowEnd > b.windowStart, { message: "The window must end after it starts", path: ["windowEnd"] })
+  .refine((b) => minutesOf(b.windowEnd) - minutesOf(b.windowStart) >= b.durationMinutes, {
+    message: "The time window must be at least as long as the clean",
+    path: ["windowEnd"],
+  });
+
+function minutesOf(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h! * 60 + m!;
+}
 
 export type BookSeriesInput = z.infer<typeof bookSeriesInput>;
 

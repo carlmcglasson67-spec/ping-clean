@@ -22,6 +22,8 @@ export const PING_ERRORS = {
   PC024: "The first clean has to be after today.",
   PC025: "A booking is 1 to 8 cleans.",
   PC026: "That day or time isn't valid.",
+  PC027: "You already have cleans booked at this home on those dates.",
+  PC028: "That booking was already made with different details. Start the booking again.",
 } as const;
 
 export type PingErrorCode = keyof typeof PING_ERRORS;

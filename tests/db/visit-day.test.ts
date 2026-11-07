@@ -9,8 +9,11 @@ const COMPLETE = `select public.complete_visit($1)`;
 const today = IDS.visitToday; // Anna's clean today, Tara's (seed)
 
 /** Upload the file to the private bucket, then record it, as the cleaner app does. */
-const photo = async (q: Query, kind: "before" | "after", name: string, upload = true) => {
-  if (upload) await q.rows(`insert into storage.objects (bucket_id, name, owner) values ('visit-photos', $1, auth.uid())`, [`${today}/${name}.jpg`]);
+const photo = async (q: Query, kind: "before" | "after", name: string, upload: "real" | "none" | "empty" = "real") => {
+  if (upload !== "none") {
+    await q.rows(`insert into storage.objects (bucket_id, name, owner, metadata) values ('visit-photos', $1, auth.uid(), $2)`,
+      [`${today}/${name}.jpg`, JSON.stringify({ size: upload === "empty" ? 0 : 184_000, mimetype: "image/jpeg" })]);
+  }
   await q.rows(`insert into public.visit_photos (visit_id, kind, storage_path, uploaded_by) values ($1, $2, $3, $4)`,
     [today, kind, `${today}/${name}.jpg`, U.tara]);
 };
@@ -128,10 +131,40 @@ describe("complete_visit", () => {
   it("doesn't count a photo record with no uploaded file (security review)", async () => {
     const r = await as("tara", async (q) => {
       await readyToFinish(q, { after: false });
-      await photo(q, "after", "fake", false);
+      await photo(q, "after", "fake", "none");
       return q.failure(COMPLETE, [today]);
     });
     expect(r).toEqual({ code: "PC014", detail: "after" });
+  });
+
+  it("doesn't count an empty file, or a file someone else uploaded (review)", async () => {
+    const empty = await as("tara", async (q) => {
+      await readyToFinish(q, { after: false });
+      await photo(q, "after", "empty", "empty");
+      return q.failure(COMPLETE, [today]);
+    });
+    expect(empty).toEqual({ code: "PC014", detail: "after" });
+    const notHers = await as("tara", async (q) => {
+      await readyToFinish(q, { after: false });
+      await photo(q, "after", "other");
+      await q.rows(`reset role`);
+      await q.rows(`update storage.objects set owner = $1 where name = $2`, [U.alex, `${today}/other.jpg`]);
+      await q.actAs(U.tara);
+      return q.failure(COMPLETE, [today]);
+    });
+    expect(notHers).toEqual({ code: "PC014", detail: "after" });
+  });
+
+  it("refuses a reason made only of invisible or space characters (review)", async () => {
+    const r = await as("tara", async (q) => {
+      await q.rows(START, [today]);
+      const out: Record<string, string> = {};
+      for (const [name, text] of [["nbsp", " "], ["zero-width", "​​​"], ["ideographic", "　"], ["dots", "..."], ["ok", "No key"]]) {
+        out[name!] = await q.attempt(`update public.checklist_items set skipped_reason = $2 where visit_id = $1 and item_key = 'bins.empty'`, [today, text]);
+      }
+      return out;
+    });
+    expect(r).toEqual({ nbsp: CHECK, "zero-width": CHECK, ideographic: CHECK, dots: CHECK, ok: "ok" });
   });
 
   it("never lets a cleaner add, remove or re-label checklist items themselves", async () => {

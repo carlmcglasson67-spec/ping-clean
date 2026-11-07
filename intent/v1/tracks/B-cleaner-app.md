@@ -17,8 +17,10 @@ Need a shared change? Write it in SHARED-REQUESTS.md and stop that piece.
   booked again". Still town and district only until claimed.
 - **The visit day**: `start_visit(visit)` on the day lays out the checklist;
   `complete_visit(visit)` refuses until every item is ticked (`done = true`) or marked
-  "couldn't do" (`done = false, skipped_reason = '<why>'`, non-blank, max 300), and a before
-  and an after photo are uploaded (the file must be in the bucket, not just the row). Ticking
+  "couldn't do" (`done = false, skipped_reason = '<why>'`: at least one word of 3+ letters or
+  digits, max 300), and a before and an after photo are uploaded by that cleaner (the file
+  must be in the bucket and not empty, not just the row). Cleans left "scheduled" after their
+  day become no-shows overnight and the admin is told; a block ends once its last date passes. Ticking
   a skipped item doesn't clear its reason for you: send `{ done: true, skipped_reason: null }`. The customer sees the
   reasons on that visit. Errors PC010–PC015 → `pingErrorMessage()` in `lib/db/errors.ts`.
 

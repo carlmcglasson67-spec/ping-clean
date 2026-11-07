@@ -31,6 +31,8 @@ describe("bookSeriesInput", () => {
     expect(bookSeriesInput.safeParse({ ...valid, durationMinutes: 135 }).success).toBe(false);
     expect(bookSeriesInput.safeParse({ ...valid, preferredDay: 0 }).success).toBe(false);
     expect(bookSeriesInput.safeParse({ ...valid, windowStart: "14:00", windowEnd: "10:00" }).success).toBe(false);
+    expect(bookSeriesInput.safeParse({ ...valid, windowStart: "10:00", windowEnd: "11:30", durationMinutes: 120 }).success).toBe(false);
+    expect(bookSeriesInput.safeParse({ ...valid, windowStart: "10:00", windowEnd: "12:00", durationMinutes: 120 }).success).toBe(true);
   });
 
   it("maps to the database's argument names", () => {

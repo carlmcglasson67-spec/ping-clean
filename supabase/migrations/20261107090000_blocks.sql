@@ -239,8 +239,43 @@ begin
   return inserted;
 end $$;
 
--- A held block whose cleans all exist and none is still to do has finished: it ends, and
--- with it the cleaner's access to the address, key code and messages.
+-- Visits left behind after their day, for a person to look at.
+alter table public.engine_alerts drop constraint engine_alerts_kind_check;
+alter table public.engine_alerts add constraint engine_alerts_kind_check
+  check (kind in ('release_failed', 'generate_failed', 'visit_needs_cover', 'visit_no_show', 'visit_unfinished'));
+
+-- Nightly: a clean still 'scheduled' after its day never happened, so it becomes a no-show
+-- and the admin is told. One still 'in_progress' after its day was started but never
+-- finished: the admin is told and decides (it is never completed or charged automatically).
+-- Nobody's no-show count changes here: that is the admin's call, not the clock's.
+create function private.close_stale_visits() returns integer
+language plpgsql security definer set search_path = '' as $$
+declare
+  n integer;
+begin
+  perform set_config('app.actor', 'cron:generate-visits', true);
+  with stale as (
+    update public.visits set status = 'no_show'
+    where status = 'scheduled' and scheduled_date < private.london_today()
+    returning id, series_id
+  )
+  insert into public.engine_alerts (kind, series_id, visit_id, message)
+  select 'visit_no_show', series_id, id, 'A booked clean passed without being started. Check with the cleaner and the customer.'
+  from stale;
+  get diagnostics n = row_count;
+
+  insert into public.engine_alerts (kind, series_id, visit_id, message)
+  select 'visit_unfinished', v.series_id, v.id, 'A clean was started but never marked complete. Check it and settle it by hand.'
+  from public.visits v
+  where v.status = 'in_progress' and v.scheduled_date < private.london_today()
+    and not exists (select 1 from public.engine_alerts a where a.visit_id = v.id and a.kind = 'visit_unfinished');
+  return n;
+end $$;
+
+-- A held block is over when all its cleans exist and either none is still to do, or its
+-- last date has passed (whatever state the cleans were left in: those are alerts for the
+-- admin, not a reason to keep the address open). It ends, and with it the cleaner's access
+-- to the address, key code and messages.
 create function private.end_block_if_done(p_series uuid) returns boolean
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -250,9 +285,28 @@ begin
   where s.id = p_series
     and s.status = 'claimed'
     and (select count(*) from public.visits v where v.series_id = s.id) >= s.block_size
-    and not exists (select 1 from public.visits v where v.series_id = s.id and v.status in ('scheduled', 'in_progress'));
+    and (
+      not exists (select 1 from public.visits v where v.series_id = s.id and v.status in ('scheduled', 'in_progress'))
+      or (select max(v.scheduled_date) from public.visits v where v.series_id = s.id) < private.london_today()
+    );
   get diagnostics n = row_count;
   return n > 0;
+end $$;
+
+-- When a held job changes hands (claimed or assigned after going back on the board), any
+-- clean still booked from today on goes to the new cleaner. Otherwise today's clean would
+-- stay with the cleaner who left, nobody could start it, and the block could never end.
+-- The admin's "needs cover" alert stays open until a person confirms the cover.
+create function private.hand_over_visits(p_series uuid, p_cleaner uuid) returns integer
+language plpgsql security definer set search_path = '' as $$
+declare
+  n integer;
+begin
+  update public.visits set cleaner_id = p_cleaner
+  where series_id = p_series and status = 'scheduled' and scheduled_date >= private.london_today()
+    and cleaner_id is distinct from p_cleaner;
+  get diagnostics n = row_count;
+  return n;
 end $$;
 
 create or replace procedure private.run_generate_visits(p_horizon_days integer default 28)
@@ -261,6 +315,12 @@ declare
   sid uuid;
 begin
   perform pg_catalog.set_config('search_path', '', false);  -- see run_release_offers
+  begin
+    perform private.close_stale_visits();
+  exception when others then
+    raise warning 'close_stale_visits failed: %', sqlerrm;
+  end;
+  commit;
   for sid in select id from public.series where status = 'claimed' loop
     begin
       perform set_config('app.actor', 'cron:generate-visits', true);
@@ -280,6 +340,7 @@ declare
   total integer := 0;
   sid uuid;
 begin
+  perform private.close_stale_visits();
   perform set_config('app.actor', 'cron:generate-visits', true);
   for sid in select id from public.series where status = 'claimed' loop
     total := total + private.generate_visits_for_series(sid, private.london_today() + p_horizon_days);
@@ -333,7 +394,89 @@ begin
       and o.status = 'open'
       and o.opens_at <= now()
       and s.status in ('offering', 'unclaimed')
+      -- Only what they could claim right now (same rule claim_series checks), so pressing
+      -- Claim never fails because their tier's window isn't open (yet, or any more).
+      and exists (select 1 from private.eligible_cleaners(s.id) e where e.cleaner_id = (select auth.uid()))
     order by o.opens_at;
+end $$;
+
+-- ---------------------------------------------------------------- claiming and assigning
+-- As in the engine, plus: a clean still booked from today on goes to the new cleaner.
+create or replace function public.claim_series(p_offer uuid)
+returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare
+  me uuid := (select auth.uid());
+  sid uuid;
+  off public.job_offers;
+  s public.series;
+begin
+  if not private.is_active_cleaner() then
+    raise exception 'Only active Ping cleaners can claim jobs' using errcode = '42501';
+  end if;
+
+  select o.series_id into sid from public.job_offers o where o.id = p_offer and o.cleaner_id = me;
+  if not found then
+    raise exception 'That job isn''t available to you' using errcode = 'PC001';
+  end if;
+
+  select * into s from public.series where id = sid for update;
+  perform 1 from public.cleaners where id = me for share;
+  select * into off from public.job_offers where id = p_offer for update;
+
+  if s.status not in ('offering', 'unclaimed') then
+    raise exception 'Another cleaner claimed this one first' using errcode = 'PC002';
+  end if;
+  if off.status <> 'open' or off.opens_at > now() or off.round <> s.offer_round
+     or not exists (select 1 from private.eligible_cleaners(s.id) e where e.cleaner_id = me) then
+    raise exception 'That job is no longer open to you' using errcode = 'PC003';
+  end if;
+
+  update public.series set cleaner_id = me, status = 'claimed', claimed_at = now(), offering_since = null
+  where id = s.id;
+  update public.job_offers set status = 'claimed', responded_at = now() where id = off.id;
+  update public.job_offers set status = 'withdrawn', responded_at = now()
+  where job_offers.series_id = s.id and job_offers.round = s.offer_round and id <> off.id
+    and job_offers.status in ('open', 'pending');
+
+  perform private.hand_over_visits(s.id, me);
+  perform private.generate_visits_for_series(s.id, private.london_today() + 28);
+  return s.id;
+end $$;
+
+create or replace function public.admin_assign_series(p_series uuid, p_cleaner uuid)
+returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  s public.series;
+  c public.cleaners;
+begin
+  if not private.is_admin() then
+    raise exception 'Only the Ping team can assign jobs' using errcode = '42501';
+  end if;
+  select * into s from public.series where id = p_series for update;
+  if not found or s.status not in ('offering', 'unclaimed') then
+    raise exception 'That job has already been taken' using errcode = 'PC002';
+  end if;
+  select c2.* into c from public.cleaners c2 join public.profiles p on p.id = c2.id
+  where c2.id = p_cleaner and c2.status = 'active' and p.role = 'cleaner'
+  for share of c2;
+  if not found then
+    raise exception 'That cleaner isn''t active' using errcode = 'PC001';
+  end if;
+
+  update public.series set cleaner_id = p_cleaner, status = 'claimed', claimed_at = now(), offering_since = null
+  where id = s.id;
+  insert into public.job_offers (series_id, cleaner_id, tier, round, opens_at, status, responded_at)
+  values (s.id, p_cleaner, c.tier, s.offer_round, now(), 'claimed', now())
+  on conflict on constraint job_offers_one_per_round
+    do update set status = 'claimed', responded_at = now();
+  update public.job_offers set status = 'withdrawn', responded_at = now()
+  where job_offers.series_id = s.id and job_offers.round = s.offer_round and cleaner_id <> p_cleaner
+    and job_offers.status in ('open', 'pending');
+
+  perform private.hand_over_visits(s.id, p_cleaner);
+  perform private.generate_visits_for_series(s.id, private.london_today() + 28);
 end $$;
 
 -- ---------------------------------------------------------------- booking (A-3)
@@ -342,7 +485,32 @@ end $$;
 -- Error codes the site turns into plain words:
 --   PC020 booking not open yet · PC021 home not found · PC022 outside our area
 --   PC023 length not allowed · PC024 start must be after today · PC025 block 1–8
---   PC026 day or time window not valid
+--   PC026 day or time window not valid (incl. a window shorter than the clean)
+--   PC027 cleans already booked at this home on those dates
+--   PC028 that request id was already used for a different booking
+
+-- The series an earlier call with the same request id made, or null. A replay with
+-- different details is refused rather than silently answered with the first booking.
+create function private.replayed_booking(
+  p_customer uuid, p_request_id uuid, p_property uuid, p_frequency public.series_frequency,
+  p_preferred_day smallint, p_window_start time, p_window_end time, p_duration_minutes integer,
+  p_starts_on date, p_block_size smallint
+) returns uuid
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  s public.series;
+begin
+  select * into s from public.series where customer_id = p_customer and client_request_id = p_request_id;
+  if not found then
+    return null;
+  end if;
+  if (s.property_id, s.frequency, s.preferred_day, s.window_start, s.window_end, s.duration_minutes, s.starts_on, s.block_size)
+     is distinct from (p_property, p_frequency, p_preferred_day, p_window_start, p_window_end, p_duration_minutes, p_starts_on, p_block_size) then
+    raise exception 'That booking was already made with different details. Start the booking again.' using errcode = 'PC028';
+  end if;
+  return s.id;
+end $$;
+
 create function public.book_series(
   p_property uuid,
   p_frequency public.series_frequency,
@@ -363,6 +531,8 @@ declare
   fr_cleaner uuid;
   hub_opens timestamptz := now();
   new_id uuid;
+  new_first date;
+  new_last date;
 begin
   if me is null or private.my_role() is distinct from 'customer' then
     raise exception 'Only customers can book a clean' using errcode = '42501';
@@ -372,8 +542,9 @@ begin
   end if;
 
   -- Same request again (a double tap, a retry in bad signal): the same series, nothing new.
-  select id into new_id from public.series where customer_id = me and client_request_id = p_request_id;
-  if found then
+  new_id := private.replayed_booking(me, p_request_id, p_property, p_frequency, p_preferred_day,
+                                     p_window_start, p_window_end, p_duration_minutes, p_starts_on, p_block_size);
+  if new_id is not null then
     return new_id;
   end if;
 
@@ -382,10 +553,19 @@ begin
   end if;
   select * into st from public.settings where id;
 
-  select * into pr from public.properties where id = p_property and customer_id = me;
+  -- Lock the home: two bookings for it are made one after the other, so the overlap check
+  -- below sees the first before the second is made.
+  select * into pr from public.properties where id = p_property and customer_id = me for update;
   if not found then
     raise exception 'That home isn''t on your account' using errcode = 'PC021';
   end if;
+  -- A double tap that waited on the lock: the first tap's series is there now.
+  new_id := private.replayed_booking(me, p_request_id, p_property, p_frequency, p_preferred_day,
+                                     p_window_start, p_window_end, p_duration_minutes, p_starts_on, p_block_size);
+  if new_id is not null then
+    return new_id;
+  end if;
+
   if not (pr.postcode_district = any (st.launch_districts)) then
     raise exception 'We don''t clean in % yet', pr.postcode_district using errcode = 'PC022';
   end if;
@@ -400,8 +580,23 @@ begin
     raise exception 'A booking is 1 to 8 cleans' using errcode = 'PC025';
   end if;
   if p_frequency is null or p_preferred_day is null or p_preferred_day not between 1 and 7
-     or p_window_start is null or p_window_end is null or p_window_end <= p_window_start then
+     or p_window_start is null or p_window_end is null or p_window_end <= p_window_start
+     or p_window_end - p_window_start < make_interval(mins => p_duration_minutes) then
     raise exception 'That day or time isn''t valid' using errcode = 'PC026';
+  end if;
+
+  -- One block at a time per home: refuse if a live block's dates overlap this one's.
+  -- A rebook for after the current block (or after it has ended) is fine.
+  new_first := private.block_first_date(p_starts_on, p_preferred_day);
+  new_last := new_first + private.cadence_days(p_frequency) * (p_block_size - 1);
+  if exists (
+    select 1 from public.series s
+    where s.property_id = pr.id
+      and s.status in ('offering', 'unclaimed', 'claimed', 'paused')
+      and private.block_first_date(s.starts_on, s.preferred_day) <= new_last
+      and s.ends_on >= new_first
+  ) then
+    raise exception 'You already have cleans booked at this home on those dates' using errcode = 'PC027';
   end if;
 
   -- Rebooking: the latest earlier block at this home that a cleaner held.
@@ -423,12 +618,7 @@ begin
           p_duration_minutes, st.price_per_hour_pence, st.commission_type, st.commission_value,
           'offering', p_starts_on, p_block_size, hub_opens, p_request_id,
           prev.id, fr_cleaner)
-  on conflict on constraint series_one_per_request do nothing
   returning id into new_id;
-
-  if new_id is null then  -- the same request committed a moment ago in another connection
-    select id into new_id from public.series where customer_id = me and client_request_id = p_request_id;
-  end if;
   return new_id;
 end $$;
 
@@ -440,6 +630,12 @@ revoke all on function private.set_block_end() from public;
 revoke all on function private.cleaner_fits(uuid, text, smallint) from public;
 revoke all on function private.eligible_cleaners(uuid) from public;
 revoke all on function private.end_block_if_done(uuid) from public;
+revoke all on function private.close_stale_visits() from public;
+revoke all on function private.hand_over_visits(uuid, uuid) from public;
+revoke all on function private.replayed_booking(uuid, uuid, uuid, public.series_frequency, smallint, time, time, integer, date, smallint) from public;
+revoke all on function public.claim_series(uuid) from public, anon;
+revoke all on function public.admin_assign_series(uuid, uuid) from public, anon;
+grant execute on function public.claim_series(uuid), public.admin_assign_series(uuid, uuid) to authenticated;
 -- The ends_on trigger runs as whoever writes the series: the security-definer functions
 -- here, or the server with the service role. Signed-in users can't write series at all.
 grant execute on function private.cadence_days(public.series_frequency), private.block_first_date(date, smallint)

@@ -95,7 +95,23 @@ Lock order everywhere: series → cleaner → visit/offers.
 | PC023 | length of clean not allowed |
 | PC024 | start date must be after today |
 | PC025 | block must be 1 to 8 cleans |
-| PC026 | day or time window not valid |
+| PC026 | day or time window not valid (incl. a window shorter than the clean) |
+| PC027 | cleans already booked at this home on those dates (one block at a time per home) |
+| PC028 | that request id was already used for a different booking |
+
+## Independent review fixes (7 Nov 2026)
+- Nightly `private.close_stale_visits()`: `scheduled` visits before today → `no_show` + a
+  `visit_no_show` alert; `in_progress` before today → one `visit_unfinished` alert. No
+  cleaner counters change (admin's call). `end_block_if_done` also ends a full block once its
+  last date has passed, whatever state the cleans were left in.
+- `book_series` locks the home row, re-checks the request id after the lock, refuses
+  overlapping live blocks (PC027), replays with different details (PC028), and windows
+  shorter than the clean (PC026).
+- `private.hand_over_visits`: `claim_series` and `admin_assign_series` give any still-booked
+  clean from today on to the new cleaner (the "needs cover" alert stays open for a person).
+- Reasons need a word of 3+ letters/digits (`[[:alnum:]]{3,}`); photos must be owned by the
+  cleaner and non-empty; `job_board()` shows only offers the cleaner can claim now;
+  `private.stamp_checklist_tick()` revoked from public.
 
 ## RLS impact
 No new tables. New columns sit under existing policies:

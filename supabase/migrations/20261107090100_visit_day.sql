@@ -18,7 +18,9 @@
 alter table public.checklist_items
   add column skipped_reason text,
   add column skipped_at timestamptz,
-  add constraint checklist_skip_reason check (skipped_reason is null or (skipped_reason ~ '\S' and char_length(skipped_reason) <= 300)),
+  -- A real reason: at least one word of 3+ letters or digits. Spaces, invisible characters
+  -- (non-breaking or zero-width spaces) and punctuation alone don't count.
+  add constraint checklist_skip_reason check (skipped_reason is null or (skipped_reason ~ '[[:alnum:]]{3,}' and char_length(skipped_reason) <= 300)),
   add constraint checklist_skip_time check ((skipped_reason is null) = (skipped_at is null)),
   add constraint checklist_done_or_skipped check (not (done and skipped_reason is not null));
 
@@ -129,8 +131,8 @@ begin
     raise exception 'That clean is booked for another day' using errcode = 'PC011';
   end if;
 
-  select count(*) filter (where not ci.done and (ci.skipped_reason is null or ci.skipped_reason !~ '\S')),
-         count(*) filter (where ci.skipped_reason ~ '\S')
+  select count(*) filter (where not ci.done and (ci.skipped_reason is null or ci.skipped_reason !~ '[[:alnum:]]{3,}')),
+         count(*) filter (where ci.skipped_reason ~ '[[:alnum:]]{3,}')
   into left_to_do, skipped
   from public.checklist_items ci where ci.visit_id = v.id;
   if left_to_do > 0 or not exists (select 1 from public.checklist_items where visit_id = v.id) then
@@ -138,14 +140,16 @@ begin
       using errcode = 'PC013', detail = left_to_do::text;
   end if;
 
-  -- A photo counts only if its file really is in the private bucket: a row on its own
-  -- (no upload) is not evidence of a clean.
+  -- A photo counts only if its file really is in the private bucket, uploaded by this
+  -- cleaner, and isn't empty: a row on its own (no upload) is not evidence of a clean.
   select string_agg(k::text, ',' order by k) into missing
   from unnest(array['before', 'after']::public.photo_kind[]) as k
   where not exists (
     select 1 from public.visit_photos ph
     join storage.objects o on o.bucket_id = 'visit-photos' and o.name = ph.storage_path
-    where ph.visit_id = v.id and ph.kind = k
+    where ph.visit_id = v.id and ph.kind = k and ph.uploaded_by = me
+      and o.owner = me
+      and coalesce((o.metadata ->> 'size')::bigint, 0) > 0
   );
   if missing is not null then
     raise exception 'Add at least one before and one after photo' using errcode = 'PC014', detail = missing;
@@ -159,6 +163,7 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- access
+revoke all on function private.stamp_checklist_tick() from public;
 revoke all on function public.start_visit(uuid) from public, anon;
 revoke all on function public.complete_visit(uuid) from public, anon;
 grant execute on function public.start_visit(uuid), public.complete_visit(uuid) to authenticated;
