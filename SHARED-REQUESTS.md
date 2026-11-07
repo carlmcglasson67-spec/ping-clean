@@ -40,7 +40,7 @@ copying the zero-commission trick into money code.
 
 **After it lands.** `quotePence` becomes a one-line call to it. No behaviour change.
 
-## A-3. `public.book_series(...)`: one atomic booking function (for Track A item 4, checkout)
+## A-3. `public.book_series(...)`: one atomic booking function. **Done in #11** (with blocks of 1–8); checkout uses it.
 
 **What.** A `security definer` function the signed-in customer calls to turn a property into a
 regular clean. Series inserts are revoked from `authenticated`, so checkout can't work without it.
@@ -88,3 +88,25 @@ Rules inside, all from `public.settings` (never from the browser):
 
 **Why.** ping-money-rules 4, 6, 7 and 8: card saved at booking with a SetupIntent, idempotent,
 webhook-verified, test mode only. All of it is shared code or outside Track A's folders.
+
+## A-5. Checkout in the e2e suite (raised in Track A item 4)
+
+**What.** Two changes in `tests/e2e/`:
+1. `fake-supabase.mjs`: pass RPC arguments by name (`select * from public.fn(p_x => $1, …)`,
+   unwrapping a scalar result as PostgREST does) and support `POST /rest/v1/<table>` inserts
+   with `returning`, so `book_series` and the property insert run through it.
+2. A checkout journey in `roles.e2e.mjs`: Anna books a new home from the instant price, signs in,
+   lands back on checkout, double-taps confirm, gets exactly one series in `offering` with the
+   settings price, and sees it in `/account`; with prices unset, checkout shows "Booking opens soon".
+
+**Why.** Track A can't edit `tests/`. The PR for item 4 ran exactly this against real Postgres
+with a local copy of the fake (24 checks); it belongs in CI so it can't regress.
+
+## A-6. Optional: create the home inside `book_series` (raised in Track A item 4)
+
+**What.** Either a `book_new_home(...)` wrapper or extra optional address arguments on
+`book_series`, so a new home and its block are made in one transaction.
+
+**Why.** Today checkout inserts the property, then books. If booking is refused after the insert
+(rare: checkout pre-checks area, minimum and window first), the address stays on the account.
+It's reused if they try again, so it does no harm, but one transaction would be cleaner.
