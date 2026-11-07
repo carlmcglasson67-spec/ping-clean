@@ -1,8 +1,9 @@
 "use client";
 
+import type { Route } from "next";
 import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
-import { cn } from "@/components/ui";
+import { ButtonLink, cn } from "@/components/ui";
 import { formatDuration, formatPence, formatPenceShort } from "@/lib/money";
 import { parsePostcode } from "../_lib/postcode";
 import type { PricingState } from "../_lib/pricing-shape";
@@ -111,10 +112,18 @@ function OpenPrice({ pricing, tone }: { pricing: Open; tone: "card" | "ink" }) {
             </Link>
           </div>
         )}
-        <p className="flex items-center gap-3 border-t border-line-dark pt-6 text-base text-paper/70">
-          <span className="size-2 shrink-0 rounded-full bg-signal" aria-hidden />
-          Online booking opens very soon.
-        </p>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-4 border-t border-line-dark pt-6">
+          {(parsed.kind !== "full" && parsed.kind !== "district") || covered ? (
+          <ButtonLink
+            href={`/account/book?${new URLSearchParams({ ...(parsed.kind === "full" ? { postcode: parsed.postcode } : {}), minutes: String(minutes) })}` as Route}
+            size="lg"
+            variant={covered ? "primary" : "secondary"}
+          >
+            {covered ? "Book this clean" : "Start a booking"}
+          </ButtonLink>
+          ) : null}
+          <span className="text-base text-paper/70">No contract. Book up to 8 cleans; rebook any time.</span>
+        </div>
       </div>
     </div>
   );

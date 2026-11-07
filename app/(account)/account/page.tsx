@@ -1,6 +1,8 @@
-import { Badge, Card, EmptyState, ErrorState, PageHeader } from "@/components/ui";
+import Link from "next/link";
+import type { Route } from "next";
+import { Badge, ButtonLink, Card, EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { firstName, requireRole } from "@/lib/auth/session";
-import { formatWindow, relativeDay, todayInLondon, weekdayName } from "@/lib/dates";
+import { formatDay, formatWindow, relativeDay, todayInLondon, weekdayName } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
 import { FREQUENCY, SERIES_STATUS, VISIT_STATUS } from "@/lib/labels";
 import { formatDuration, formatPence } from "@/lib/money";
@@ -20,7 +22,7 @@ export default async function AccountHome() {
   const [series, visits, properties, payments] = await Promise.all([
     supabase
       .from("series")
-      .select("id, property_id, frequency, preferred_day, window_start, window_end, duration_minutes, status, starts_on")
+      .select("id, property_id, frequency, preferred_day, window_start, window_end, duration_minutes, status, starts_on, ends_on, block_size")
       .neq("status", "ended")
       .order("created_at"),
     supabase
@@ -46,13 +48,18 @@ export default async function AccountHome() {
         eyebrow="My cleans"
         title={`Hello, ${firstName(session)}.`}
         lede={next ? <>Your next clean is <strong className="text-ink">{whenPhrase(next.scheduled_date)}</strong>, {formatWindow(next.window_start, next.window_end)}.</> : "Everything to do with your regular clean, in one place."}
+        action={
+          <ButtonLink href="/account/book" size="lg">
+            {active.length ? "Book more cleans" : "Book a clean"}
+          </ButtonLink>
+        }
       />
 
       {failed ? (
         <ErrorState>We couldn&rsquo;t load your cleans just now. Refresh the page, and if it keeps happening, call the Ping office.</ErrorState>
       ) : active.length === 0 ? (
         <EmptyState title="No regular clean booked yet">
-          Once you book, your cleaner, your next visit and every receipt will show here. Online booking opens soon. Until then, call the Ping office to get started.
+          Once you book, your cleaner, your next visit and every receipt will show here. No contract: book up to 8 cleans, and rebook any time.
         </EmptyState>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr] lg:gap-8">
@@ -64,7 +71,9 @@ export default async function AccountHome() {
               return (
                 <Card key={s.id} className="grain relative overflow-hidden bg-ink text-paper ring-0">
                   <div className="flex flex-wrap items-start justify-between gap-4">
-                    <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">Your regular clean</p>
+                    <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">
+                      {s.block_size} {s.block_size === 1 ? "clean" : "cleans"} · until {formatDay(s.ends_on)}
+                    </p>
                     <Badge tone={status.tone}>{status.label}</Badge>
                   </div>
                   <p className="mt-6 font-display text-3xl font-semibold">
@@ -78,6 +87,9 @@ export default async function AccountHome() {
                       {home.address_line1}, {home.town} {home.postcode}
                     </p>
                   ) : null}
+                  <Link href={`/account/booking/${s.id}` as Route} className="mt-5 inline-flex min-h-12 items-center gap-2 font-semibold text-signal hover:text-paper">
+                    Booking details <span aria-hidden>&rarr;</span>
+                  </Link>
                 </Card>
               );
             })}
