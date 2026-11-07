@@ -1,16 +1,17 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useActionState, useEffect } from "react";
 import { Button } from "@/components/ui";
 import { applyAsCleaner, type ApplyState } from "./actions";
 
 export function ApplyButton() {
-  const router = useRouter();
   const [state, action, pending] = useActionState<ApplyState>(applyAsCleaner, {});
   useEffect(() => {
-    if (state.ok) router.replace("/work/details");
-  }, [state.ok, router]);
+    // A full page load, on purpose. Applying changes who this login is: the client router
+    // still holds pages prefetched as a customer (/work → "go to /account"), and a soft
+    // navigation reuses them and loops between the two apps.
+    if (state.ok) window.location.replace("/work/details");
+  }, [state.ok]);
   const busy = pending || state.ok;
 
   return (
