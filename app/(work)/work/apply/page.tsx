@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Route } from "next";
 import { redirect } from "next/navigation";
 import { ButtonLink, PageHeader } from "@/components/ui";
 import { AppShell } from "@/components/ui/app-shell";
@@ -22,7 +22,9 @@ const POINTS = [
  */
 export default async function ApplyPage() {
   const session = await getSession();
-  if (!session) redirect("/login?next=/work/apply");
+  // /signup arrives with #19 (it links to sign-in for people with an account). Typed loosely
+  // until then: typed routes only know pages that exist on this branch.
+  if (!session) redirect("/signup?next=/work/apply" as Route);
   if (session.role === "admin") redirect(homeFor("admin"));
   if (session.role === "cleaner") {
     // Not a redirect: straight after applying, this page re-renders as a cleaner while
