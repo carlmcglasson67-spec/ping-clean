@@ -37,36 +37,50 @@ No account, no password, no price. Regular domestic cleans only, as everywhere o
 | `unsubscribed_at` | from the link in that message (built with the message) |
 | `delete_after` | `registered_at + interest_retention_months` |
 
-Exactly one of email or phone (check). Unique per `(kind, email, district)` and
+Exactly one of email or phone (check). Postcodes must use a real UK postcode area; emails
+must be plain printable ASCII. Unique per `(kind, email, district)` and
 `(kind, phone, district)`: registering again for the same area updates the row (fresh
-consent, a fresh retention date, back on the list) instead of adding one.
+consent and a fresh retention date) instead of adding one. It never clears "told", and an
+unsubscribed contact stays unsubscribed: the reply is still "thanks" and nothing changes.
 
 ## Access
-- RLS on, in the same migration. No direct access for anon or authenticated, not even to
-  their own row: there is no account to prove it's theirs.
+- RLS on, in the same migration, with **no table grants at all**: nobody (admins included)
+  reads or writes the table directly. Every way in is a function.
 - **Writes only through `public.register_interest(p_postcode, p_email, p_phone, p_notify,
-  p_source, p_consent_version)`**, security definer, granted to anon and authenticated.
-  It normalises and checks everything, stores nothing unless `p_notify` is true, and
-  **always returns `'thanks'`** for new, existing and unticked alike.
+  p_source, p_consent_version)`**, security definer, granted to the **service role only**.
+  The Server Action calls it through `lib/db/admin.ts` after the honeypot and Turnstile,
+  and sets the source and consent version itself; the database sets the kind. It
+  normalises and checks everything, stores nothing unless `p_notify` is true, and
+  **always returns `'thanks'`** for new, existing, unsubscribed and unticked alike.
   Errors only for input the person can fix: PC030 postcode, PC031 contact, PC032 not open
   (retention unset), PC033 bad source or version.
 - `public.interest_retention_months()`: anyone, for the consent wording.
-- Admins: read the table; `admin_interest_counts()` per district; mark `notified_at`;
-  delete on request. Marking and deleting write audit rows with the contacts redacted.
-- `admin_export_interest(p_district)`: the contact list (never anyone unsubscribed), and an
-  audit row with who, when, which district and how many rows.
+- Admin functions, each refusing non-admins and each leaving an audit line without contacts:
+  `admin_interest_counts()` (per district), `admin_list_interest(p_district)` (contacts
+  masked), `admin_export_interest(p_district)` (the contacts, never anyone unsubscribed),
+  `admin_mark_interest_notified(p_ids, p_notified)` (told, or undo) and
+  `admin_delete_interest(p_ids)`.
+- CSV export: `lib/interest/csv.ts` quotes every cell and defuses values starting with
+  `= + - @`, tab or CR, so nothing runs as a spreadsheet formula.
 
 ## Retention
 - `private.purge_interest()` runs nightly on pg_cron (03:40). It deletes rows past
-  `delete_after` and rows unsubscribed more than 30 days ago (Kate to confirm the 30), and
-  writes one audit row with the count.
+  `delete_after`, rows older than the *current* `interest_retention_months` (so lowering it
+  takes effect), and rows unsubscribed more than 30 days ago (Kate to confirm the 30). It
+  writes one audit row with the count; the per-row audit trigger steps aside for it.
+- Open for Carl and Kate: delete rows about 30 days after the "booking is open" message
+  has gone out?
 - With `interest_retention_months` cleared, `register_interest` refuses (PC032).
 
 ## Consent wording (draft for Carl and Kate)
 Under the form, not hidden in a link (`interestConsentText(months)` in `lib/interest/form.ts`):
 
-> We'll use this only to send you one message when booking opens near you. We delete it
-> after 6 months, or sooner if you ask us. We never share or sell it.
+> We'll use this to send you one message when booking opens near you, and to help us
+> decide where to open next. We delete it after 6 months, or sooner if you ask us. We
+> never share or sell it.
+
+Open for Kate: whether to double-opt-in (confirm the email or mobile) before the one
+message is sent.
 
 Plus a link to the privacy notice. The tick box, unticked by default and required:
 
@@ -75,8 +89,9 @@ Plus a link to the privacy notice. The tick box, unticked by default and require
 ## Spam and abuse
 - **Honeypot** (`company`), as on sign-up: filled in → "thanks", nothing stored.
 - **Turnstile**, optional: on only when `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and
-  `TURNSTILE_SECRET_KEY` are both set. Checked in the Server Action before the database.
-  No IP address is sent to Cloudflare or stored.
+  `TURNSTILE_SECRET_KEY` are both set (a warning is logged if only one is). Checked in the
+  Server Action before the database, including that the token was solved on Ping's own
+  hostname. No IP address is sent to Cloudflare or stored.
 - **Rate limit: a Vercel firewall rule**, not stored IPs. Recommended: at most 5 POSTs per
   IP per 10 minutes to the pages with the form.
 - Same reply every time; no free text or links accepted; only Ping's own message is ever sent.

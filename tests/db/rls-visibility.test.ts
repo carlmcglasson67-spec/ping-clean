@@ -53,7 +53,8 @@ describe.each(Object.keys(EXPECTED))("%s sees only their own data", (who) => {
     const want: Record<string, number> = {};
     await as(who as keyof typeof EXPECTED & "anna", async (q) => {
       for (const t of TABLES) {
-        seen[t] = await q.count(`public.${t}`);
+        // No access at all (e.g. interest_signups, functions only) counts as seeing nothing.
+        seen[t] = (await q.attempt(`select 1 from public.${t} limit 1`)) === "ok" ? await q.count(`public.${t}`) : 0;
         want[t] = EXPECTED[who]![t] ?? 0;
       }
     });

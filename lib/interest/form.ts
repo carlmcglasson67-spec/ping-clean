@@ -21,7 +21,8 @@ export const INTEREST_NOTIFY_LABEL = "Tell me when booking opens near me";
  */
 export function interestConsentText(months: number): string {
   return (
-    "We'll use this only to send you one message when booking opens near you. " +
+    "We'll use this to send you one message when booking opens near you, " +
+    "and to help us decide where to open next. " +
     `We delete it after ${months} months, or sooner if you ask us. ` +
     "We never share or sell it."
   );
@@ -34,7 +35,6 @@ export const INTEREST_FIELDS = {
   email: "email",
   phone: "phone",
   notify: "notify", // checkbox, value "on"
-  source: "source", // hidden: one of INTEREST_SOURCES
   honeypot: "company", // hidden from people; bots fill it in
   turnstile: "cf-turnstile-response", // added by the Turnstile widget
 } as const;
@@ -62,10 +62,20 @@ export const initialInterestState: RegisterInterestState = { status: "idle" };
 // ---------------------------------------------------------------- normalising
 // Mirrors private.normalise_* in the migration, so the form says the same as the database.
 
-/** "ca14 3xx", "CA143XX" → "CA14 3XX". Null if it isn't a UK postcode shape. */
+/** The real UK postcode areas (private.uk_postcode_areas()), so "ZZ9 9ZZ" is refused. */
+export const UK_POSTCODE_AREAS = new Set(
+  ("AB AL B BA BB BD BH BL BN BR BS BT CA CB CF CH CM CO CR CT CV CW DA DD DE DG DH DL DN DT DY E EC EH EN EX " +
+    "FK FY G GL GU GY HA HD HG HP HR HS HU HX IG IM IP IV JE KA KT KW KY L LA LD LE LL LN LS LU M ME MK ML N NE " +
+    "NG NN NP NR NW OL OX PA PE PH PL PO PR RG RH RM S SA SE SG SK SL SM SN SO SP SR SS ST SW SY TA TD TF TN TQ " +
+    "TR TS TW UB W WA WC WD WF WN WR WS WV YO ZE").split(" "),
+);
+
+/** "ca14 3xx", "CA143XX" → "CA14 3XX". Null if it isn't a real UK postcode shape and area. */
 export function normalisePostcode(raw: string): string | null {
   const t = raw.replace(/\s/g, "").toUpperCase();
-  return /^[A-Z]{1,2}[0-9][A-Z0-9]?[0-9][A-Z]{2}$/.test(t) ? `${t.slice(0, -3)} ${t.slice(-3)}` : null;
+  if (!/^[A-Z]{1,2}[0-9][A-Z0-9]?[0-9][A-Z]{2}$/.test(t)) return null;
+  if (!UK_POSTCODE_AREAS.has(t.match(/^[A-Z]+/)![0])) return null;
+  return `${t.slice(0, -3)} ${t.slice(-3)}`;
 }
 
 /** "07700 900321", "+44 7700 900321" → "+447700900321". UK mobiles only. */
@@ -77,10 +87,10 @@ export function normaliseUkMobile(raw: string): string | null {
   return null;
 }
 
-/** Lower-cased and trimmed. Null if it isn't a plain address. */
+/** Lower-cased and trimmed. Plain printable ASCII only (no invisible or right-to-left characters). */
 export function normaliseEmail(raw: string): string | null {
   const t = raw.trim().toLowerCase();
-  return t.length <= 254 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(t) ? t : null;
+  return t.length <= 254 && /^[!-~]+$/.test(t) && /^[^@]+@[^@]+\.[^@]+$/.test(t) ? t : null;
 }
 
 // ---------------------------------------------------------------- parsing
@@ -92,7 +102,6 @@ const formShape = z.object({
   email: text(320),
   phone: text(32),
   notify: z.literal("on").optional().catch(undefined),
-  source: z.enum(INTEREST_SOURCES).optional().catch(undefined),
 });
 
 export type InterestArgs = {
@@ -106,22 +115,24 @@ export type InterestArgs = {
 
 export type ParsedInterest =
   | { ok: true; args: InterestArgs; values: InterestValues }
-  | { ok: false; fieldErrors: Partial<Record<InterestField, string>>; values: InterestValues; badSource?: boolean };
+  | { ok: false; fieldErrors: Partial<Record<InterestField, string>>; values: InterestValues };
 
 const get = (fd: FormData, k: string) => {
   const v = fd.get(k);
   return typeof v === "string" ? v : undefined;
 };
 
-/** Checks the form on the server. Only the chosen contact is kept; the other is dropped. */
-export function parseInterestForm(fd: FormData): ParsedInterest {
+/**
+ * Checks the form on the server. Only the chosen contact is kept; the other is dropped.
+ * The source and consent version come from the server, never from the form.
+ */
+export function parseInterestForm(fd: FormData, source: InterestSource): ParsedInterest {
   const f = formShape.parse({
     postcode: get(fd, INTEREST_FIELDS.postcode),
     contact: get(fd, INTEREST_FIELDS.contact),
     email: get(fd, INTEREST_FIELDS.email),
     phone: get(fd, INTEREST_FIELDS.phone),
     notify: get(fd, INTEREST_FIELDS.notify),
-    source: get(fd, INTEREST_FIELDS.source),
   });
   const values: InterestValues = { postcode: f.postcode, contact: f.contact, email: f.email, phone: f.phone, notify: f.notify === "on" };
   const fieldErrors: Partial<Record<InterestField, string>> = {};
@@ -144,12 +155,10 @@ export function parseInterestForm(fd: FormData): ParsedInterest {
 
   if (!values.notify) fieldErrors.notify = `Tick “${INTEREST_NOTIFY_LABEL}” so we can let you know.`;
 
-  if (Object.keys(fieldErrors).length > 0 || !f.source) {
-    return { ok: false, fieldErrors, values, badSource: !f.source };
-  }
+  if (Object.keys(fieldErrors).length > 0) return { ok: false, fieldErrors, values };
   return {
     ok: true,
     values,
-    args: { p_postcode: postcode!, p_email: email, p_phone: phone, p_notify: true, p_source: f.source, p_consent_version: INTEREST_CONSENT_VERSION },
+    args: { p_postcode: postcode!, p_email: email, p_phone: phone, p_notify: true, p_source: source, p_consent_version: INTEREST_CONSENT_VERSION },
   };
 }

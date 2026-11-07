@@ -166,6 +166,27 @@ out += `${ind(2)}};
         Args: Record<PropertyKey, never>;
         Returns: { postcode_district: string; signups: number; not_yet_notified: number; newest: string }[];
       };
+      admin_list_interest: {
+        Args: { p_district?: string | null };
+        Returns: {
+          id: string;
+          postcode_district: string;
+          contact_type: "email" | "phone";
+          contact_masked: string;
+          source: "instant_price" | "holding_page";
+          registered_at: string;
+          notified_at: string | null;
+          unsubscribed_at: string | null;
+        }[];
+      };
+      admin_mark_interest_notified: {
+        Args: { p_ids: string[]; p_notified?: boolean };
+        Returns: number;
+      };
+      admin_delete_interest: {
+        Args: { p_ids: string[] };
+        Returns: number;
+      };
       admin_export_interest: {
         Args: { p_district?: string | null };
         Returns: {
