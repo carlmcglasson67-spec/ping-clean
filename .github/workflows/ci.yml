@@ -1,0 +1,38 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:              # make this a required check in branch protection on main
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint and types
+        run: npm run lint && npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Database tests (schema + RLS, every role)
+        run: npm run test:db           # uses the runner's preinstalled PostgreSQL
+      - name: End to end (every role signs in through the real UI)
+        run: npm run test:e2e          # uses the runner's preinstalled Google Chrome
+        env:
+          SHOT_DIR: screenshots/e2e
+      - name: Keep screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: screenshots/e2e
+          if-no-files-found: ignore
