@@ -99,11 +99,14 @@ const config = { confirm: true }; // Supabase "Confirm email" setting
 // from RedirectTo (see the PR's template steps), so a redirect mismatch can't break them:
 //   {{ .SiteURL }}/auth/confirm?flow=signup&token_hash={{ .TokenHash }}&type=email
 //   {{ .SiteURL }}/auth/confirm?flow=reset&token_hash={{ .TokenHash }}&type=recovery
-// The Site URL here is the app's own address (the origin the request came back to).
-function mail(email, type, userId, redirectTo) {
+// The Site URL is fixed, as it is in the Supabase project's settings, and never taken from
+// the request's redirect address: if the app ever ran on a different host from the Site
+// URL, these links would point elsewhere and the e2e checks would fail.
+let SITE_URL = "http://127.0.0.1:3200";
+function mail(email, type, userId) {
   const hash = randomUUID().replace(/-/g, "");
   tokens.set(hash, { userId, type });
-  const site = redirectTo ? new URL(redirectTo).origin : "http://127.0.0.1:3200";
+  const site = SITE_URL;
   const link = type === "signup"
     ? `${site}/auth/confirm?flow=signup&token_hash=${hash}&type=email`
     : `${site}/auth/confirm?flow=reset&token_hash=${hash}&type=recovery`;
@@ -163,7 +166,8 @@ const readBody = (req) => new Promise((r) => {
   req.on("end", () => r(d ? JSON.parse(d) : {}));
 });
 
-export function startFakeSupabase(port = 54321) {
+export function startFakeSupabase(port = 54321, { siteUrl } = {}) {
+  if (siteUrl) SITE_URL = siteUrl;
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
     const bearer = (req.headers.authorization ?? "").replace(/^Bearer /, "");

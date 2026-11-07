@@ -78,7 +78,7 @@ async function check(name, fn) {
 
 console.log("e2e: building app against the test database…");
 run("npx", ["next", "build"]);
-const fake = await startFakeSupabase(54321);
+const fake = await startFakeSupabase(54321, { siteUrl: BASE }); // the project's fixed Site URL
 // detached: its own process group, so we can stop npx *and* the Next server under it.
 const app = spawn("npx", ["next", "start", "-p", String(PORT), "-H", "127.0.0.1"], { env, stdio: ["ignore", "pipe", "pipe"], detached: true });
 const stopApp = () => { try { process.kill(-app.pid, "SIGTERM"); } catch {} };

@@ -28,9 +28,12 @@ type Env = Record<string, string | undefined>;
 // development works; reset passes then stop working on restart, which is harmless.
 let devSecret: string | undefined;
 
+export const RESET_SECRET_PROBLEM = "RESET_PASS_SECRET is missing or shorter than 32 characters: password resets are switched off.";
+
 /**
  * The signing secret. Required in production (at least 32 characters): null there when it's
- * missing or short, and every reset then fails closed.
+ * missing or shorter than 32 characters, and every reset then fails closed. Also checked
+ * when the server starts (instrumentation.ts), so a bad setup shows in the logs at once.
  */
 export function resetPassSecret(env: Env = process.env): string | null {
   const s = env.RESET_PASS_SECRET;

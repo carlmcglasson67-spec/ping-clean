@@ -8,7 +8,8 @@ import { z } from "zod";
 export const confirmFields = z
   .object({
     token_hash: z.string().regex(/^[A-Za-z0-9_-]{8,512}$/).optional(),
-    type: z.enum(["signup", "email", "recovery"]).optional(),
+    // email covers sign-up and magic links; invite and email_change come from those templates.
+    type: z.enum(["signup", "email", "recovery", "invite", "email_change"]).optional(),
     code: z.string().regex(/^[A-Za-z0-9_-]{8,512}$/).optional(),
     next: z.string().max(512).optional(),
     flow: z.enum(["signup", "reset"]).optional(),

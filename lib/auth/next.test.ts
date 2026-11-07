@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { resolveSiteUrl } from "@/lib/env";
 import { safeNext, signedOutEntry } from "./next";
 import { passwordBytes, passwordChecks, passwordProblem } from "./password";
 import { parseConfirmForm } from "./confirm-fields";
 import { maskEmail } from "./mask";
-import { canChooseNewPassword, freshEmailLink, makeResetPass, resetPassSecret } from "./recovery";
+import { canChooseNewPassword, freshEmailLink, makeResetPass, RESET_SECRET_PROBLEM, resetPassSecret } from "./recovery";
 import { postLoginPath } from "./roles";
 
 describe("safeNext: only paths inside the apps", () => {
@@ -159,6 +159,23 @@ describe("who may choose a new password (final check F1)", () => {
     expect(resetPassSecret({ NODE_ENV: "production", RESET_PASS_SECRET: secret })).toBe(secret);
     expect(resetPassSecret({ NODE_ENV: "development" })).toMatch(/^[0-9a-f]{64}$/); // made per server start
     expect(canChooseNewPassword(makeResetPass(sid, secret, now), session(), null, now)).toBe(false);
+    expect(RESET_SECRET_PROBLEM).toContain("missing or shorter than 32 characters");
+  });
+
+  it("is checked when the server starts in production (instrumentation.ts)", async () => {
+    const { register } = await import("../../instrumentation");
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("RESET_PASS_SECRET", "short");
+    await register();
+    expect(err).toHaveBeenCalledWith(expect.stringContaining("shorter than 32 characters"));
+    err.mockClear();
+    vi.stubEnv("RESET_PASS_SECRET", secret);
+    await register();
+    expect(err).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+    err.mockRestore();
   });
 });
 

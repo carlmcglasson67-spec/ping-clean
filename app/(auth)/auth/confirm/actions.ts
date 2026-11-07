@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { parseConfirmForm } from "@/lib/auth/confirm-fields";
 import { tidyPhone } from "@/lib/auth/links";
 import { safeNext } from "@/lib/auth/next";
-import { makeResetPass, RESET_COOKIE, RESET_COOKIE_OPTIONS, RESET_PASS_MINUTES, resetPassSecret } from "@/lib/auth/recovery";
+import { makeResetPass, RESET_COOKIE, RESET_COOKIE_OPTIONS, RESET_PASS_MINUTES, RESET_SECRET_PROBLEM, resetPassSecret } from "@/lib/auth/recovery";
 import { postLoginPath } from "@/lib/auth/roles";
 import { createClient } from "@/lib/db/server";
 import { hasSupabaseEnv, resolveSiteUrl } from "@/lib/env";
@@ -45,7 +45,7 @@ export async function confirmLink(formData: FormData): Promise<void> {
     const secret = resetPassSecret();
     const { data: claims } = await supabase.auth.getClaims();
     const sessionId = claims?.claims?.session_id;
-    if (!secret) console.error("RESET_PASS_SECRET is not set: password resets are switched off.");
+    if (!secret) console.error(RESET_SECRET_PROBLEM);
     if (secret && typeof sessionId === "string") {
       const jar = await cookies();
       jar.set(RESET_COOKIE, makeResetPass(sessionId, secret), {
