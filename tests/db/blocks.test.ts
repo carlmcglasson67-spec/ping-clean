@@ -1,6 +1,6 @@
 // Blocks of 1–8 cleans, booking (book_series), and rebooking with first refusal.
 import { randomUUID } from "node:crypto";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { as, CHECK, DENIED, IDS, pool, setupThen, U, type Query } from "./helpers";
 
 afterAll(() => pool.end());
@@ -135,7 +135,53 @@ describe("blocks: never more visits than the block", () => {
 });
 
 // ---------------------------------------------------------------- booking (A-3)
+// While a block at a home is waiting for a cleaner, no new block can be booked there. Ben's
+// seeded block is on offer, so for these tests it's held by Alex (committed, put back after).
+const holdBen = () => pool.query(`update public.series set status = 'claimed', cleaner_id = $1, claimed_at = now(), offering_since = null where id = $2`, [U.alex, IDS.benSeries]);
+const releaseBen = () => pool.query(`update public.series set status = 'offering', cleaner_id = null, claimed_at = null, offering_since = now() - interval '30 minutes' where id = $1`, [IDS.benSeries]);
+
 describe("book_series", () => {
+  beforeAll(holdBen);
+  afterAll(releaseBen);
+
+  it("refuses a new block while one at that home is still waiting for a cleaner, whatever the dates (re-review)", async () => {
+    for (const status of ["offering", "unclaimed"]) {
+      expect(await setupThen(async (su) => {
+        await su.rows(`update public.series set status = $1::public.series_status, cleaner_id = null, claimed_at = null, offering_since = now() where id = $2`, [status, IDS.benSeries]);
+      }, U.ben, (q) => q.attempt(BOOK, booking({ startsIn: 300 })))).toBe("PC027");
+    }
+  });
+
+  it("answers a same-id race for two different homes with the booking or PC028, never a raw error (re-review)", async () => {
+    const home2 = "00000000-0000-4000-b000-0000000000a2";
+    await pool.query(`insert into public.properties (id, customer_id, address_line1, town, postcode, bedrooms, bathrooms)
+                      values ($1, $2, '14 Test Street', 'Workington', 'CA14 9ZY', 2, 1)`, [home2, U.anna]);
+    const req = randomUUID();
+    const tap = async (property: string) => {
+      const c = await pool.connect();
+      try {
+        await c.query("begin");
+        await c.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: U.anna, role: "authenticated" })]);
+        await c.query(`set local role authenticated`);
+        await c.query(BOOK, booking({ property, frequency: "weekly", day: 1, from: "09:00", to: "12:00", minutes: 150, startsIn: 60, request: req }));
+        await new Promise((res) => setTimeout(res, 100));
+        await c.query("commit");
+        return "ok";
+      } catch (e) {
+        await c.query("rollback");
+        return (e as { code?: string }).code;
+      } finally {
+        c.release();
+      }
+    };
+    try {
+      expect((await Promise.all([tap(IDS.annaProperty), tap(home2)])).sort()).toEqual(["PC028", "ok"]);
+    } finally {
+      await pool.query(`delete from public.series where customer_id = $1 and client_request_id = $2`, [U.anna, req]);
+      await pool.query(`delete from public.properties where id = $1`, [home2]);
+    }
+  });
+
   it("books a block at the customer's own home, priced from settings, on offer to the hub", async () => {
     const r = await as("ben", async (q) => {
       const id = await book(q, booking({ block: 4, day: 3 }));
@@ -147,7 +193,8 @@ describe("book_series", () => {
     });
     expect(r).toEqual({
       customer_id: U.ben, cleaner_id: null, status: "offering", block_size: 4, price_per_hour_pence: 2000,
-      commission_type: "percent", commission_value: 2500, rebook_of: null, first_refusal_cleaner_id: null,
+      // Ben's earlier block (held by Alex here) is linked; the window setting is unset, so no first refusal.
+      commission_type: "percent", commission_value: 2500, rebook_of: IDS.benSeries, first_refusal_cleaner_id: null,
       span: expect.any(Number), planned_end: true,
     });
   });
@@ -220,7 +267,8 @@ describe("book_series", () => {
     expect(r).toEqual({ a: "ok", b: "PC027", count: 2 });
     for (const status of ["unclaimed", "paused"]) {
       expect(await setupThen(async (su) => {
-        await su.rows(`update public.series set status = $1::public.series_status, cleaner_id = case when $1::text = 'paused' then $2::uuid end where id = $3`, [status, U.alex, IDS.benSeries]);
+        await su.rows(`update public.series set status = $1::public.series_status, cleaner_id = case when $1::text = 'paused' then $2::uuid end,
+                       offering_since = case when $1::text = 'paused' then null else now() end where id = $3`, [status, U.alex, IDS.benSeries]);
       }, U.ben, (q) => q.attempt(BOOK, booking({ startsIn: 1 })))).toBe("PC027");
     }
   });
@@ -478,7 +526,10 @@ describe("rebooking: the previous cleaner gets first refusal", () => {
 
   it("never links a booking to another customer's block", async () => {
     // Ben's home has no previous block with a cleaner, and Anna's series isn't his.
-    const r = await setupThen(async (su) => { await windowOf(60)(su); }, U.ben, async (q) => {
+    const r = await setupThen(async (su) => {
+      await windowOf(60)(su);
+      await su.rows(`update public.series set status = 'ended' where id = $1`, [IDS.benSeries]); // never had a cleaner
+    }, U.ben, async (q) => {
       const id = await book(q, booking());
       return (await q.rows(`select rebook_of, first_refusal_cleaner_id from public.series where id = $1`, [id]))[0];
     });
@@ -620,6 +671,101 @@ describe("review: trigger helpers aren't callable", () => {
     const [r] = await as("superuser", (q) => q.rows(`select has_function_privilege('authenticated', 'private.stamp_checklist_tick()', 'execute') as authed,
                                                         has_function_privilege('anon', 'private.stamp_checklist_tick()', 'execute') as anon`));
     expect(r).toEqual({ authed: false, anon: false });
+  });
+});
+
+// ---------------------------------------------------------------- re-review fixes
+describe("re-review: a block that slips never runs into the next one at the same home", () => {
+  const fakeToday = (q: Query, sqlDate: string) =>
+    q.rows(`create or replace function private.london_today() returns date language sql stable set search_path = '' as $$ select ${sqlDate} $$`);
+  const n = async (q: Query, sql: string, params: unknown[] = []) => (await q.rows<{ n: number }>(sql, params))[0]!.n;
+
+  it("z1: block A claimed, B booked after it, A dropped and re-assigned a month late: no clean is double-booked", async () => {
+    const r = await as("superuser", async (q) => {
+      // Block A = Ben's 4 fortnightly Wednesdays, held by Tara.
+      await q.actAs(U.admin);
+      await q.rows(`select public.admin_assign_series($1, $2)`, [IDS.benSeries, U.tara]);
+      await q.rows(`reset role`);
+      const aEnd = await n(q, `select ends_on - private.london_today() as n from public.series where id = $1`, [IDS.benSeries]);
+      // Ben books block B (weekly Wednesdays) to start the day after A's last clean.
+      await q.actAs(U.ben);
+      const b = await book(q, booking({ frequency: "weekly", day: 3, startsIn: aEnd + 1, block: 4 }));
+      // Tara drops out; nobody takes A for a month; then A and B are both assigned.
+      await q.actAs(U.admin);
+      await q.rows(`select public.admin_reopen_series($1)`, [IDS.benSeries]);
+      await q.rows(`reset role`);
+      await fakeToday(q, `(now() at time zone 'Europe/London')::date + 30`);
+      await q.actAs(U.admin);
+      await q.rows(`select public.admin_assign_series($1, $2)`, [IDS.benSeries, U.tara]);
+      await q.rows(`select public.admin_assign_series($1, $2)`, [b, U.alex]);
+      await q.rows(`reset role`);
+      for (const sid of [IDS.benSeries, b]) await q.rows(`select private.generate_visits_for_series($1, private.london_today() + 400)`, [sid]);
+
+      const doubled = await q.rows(`select v.scheduled_date from public.visits v join public.series s on s.id = v.series_id
+                                    where s.property_id = $1 group by 1 having count(*) > 1`, [IDS.benProperty]);
+      const aLast = await q.rows<{ last: string; ends: string; bFirst: string; aCount: number; bCount: number }>(
+        `select (select max(scheduled_date)::text from public.visits where series_id = $1) as last,
+                (select ends_on::text from public.series where id = $1) as ends,
+                (select min(scheduled_date)::text from public.visits where series_id = $2) as "bFirst",
+                (select count(*)::int from public.visits where series_id = $1) as "aCount",
+                (select count(*)::int from public.visits where series_id = $2) as "bCount"`, [IDS.benSeries, b]);
+      const alerts = await q.rows(`select kind, series_id from public.engine_alerts where kind = 'block_overlap'`);
+
+      // Time passes beyond A's last clean, which was done: A ends and Tara loses the address.
+      await fakeToday(q, `date '${aLast[0]!.ends}' + 1`);
+      await q.rows(`update public.visits set status = 'completed', started_at = now(), completed_at = now() where series_id = $1`, [IDS.benSeries]);
+      const ended = (await q.rows<{ e: boolean }>(`select private.end_block_if_done($1) as e`, [IDS.benSeries]))[0]!.e;
+      await q.actAs(U.tara);
+      const taraSees = await q.count(`public.properties where id = '${IDS.benProperty}'`);
+      return { doubled, a: aLast[0]!, alerts, ended, taraSees };
+    });
+    expect(r.doubled).toEqual([]);
+    expect(r.a.last < r.a.bFirst).toBe(true);
+    expect(r.a.ends).toBe(r.a.last);   // A's end moved back to its last clean
+    expect(r.a.aCount).toBeLessThan(4); // cut short, not double-booked
+    expect(r.a.bCount).toBe(4);         // the later block is untouched
+    expect(r.alerts).toEqual([{ kind: "block_overlap", series_id: IDS.benSeries }]);
+    expect(r.ended).toBe(true);
+    expect(r.taraSees).toBe(0);
+  });
+});
+
+describe("re-review: paused blocks and a failing sweep", () => {
+  it("leaves a paused block's cleans alone overnight (pause isn't built yet)", async () => {
+    const r = await as("superuser", async (q) => {
+      await q.rows(`update public.series set status = 'paused' where id = $1`, [IDS.annaSeries]);
+      await q.rows(`update public.visits set scheduled_date = private.london_today() - 1 where id = $1`, [IDS.visitToday]);
+      await q.rows(`select private.generate_visits()`);
+      return {
+        visit: (await q.rows<{ status: string }>(`select status from public.visits where id = $1`, [IDS.visitToday]))[0]!.status,
+        alerts: await q.count("public.engine_alerts"),
+      };
+    });
+    expect(r).toEqual({ visit: "scheduled", alerts: 0 });
+  });
+
+  it("tells the admin when the missed-cleans check fails on the scheduler, and carries on", async () => {
+    const c = await pool.connect();
+    try {
+      await c.query(`update public.visits set scheduled_date = (now() at time zone 'Europe/London')::date - 1 where id = $1`, [IDS.visitToday]);
+      await c.query(`create function public.boom() returns trigger language plpgsql as $$ begin
+        if new.status = 'no_show' then raise exception 'test failure'; end if; return new; end $$`);
+      await c.query(`create trigger boom before update on public.visits for each row execute function public.boom()`);
+      await c.query(`call private.run_generate_visits()`);
+      await c.query(`reset search_path`);
+      const { rows } = await c.query(`select kind, series_id, message from public.engine_alerts where kind = 'generate_failed'`);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ kind: "generate_failed", series_id: null });
+      expect(rows[0].message).toMatch(/missed cleans/);
+    } finally {
+      await c.query(`reset search_path`);
+      await c.query(`drop trigger if exists boom on public.visits`);
+      await c.query(`drop function if exists public.boom()`);
+      await c.query(`delete from public.engine_alerts`);
+      await c.query(`update public.visits set scheduled_date = (now() at time zone 'Europe/London')::date, status = 'scheduled' where id = $1`, [IDS.visitToday]);
+      await c.query(`delete from public.visits where series_id = $1 and id not in ($2, $3, $4)`, [IDS.annaSeries, IDS.visitDone, IDS.visitToday, IDS.visitNextWeek]);
+      c.release();
+    }
   });
 });
 

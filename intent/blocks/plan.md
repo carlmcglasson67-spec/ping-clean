@@ -109,6 +109,12 @@ Lock order everywhere: series → cleaner → visit/offers.
   shorter than the clean (PC026).
 - `private.hand_over_visits`: `claim_series` and `admin_assign_series` give any still-booked
   clean from today on to the new cleaner (the "needs cover" alert stays open for a person).
+- Re-review: `book_series` refuses (PC027) while any block at the home is offering/unclaimed;
+  generation never books a clean on or after the start of a later live block at the same home
+  (raises a `block_overlap` alert; a cut-short block's `ends_on` is its last clean and it ends
+  once that passes); a same-id race across two homes answers as a replay (series or PC028);
+  a failed missed-cleans sweep raises a `generate_failed` alert; the sweep skips paused blocks
+  (TODO: pause must handle ending and address access).
 - Reasons need a word of 3+ letters/digits (`[[:alnum:]]{3,}`); photos must be owned by the
   cleaner and non-empty; `job_board()` shows only offers the cleaner can claim now;
   `private.stamp_checklist_tick()` revoked from public.

@@ -189,6 +189,7 @@ declare
   last_date date;
   inserted integer := 0;
   new_end date;
+  cutoff date;
   today date := private.london_today();
 begin
   -- A pause or end committing at the same moment waits for us, or we see it.
@@ -207,6 +208,15 @@ begin
   step := private.cadence_days(s.frequency);
   select count(*) into have from public.visits where series_id = s.id;
 
+  -- Backstop: never book a clean on or after the start of another live block at this home
+  -- (a block that slipped, e.g. claimed late or put back on the board, could otherwise run
+  -- into the next one). Those cleans aren't made; the admin is told below.
+  select min(private.block_first_date(o.starts_on, o.preferred_day)) into cutoff
+  from public.series o
+  where o.property_id = s.property_id and o.id <> s.id
+    and o.status in ('offering', 'unclaimed', 'claimed', 'paused')
+    and private.block_first_date(o.starts_on, o.preferred_day) > first_date;
+
   if have < s.block_size then
     insert into public.visits (series_id, customer_id, cleaner_id, scheduled_date, window_start, window_end,
                                duration_minutes, price_pence, cleaner_earnings_pence, ping_fee_pence)
@@ -216,6 +226,7 @@ begin
       select g::date as d
       from generate_series(private.next_cadence_after(first_date, step, today), p_until, make_interval(days => step)) as g
       where not exists (select 1 from public.visits v where v.series_id = s.id and v.scheduled_date = g::date)
+        and (cutoff is null or g::date < cutoff)
       order by 1
       limit s.block_size - have
     ) d
@@ -231,6 +242,17 @@ begin
   else
     new_end := private.next_cadence_after(first_date, step, greatest(today, coalesce(last_date, today)))
                + step * (s.block_size - have - 1);
+    if cutoff is not null and new_end >= cutoff then
+      -- Cut short by the next block: it ends with the last clean it has, and the admin
+      -- decides what to do about the cleans that didn't fit.
+      new_end := greatest(coalesce(last_date, s.starts_on), s.starts_on);
+      insert into public.engine_alerts (kind, series_id, message)
+      select 'block_overlap', s.id,
+             'A block slipped into the next block booked at the same home, so ' || (s.block_size - have)
+             || ' of its cleans were not booked. Agree with the customer what happens to them.'
+      where not exists (select 1 from public.engine_alerts a
+                        where a.series_id = s.id and a.kind = 'block_overlap' and a.resolved_at is null);
+    end if;
   end if;
   if new_end is not null and new_end >= s.starts_on and new_end is distinct from s.ends_on then
     update public.series set ends_on = new_end where id = s.id;
@@ -242,7 +264,7 @@ end $$;
 -- Visits left behind after their day, for a person to look at.
 alter table public.engine_alerts drop constraint engine_alerts_kind_check;
 alter table public.engine_alerts add constraint engine_alerts_kind_check
-  check (kind in ('release_failed', 'generate_failed', 'visit_needs_cover', 'visit_no_show', 'visit_unfinished'));
+  check (kind in ('release_failed', 'generate_failed', 'visit_needs_cover', 'visit_no_show', 'visit_unfinished', 'block_overlap'));
 
 -- Nightly: a clean still 'scheduled' after its day never happened, so it becomes a no-show
 -- and the admin is told. One still 'in_progress' after its day was started but never
@@ -254,10 +276,14 @@ declare
   n integer;
 begin
   perform set_config('app.actor', 'cron:generate-visits', true);
+  -- TODO(pause): nothing pauses a block yet. Cleans in a paused block are skipped here, and
+  -- end_block_if_done only ends 'claimed' blocks. When pausing is built it must decide how a
+  -- paused block's cleans are moved on, when it ends, and that the address locks again.
   with stale as (
-    update public.visits set status = 'no_show'
-    where status = 'scheduled' and scheduled_date < private.london_today()
-    returning id, series_id
+    update public.visits v set status = 'no_show'
+    where v.status = 'scheduled' and v.scheduled_date < private.london_today()
+      and not exists (select 1 from public.series s where s.id = v.series_id and s.status = 'paused')
+    returning v.id, v.series_id
   )
   insert into public.engine_alerts (kind, series_id, visit_id, message)
   select 'visit_no_show', series_id, id, 'A booked clean passed without being started. Check with the cleaner and the customer.'
@@ -268,6 +294,7 @@ begin
   select 'visit_unfinished', v.series_id, v.id, 'A clean was started but never marked complete. Check it and settle it by hand.'
   from public.visits v
   where v.status = 'in_progress' and v.scheduled_date < private.london_today()
+    and not exists (select 1 from public.series s where s.id = v.series_id and s.status = 'paused')
     and not exists (select 1 from public.engine_alerts a where a.visit_id = v.id and a.kind = 'visit_unfinished');
   return n;
 end $$;
@@ -284,7 +311,8 @@ begin
   update public.series s set status = 'ended'
   where s.id = p_series
     and s.status = 'claimed'
-    and (select count(*) from public.visits v where v.series_id = s.id) >= s.block_size
+    and ((select count(*) from public.visits v where v.series_id = s.id) >= s.block_size
+         or s.ends_on < private.london_today())  -- cut short (see generate_visits_for_series)
     and (
       not exists (select 1 from public.visits v where v.series_id = s.id and v.status in ('scheduled', 'in_progress'))
       or (select max(v.scheduled_date) from public.visits v where v.series_id = s.id) < private.london_today()
@@ -318,7 +346,7 @@ begin
   begin
     perform private.close_stale_visits();
   exception when others then
-    raise warning 'close_stale_visits failed: %', sqlerrm;
+    perform private.note_engine_failure('generate_failed', null, 'checking for missed cleans: ' || sqlerrm);
   end;
   commit;
   for sid in select id from public.series where status = 'claimed' loop
@@ -585,8 +613,13 @@ begin
     raise exception 'That day or time isn''t valid' using errcode = 'PC026';
   end if;
 
-  -- One block at a time per home: refuse if a live block's dates overlap this one's.
-  -- A rebook for after the current block (or after it has ended) is fine.
+  -- One block at a time per home. While a block there is still waiting for a cleaner, no
+  -- new one: its dates aren't settled (a late claim moves it later).
+  if exists (select 1 from public.series s where s.property_id = pr.id and s.status in ('offering', 'unclaimed')) then
+    raise exception 'You already have cleans booked at this home on those dates' using errcode = 'PC027';
+  end if;
+  -- And a held block's dates mustn't overlap this one's. A rebook for after the current
+  -- block (or after it has ended) is fine.
   new_first := private.block_first_date(p_starts_on, p_preferred_day);
   new_last := new_first + private.cadence_days(p_frequency) * (p_block_size - 1);
   if exists (
@@ -619,6 +652,15 @@ begin
           'offering', p_starts_on, p_block_size, hub_opens, p_request_id,
           prev.id, fr_cleaner)
   returning id into new_id;
+  return new_id;
+exception when unique_violation then
+  -- The same request id raced in on another connection for a different home (the home
+  -- locks above don't serialise those). Answer as a replay: that series, or PC028.
+  new_id := private.replayed_booking(me, p_request_id, p_property, p_frequency, p_preferred_day,
+                                     p_window_start, p_window_end, p_duration_minutes, p_starts_on, p_block_size);
+  if new_id is null then
+    raise;
+  end if;
   return new_id;
 end $$;
 
