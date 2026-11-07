@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { buttonClass } from "@/components/ui/button";
 import { Badge, Card, EmptyState, ErrorState, PageHeader, PingMark, Stat } from "@/components/ui";
 import { firstName, requireRole } from "@/lib/auth/session";
 import { formatWindow, monthStartInLondon, relativeDay, todayInLondon } from "@/lib/dates";
@@ -48,7 +49,8 @@ export default async function WorkHome() {
       .eq("status", "scheduled")
       .order("scheduled_date")
       .limit(5),
-    supabase.from("job_offers").select("id").eq("status", "open"),
+    // The same list the job board shows, so the count never promises a job that's gone.
+    supabase.rpc("job_board"),
     supabase.from("payouts").select("amount_pence, status, paid_at").gte("created_at", monthStartInLondon()),
   ]);
   const failed = todays.error || upcoming.error || offers.error || payouts.error;
@@ -99,6 +101,9 @@ export default async function WorkHome() {
             <p className="mt-2 max-w-xs text-ink/80">
               {offers.data?.length ? "Waiting in your areas now. First to claim gets the job." : "We'll ping you the moment one comes up in your areas."}
             </p>
+            <Link href="/work/jobs" className={buttonClass("ink", "lg", "mt-6 w-full sm:w-auto")}>
+              {offers.data?.length ? "See the jobs" : "Open the job board"}
+            </Link>
           </Card>
 
           <section aria-labelledby="coming" className="grid content-start gap-4 lg:col-start-1 lg:row-start-2">
