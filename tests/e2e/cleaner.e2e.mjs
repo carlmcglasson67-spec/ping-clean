@@ -15,6 +15,7 @@ const JPEG = Buffer.from("ffd8ffe000104a46494600010100000100010000ffd9", "hex");
 const TARA = "00000000-0000-4000-a000-000000000004";
 const ALEX = "00000000-0000-4000-a000-000000000005";
 const BEN_SERIES = "00000000-0000-4000-c000-000000000002";
+const ANNA_SERIES = "00000000-0000-4000-c000-000000000001";
 
 /** Test set-up and checks straight against the database, as its owner. */
 async function sql(text, params = []) {
@@ -254,6 +255,68 @@ export async function cleanerFlows({ browser, BASE, check, signIn, SHOTS }) {
     await tara.screenshot({ path: `${SHOTS}/work-jobs-claimed-1440.png`, fullPage: true });
     await tara.context().close();
     await alex.context().close();
+  }
+
+  console.log("e2e: today's jobs (Track B)");
+  {
+    // Tara holds Anna's weekly clean, which falls today: 12 Test Street, key code 4721.
+    const tara = await (await browser.newContext(PHONE)).newPage();
+    await signIn(tara, "tara.cleaner");
+    await tara.waitForURL(`${BASE}/work`);
+
+    await check("home leads to today's addresses", async () => {
+      await tara.getByRole("link", { name: "Addresses and directions" }).click();
+      await tara.waitForURL(`${BASE}/work/today`);
+    });
+
+    await check("a claimed job shows the full address, access notes and directions", async () => {
+      await tara.getByRole("heading", { name: "12 Test Street" }).waitFor();
+      const text = await tara.locator("main").innerText();
+      for (const s of ["One clean today.", "9am–12pm", "Workington", "CA14 9ZZ", "Side gate, key in the safe", "One friendly dog", "You earn £37.50"]) {
+        assert.ok(text.includes(s), `expected "${s}"`);
+      }
+      const href = await tara.getByRole("link", { name: "Directions" }).getAttribute("href");
+      const url = new URL(href);
+      assert.equal(url.host, "www.google.com");
+      assert.equal(url.searchParams.get("destination"), "12 Test Street, Workington CA14 9ZZ");
+    });
+
+    await check("the key code stays hidden until tapped", async () => {
+      assert.ok(!(await tara.locator("main").innerText()).includes("4721"));
+      await tara.getByRole("button", { name: /Show key code/ }).click();
+      await tara.getByText("4721").waitFor();
+      await tara.screenshot({ path: `${SHOTS}/work-today-390.png`, fullPage: true });
+      await tara.setViewportSize({ width: 1440, height: 900 });
+      await tara.screenshot({ path: `${SHOTS}/work-today-1440.png`, fullPage: true });
+      await tara.setViewportSize(PHONE.viewport);
+    });
+
+    await check("the page is never stored by the browser or a cache", async () => {
+      const r = await tara.request.get(`${BASE}/work/today`);
+      assert.match(r.headers()["cache-control"] ?? "", /no-store/);
+    });
+
+    await check("a cleaner without today's job never sees its address", async () => {
+      const alex = await (await browser.newContext(PHONE)).newPage();
+      await signIn(alex, "alex.cleaner");
+      await alex.waitForURL(`${BASE}/work`);
+      await alex.goto(`${BASE}/work/today`);
+      await alex.getByText("A free day").waitFor();
+      const html = await alex.content();
+      for (const s of ["12 Test Street", "CA14 9ZZ", "Side gate", "4721"]) assert.ok(!html.includes(s), `must not see "${s}"`);
+      await alex.screenshot({ path: `${SHOTS}/work-today-empty-390.png`, fullPage: true });
+      await alex.context().close();
+    });
+
+    await check("the address goes the moment the job stops being theirs", async () => {
+      await sql(`select private.reopen_series($1)`, [ANNA_SERIES]);
+      await tara.reload();
+      await tara.getByText("This clean is with the Ping office now").waitFor();
+      const html = await tara.content();
+      for (const s of ["12 Test Street", "CA14 9ZZ", "Side gate", "4721"]) assert.ok(!html.includes(s), `must be gone: "${s}"`);
+      await tara.screenshot({ path: `${SHOTS}/work-today-reopened-390.png`, fullPage: true });
+    });
+    await tara.context().close();
   }
 
   {
