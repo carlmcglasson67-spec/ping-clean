@@ -12,10 +12,11 @@ export const metadata: Metadata = {
   description:
     "The same vetted, insured cleaner every week. Fixed prices, a checklist and photos on every clean. Workington, Whitehaven, Cockermouth and across West Cumbria.",
   applicationName: "Ping Clean",
+  // Icons come from app/icon.svg, app/apple-icon.png and app/favicon.ico (scripts/brand/).
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f5f1e8",
+  themeColor: "#f2f1f1",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",

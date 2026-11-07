@@ -16,7 +16,7 @@ export function Field({ label, hint, error, className, ...input }: FieldProps) {
 
   return (
     <div className={cn("grid gap-2", className)}>
-      <label htmlFor={id} className="text-sm font-semibold text-ink">
+      <label htmlFor={id} className="text-sm font-semibold text-navy">
         {label}
       </label>
       <input
@@ -25,14 +25,14 @@ export function Field({ label, hint, error, className, ...input }: FieldProps) {
         aria-describedby={describedBy}
         {...input}
         className={cn(
-          "min-h-14 w-full rounded-md bg-card px-4 text-base text-ink placeholder:text-ink-3",
+          "min-h-14 w-full rounded-md bg-card px-4 text-base text-navy placeholder:text-navy-3",
           "ring-1 ring-inset ring-line transition-shadow duration-200",
-          "focus:outline-none focus:ring-2 focus:ring-ink",
+          "focus:outline-none focus:ring-2 focus:ring-blue",
           error && "ring-2 ring-bad focus:ring-bad",
         )}
       />
       {hint && !error ? (
-        <p id={hintId} className="text-sm text-ink-3">
+        <p id={hintId} className="text-sm text-navy-3">
           {hint}
         </p>
       ) : null}

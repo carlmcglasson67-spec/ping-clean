@@ -1,39 +1,76 @@
 @import "tailwindcss";
 
 /*
-  Ping Clean design tokens. One set for the site and all three apps.
+  Ping Clean design tokens: Carl's official brand (7 Nov 2026). One set for the site and
+  all three apps. Contrast for every text pair is tested in components/ui/tokens.test.ts.
 
-  Ink on warm paper, with a single signal colour for the thing to press.
-  The paper is never pure white: Pervonio rule, no text floating on white.
+  Two kinds of surface:
+    light  canvas (mist white) and white cards, navy text      -> content, forms, lists
+    navy   deep navy panels with fine teal signal waves         -> heroes, statements, admin
+  Teal (#00C2D1) is for navy surfaces and big shapes. It is never small text on light:
+  there, teal text is teal-ink (#08707F), and teal-deep (#0C93AC) only for large type and icons.
 */
 @theme {
-  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
-  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
 
-  /* Surfaces */
-  --color-paper: #f5f1e8;      /* page background */
-  --color-paper-2: #ece6d8;    /* recessed panels, skeletons */
-  --color-card: #fbf9f4;       /* raised cards */
-  --color-ink: #11181f;        /* text, dark panels */
-  --color-ink-2: #3a444e;      /* secondary text */
-  --color-ink-3: #6b747d;      /* hints, meta */
-  --color-line: #d9d1c0;       /* hairlines on paper */
-  --color-line-dark: #2a333c;  /* hairlines on ink */
+  /* ---- Light surfaces */
+  --color-canvas: #f2f1f1;      /* page background: never pure white */
+  --color-mist: #e2e7e9;        /* recessed panels, skeletons, alternate sections */
+  --color-card: #ffffff;        /* raised cards and fields */
+  --color-line: #c9d3db;        /* hairlines on light */
 
-  /* Brand */
-  --color-signal: #ff5a2b;     /* primary action. The "ping". */
-  --color-signal-ink: #c2370f; /* signal text on paper (AA on paper) */
-  --color-signal-soft: #ffe3d8;
-  --color-mist: #dbe6ef;       /* cool accent panels */
-  --color-moss: #23493b;       /* deep green for trust moments */
+  /* ---- Navy surfaces */
+  --color-navy-950: #010c26;    /* deepest: hero backgrounds */
+  --color-navy-900: #011a3a;    /* navy panels */
+  --color-navy-800: #0b2a57;    /* raised on navy */
+  --color-line-navy: #1e3a66;   /* hairlines on navy */
 
-  /* Status */
-  --color-ok: #1f7a4d;
+  /* ---- Text */
+  --color-navy: #001d44;        /* text on light; also the "ink" panel colour */
+  --color-navy-2: #334a6b;      /* secondary text on light */
+  --color-navy-3: #536581;      /* hints and meta on light (AA on canvas, mist and white) */
+  --color-on-navy: #ffffff;
+  --color-on-navy-2: #c3cfdd;   /* secondary text on navy */
+  --color-on-navy-3: #97a9c2;   /* hints on navy */
+
+  /* ---- Brand */
+  --color-blue: #0052fe;        /* brand blue: primary action on light, links */
+  --color-blue-press: #0043d1;
+  --color-blue-bright: #1b7efa; /* large text and decoration on navy only */
+  --color-teal: #00c2d1;        /* the ping: accents and actions on navy, big shapes */
+  --color-teal-glow: #18f5e8;   /* highlight on navy */
+  --color-teal-deep: #0c93ac;   /* large teal type and icons on light (3:1) */
+  --color-teal-ink: #08707f;    /* teal text of any size on light */
+  --color-teal-soft: #d4f3f5;   /* soft teal fill on light (teal-ink text on it) */
+  --color-logo-deep: #0f2df6;   /* logo only: the outer arc */
+
+  /* ---- Status */
+  --color-ok: #1c6f46;
   --color-ok-soft: #dcefe3;
-  --color-warn: #9a5b00;
+  --color-warn: #8f5200;
   --color-warn-soft: #fbeccb;
   --color-bad: #b3261e;
   --color-bad-soft: #f8dcd8;
+  --color-ok-on-navy: #5bd69a;  /* status text on navy surfaces */
+  --color-warn-on-navy: #f5b950;
+  --color-bad-on-navy: #ff8a80;
+
+  /*
+    ---- Earlier token names, kept as aliases so pages written before the brand still work.
+    They now resolve to the brand colours. New code uses the names above; the tracks move
+    their pages over as they touch them (list in the brand PR).
+  */
+  --color-paper: var(--color-canvas);
+  --color-paper-2: var(--color-mist);
+  --color-ink: var(--color-navy);
+  --color-ink-2: var(--color-navy-2);
+  --color-ink-3: var(--color-navy-3);
+  --color-line-dark: var(--color-line-navy);
+  --color-signal: var(--color-teal);
+  --color-signal-ink: var(--color-teal-ink);
+  --color-signal-soft: var(--color-teal-soft);
+  --color-moss: var(--color-teal-ink);
 
   /* Type scale: fluid, confident, never small. */
   --text-xs: 0.8125rem;
@@ -49,29 +86,29 @@
   --text-2xl: clamp(1.875rem, 1.5rem + 1.6vw, 2.75rem);
   --text-2xl--line-height: 1.1;
   --text-3xl: clamp(2.5rem, 1.8rem + 3vw, 4.5rem);
-  --text-3xl--line-height: 1;
-  --text-4xl: clamp(3.25rem, 2rem + 6vw, 8.5rem);
-  --text-4xl--line-height: 0.92;
+  --text-3xl--line-height: 1.02;
+  --text-4xl: clamp(3.1rem, 1.9rem + 5.6vw, 8rem);
+  --text-4xl--line-height: 0.96;
 
   --radius-sm: 0.5rem;
   --radius-md: 0.875rem;
   --radius-lg: 1.375rem;
   --radius-xl: 2rem;
 
-  --shadow-card: 0 1px 0 rgb(17 24 31 / 0.04), 0 8px 24px -12px rgb(17 24 31 / 0.18);
-  --shadow-lift: 0 2px 0 rgb(17 24 31 / 0.05), 0 20px 40px -20px rgb(17 24 31 / 0.35);
+  --shadow-card: 0 1px 0 rgb(0 29 68 / 0.04), 0 10px 28px -14px rgb(0 29 68 / 0.22);
+  --shadow-lift: 0 2px 0 rgb(0 29 68 / 0.05), 0 24px 44px -22px rgb(0 29 68 / 0.4);
+  --shadow-glow: 0 0 0 1px rgb(0 194 209 / 0.35), 0 12px 36px -12px rgb(0 194 209 / 0.45);
 
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @layer base {
   html {
-    background: var(--color-paper);
-    color: var(--color-ink);
+    background: var(--color-canvas);
+    color: var(--color-navy);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    font-feature-settings: "ss01", "cv11";
   }
 
   body {
@@ -87,18 +124,19 @@
 
   h1, h2, h3, .font-display {
     font-family: var(--font-display);
-    font-variation-settings: "opsz" 96;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.03em;
     text-wrap: balance;
   }
 
   p { text-wrap: pretty; }
 
-  ::selection { background: var(--color-signal); color: white; }
+  ::selection { background: var(--color-teal); color: var(--color-navy); }
 
+  /* Two rings so focus shows on light (navy ring) and on navy (glow ring). */
   :focus-visible {
-    outline: 3px solid var(--color-signal);
+    outline: 3px solid var(--color-navy);
     outline-offset: 3px;
+    box-shadow: 0 0 0 3px var(--color-teal-glow);
     border-radius: 6px;
   }
 
@@ -111,9 +149,45 @@
 }
 
 @layer utilities {
-  /* Fine paper grain so large ink and paper panels never look flat. */
+  /* Fine grain so large flat panels never look like flat fills. */
   .grain {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /*
+    Navy panels carry the brand's signal waves: a soft light from the top left, fine teal
+    lines along the bottom, and the grain. Any `grain` panel on navy gets this, so the
+    pages written before the brand pick it up without changes.
+  */
+  .signal-waves,
+  .grain.bg-ink,
+  .grain.bg-navy,
+  .grain.bg-navy-900,
+  .grain.bg-navy-950 {
+    background-image:
+      url("/brand/signal-waves.svg"),
+      radial-gradient(120% 90% at 0% 0%, rgb(27 126 250 / 0.22) 0%, transparent 55%),
+      radial-gradient(90% 70% at 100% 100%, rgb(0 194 209 / 0.12) 0%, transparent 60%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+    /* Low and slim: the lines run along the foot of the panel, never behind body copy. */
+    background-size: 170% min(34%, 15rem), 100% 100%, 100% 100%, 160px 160px;
+    background-position: 30% calc(100% + 2.5rem), 0 0, 0 0, 0 0;
+  }
+  .signal-waves { background-color: var(--color-navy-950); }
+
+  /* The signature gradient, for big type only (the banners' "BOOK NOW"). */
+  .text-brand-gradient {
+    background: linear-gradient(90deg, var(--color-blue) 0%, var(--color-teal) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .text-brand-gradient-navy {
+    background: linear-gradient(90deg, var(--color-blue-bright) 0%, var(--color-teal-glow) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 
   .tabular { font-variant-numeric: tabular-nums; }

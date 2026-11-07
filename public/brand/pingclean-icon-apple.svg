@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-46.36 -30.06 211.11 211.11" role="img" aria-label="Ping Clean">
+<defs><radialGradient id="g" cx="30%" cy="25%" r="85%"><stop offset="0" stop-color="#0B2A57"/><stop offset="1" stop-color="#010C26"/></radialGradient></defs><rect x="-46.36" y="-30.06" width="211.11" height="211.11" rx="0" fill="url(#g)"/>
+<g fill="none" stroke-width="13" stroke-linecap="round">
+<path stroke="#0F2DF6" d="M-5.09 71.41A56.3 56.3 0 0 1 52.96 10.23"/>
+<path stroke="#1190F7" d="M17.15 81.49A45.9 45.9 0 0 1 84.15 34.57"/>
+<path stroke="#00C2D1" d="M101.51 76.06A39.34 39.34 0 0 1 50.88 118.39"/>
+<path stroke="#00C2D1" d="M123.72 85.9A53.1 53.1 0 0 1 73.43 140.78"/>
+</g>
+<path fill="#00C2D1" d="M61.95 52.4Q64.9 73.3 85.4 76.25Q64.9 79.2 61.95 100.1Q59 79.2 38.5 76.25Q59 73.3 61.95 52.4Z"/>
+</svg>

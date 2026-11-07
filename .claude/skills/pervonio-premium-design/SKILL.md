@@ -25,6 +25,12 @@ last full stop on every page. Apply from the first commit, never as a fix-up lat
 - Every screen has designed empty, loading and error states. No raw error text.
 - Same tokens and type as the site so it feels like one brand.
 
+## In this repo: the Ping Clean brand
+Use the tokens, logo components and rules in the Brand section of CLAUDE.md. Navy and
+blue must feel premium, not generic tech: deep navy, generous space, fine signal-wave
+lines, big confident type, one bright action per view. Take the flyers' palette, logo
+and mood, never their busy layouts.
+
 ## Copy
 British English. Plain, warm, specific. No filler, no lorem ipsum, no "Welcome to our website".
 
