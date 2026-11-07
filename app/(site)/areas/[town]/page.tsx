@@ -174,14 +174,14 @@ export default async function AreaPage({ params }: { params: Promise<{ town: str
       {/* ------------------------------------------------------------ Nearby + cleaners */}
       <section aria-label="Nearby and cleaners" className="px-5 pb-20 sm:px-10 lg:px-16 lg:pb-28">
         <div className="mx-auto grid max-w-[96rem] gap-4 lg:grid-cols-12 lg:gap-5">
-          <div className="rounded-xl bg-card p-8 shadow-card ring-1 ring-line/70 sm:p-12 lg:col-span-7">
+          <div className="min-w-0 rounded-xl bg-card p-8 shadow-card ring-1 ring-line/70 sm:p-12 lg:col-span-7">
             <Eyebrow tone="muted">Nearby</Eyebrow>
             <ul className="mt-6 grid">
               {near.map((t) => (
                 <li key={t.slug} className="border-b border-line last:border-b-0">
                   <Link href={areaHref(t.slug)} className="group flex min-h-20 items-center justify-between gap-6 py-4">
-                    <span className="font-display text-[clamp(1.75rem,1.2rem+1.6vw,2.75rem)] font-semibold leading-none group-hover:text-signal-ink">{t.name}</span>
-                    <span className="flex items-center gap-4">
+                    <span className="min-w-0 font-display text-[clamp(1.75rem,1.2rem+1.6vw,2.75rem)] font-semibold leading-none group-hover:text-signal-ink">{t.name}</span>
+                    <span className="flex shrink-0 items-center gap-3 sm:gap-4">
                       <span className="rounded-full bg-paper-2 px-3 py-1 text-sm font-semibold text-ink-2 tabular">{t.districts.join(" ")}</span>
                       <span aria-hidden className="text-2xl transition-transform group-hover:translate-x-1">
                         &rarr;
