@@ -60,12 +60,13 @@ language sql immutable set search_path = '' as $$
   from (select regexp_replace(coalesce(p, ''), '[\s().-]', '', 'g') as t) x
 $$;
 
--- Lower-cased and trimmed. Plain printable ASCII only (no invisible or right-to-left
--- characters), one @, a dot after it. NULL otherwise.
+-- Lower-cased and trimmed, without a trailing dot on the domain ("jo@gmail.com." is
+-- "jo@gmail.com"). Plain printable ASCII only (no invisible or right-to-left characters),
+-- one @, a dot after it. NULL otherwise.
 create function private.normalise_email(p text) returns text
 language sql immutable set search_path = '' as $$
   select case when t ~ '^[!-~]+$' and t ~ '^[^@]+@[^@]+\.[^@]+$' and length(t) <= 254 then t end
-  from (select lower(btrim(coalesce(p, ''))) as t) x
+  from (select regexp_replace(lower(btrim(coalesce(p, ''))), '\.+$', '') as t) x
 $$;
 
 -- For admin screens: enough to recognise an entry, not enough to contact anyone.
@@ -135,13 +136,17 @@ revoke all on private.interest_suppressions from public, anon, authenticated;
 --   gmail.com / googlemail.com: dots and anything after "+" removed, domain gmail.com
 --   every other domain: anything after "+" removed
 --   mobiles: already normalised (+447…)
+-- Only when something is left: "+abc@example.com" stays as it is, so it never collapses
+-- into "@example.com" and blocks a different "+zzz@example.com".
 create function private.contact_canonical(p_email text, p_phone text) returns text
 language sql immutable set search_path = '' as $$
   select case
     when p_email is null then 'p:' || p_phone
     when split_part(p_email, '@', 2) in ('gmail.com', 'googlemail.com')
-      then 'e:' || replace(split_part(split_part(p_email, '@', 1), '+', 1), '.', '') || '@gmail.com'
-    else 'e:' || split_part(split_part(p_email, '@', 1), '+', 1) || '@' || split_part(p_email, '@', 2)
+      then 'e:' || coalesce(nullif(replace(split_part(split_part(p_email, '@', 1), '+', 1), '.', ''), ''),
+                            split_part(p_email, '@', 1)) || '@gmail.com'
+    else 'e:' || coalesce(nullif(split_part(split_part(p_email, '@', 1), '+', 1), ''), split_part(p_email, '@', 1))
+              || '@' || split_part(p_email, '@', 2)
   end
 $$;
 

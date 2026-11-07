@@ -188,6 +188,35 @@ describe("register_interest: only the server can call it (review BLOCK 1)", () =
     }
   });
 
+  it("doesn't let one +tag-only address's opt-out block another's (sign-off item 1)", async () => {
+    const r = await server(async (q) => {
+      for (const email of ["+zzz@example.com", "+@example.com", "+abc+more@example.com"]) await register(q, { email });
+      await register(q, { email: "+abc@example.com", postcode: "LA9 4AA" }); // the opted-out one itself: still blocked
+      await q.rows(`reset role`);
+      return (await q.rows<{ email: string }>(`select email from public.interest_signups where unsubscribed_at is null order by email`)).map((x) => x.email);
+    }, async (su) => {
+      await seedReg(su, { email: "+abc@example.com" });
+      await su.rows(`update public.interest_signups set unsubscribed_at = now() - interval '40 days'`);
+      await su.rows(`select private.purge_interest()`);
+    });
+    // "+abc+more" canonicalises to "+abc+more" (nothing left before the first +), not "+abc": a different address.
+    expect(r).toEqual(["+@example.com", "+abc+more@example.com", "+zzz@example.com"]);
+  });
+
+  it("treats a trailing dot on the domain as the same address (sign-off item 2)", async () => {
+    const r = await server(async (q) => {
+      await register(q, { email: "J.O@Gmail.com." });
+      await q.rows(`reset role`);
+      return q.rows(`select email from public.interest_signups`);
+    }, async (su) => {
+      await seedReg(su, { email: "jo@gmail.com" });
+      await su.rows(`update public.interest_signups set unsubscribed_at = now()`);
+    });
+    expect(r).toEqual([{ email: "jo@gmail.com" }]); // only the opted-out row: nothing new stored
+    expect(await server(async (q) => { await register(q, { email: "Jo@Example.com." }); await q.rows(`reset role`);
+      return q.rows(`select email from public.interest_signups`); })).toEqual([{ email: "jo@example.com" }]);
+  });
+
   it("keeps every contact an admin deletes on request on the suppression list, opted out or not (last check 1)", async () => {
     const r = await setupThen(async (su) => {
       await seedReg(su);                                                  // still subscribed

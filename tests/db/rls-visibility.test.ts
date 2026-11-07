@@ -33,6 +33,20 @@ describe("every table is locked down", () => {
     expect(rows).toEqual([]);
   });
 
+  it("has no view, materialized view or foreign table in public or private, unless it's a security_invoker view", async () => {
+    // Views run as their owner by default, which would skip row level security.
+    const rows = await as("superuser", (q) =>
+      q.rows<{ name: string; kind: string }>(
+        `select n.nspname || '.' || c.relname as name, c.relkind::text as kind
+           from pg_class c join pg_namespace n on n.oid = c.relnamespace
+          where n.nspname in ('public', 'private') and c.relkind in ('v', 'm', 'f')
+            and not (c.relkind = 'v' and coalesce(c.reloptions @> array['security_invoker=true'], false))
+          order by 1`,
+      ),
+    );
+    expect(rows).toEqual([]);
+  });
+
   it("gives anonymous visitors nothing from any table", async () => {
     for (const t of TABLES) {
       const result = await as("anon", (q) => q.attempt(`select * from public.${t}`));

@@ -42,6 +42,7 @@ describe("normalising, the same as the database", () => {
     expect(normaliseEmail("jo‮@example.com")).toBeNull(); // right-to-left override
     expect(normaliseEmail("jö@example.com")).toBeNull();
     expect(normaliseEmail("jo smith@example.com")).toBeNull();
+    expect(normaliseEmail("J.O@Gmail.com.")).toBe("j.o@gmail.com"); // trailing dot on the domain dropped, as in the database
   });
 });
 
