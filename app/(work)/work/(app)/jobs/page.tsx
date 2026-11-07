@@ -6,7 +6,7 @@ import { requireRole } from "@/lib/auth/session";
 import { formatDay, formatWindow, todayInLondon, weekdayName } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
 import { formatDuration, formatPence } from "@/lib/money";
-import { firstVisitDate } from "../../_lib/schedule";
+import { firstVisitDate, formatShortDay } from "../../_lib/schedule";
 import { JobCard, type BoardJob } from "./job-card";
 
 export const metadata: Metadata = { title: "New jobs" };
@@ -25,8 +25,8 @@ export default async function JobsPage() {
   const header = (
     <PageHeader
       eyebrow="New jobs"
-      title="Regular cleans in your areas."
-      lede="Claim one and the customer is yours, visit after visit. You'll see the full address once it's yours."
+      title="Cleans in your areas."
+      lede="Each job is a block of cleans at one home. Claim it and every clean in it is yours. You'll see the full address once it's yours."
     />
   );
 
@@ -66,6 +66,10 @@ export default async function JobsPage() {
       hasPets: j.has_pets,
       rhythm: RHYTHM[j.frequency](day),
       firstVisit: formatDay(firstVisitDate(j.starts_on, j.preferred_day, j.frequency, today)),
+      // block_size is the true count they'd do if they took it now; ends_on its last clean.
+      cleans: j.block_size,
+      block: j.block_size === 1 ? `1 clean, on ${formatShortDay(j.ends_on)}` : `${j.block_size} cleans, last one ${formatShortDay(j.ends_on)}`,
+      firstRefusal: j.first_refusal,
       window: formatWindow(j.window_start, j.window_end),
       hours: formatDuration(j.duration_minutes),
       earnings: formatPence(j.earnings_per_visit_pence),
@@ -87,13 +91,13 @@ export default async function JobsPage() {
             </Link>
           }
         >
-          We&rsquo;ll ping you the moment a regular clean comes up in{" "}
+          We&rsquo;ll ping you the moment a new job comes up in{" "}
           {me.areas.length ? me.areas.join(", ") : "your areas"}. More areas and days mean more jobs.
         </EmptyState>
       ) : (
         <ol className="grid gap-5 lg:grid-cols-2 lg:gap-6">
           {jobs.map((j) => (
-            <li key={j.offerId} className="grid">
+            <li key={j.offerId} className="grid min-w-0">
               <JobCard job={j} />
             </li>
           ))}

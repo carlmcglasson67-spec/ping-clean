@@ -9,7 +9,7 @@ import { claimOutcome, type ClaimResult } from "../../_lib/claim";
 const input = z.object({ offerId: pgUuid, seriesId: pgUuid });
 
 /**
- * Claims a regular clean, through claim_series(): the first eligible cleaner wins,
+ * Claims a block of cleans, through claim_series(): the first eligible cleaner wins,
  * atomically, with eligibility re-checked at that moment. Nothing about the claim is
  * decided here; this only turns the database's answer into plain words.
  *

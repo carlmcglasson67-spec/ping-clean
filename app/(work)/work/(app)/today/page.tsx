@@ -46,7 +46,7 @@ export default async function TodayPage() {
       <>
         {header(0)}
         <EmptyState title="Your cleans will show here">
-          Once you&rsquo;re approved and claim a regular clean, each day&rsquo;s jobs appear here with the address and directions.
+          Once you&rsquo;re approved and claim a job, each day&rsquo;s jobs appear here with the address and directions.
         </EmptyState>
       </>
     );
