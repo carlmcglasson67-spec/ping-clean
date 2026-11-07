@@ -26,6 +26,7 @@ export function Photo({
   className,
   children,
   priority = false,
+  captionSide = "left",
 }: {
   /** Stable name for the photo Carl supplies, e.g. "home-hero-kitchen". */
   slot: string;
@@ -34,6 +35,8 @@ export function Photo({
   className?: string;
   children?: ReactNode;
   priority?: boolean;
+  /** "right" keeps two captions apart when frames overlap, as in the before/after. */
+  captionSide?: "left" | "right";
 }) {
   const t = tones[tone];
   return (
@@ -58,7 +61,12 @@ export function Photo({
         <rect x="8" y="10" width="40" height="46" fill="none" stroke={t.line} strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
       </svg>
       {children}
-      <figcaption className="absolute bottom-4 left-4 right-4 flex items-center gap-2 text-sm font-semibold sm:bottom-5 sm:left-5">
+      <figcaption
+        className={cn(
+          "absolute bottom-4 flex items-center gap-2 text-sm font-semibold sm:bottom-5",
+          captionSide === "left" ? "left-4 max-w-[calc(100%-2rem)] sm:left-5" : "right-4 max-w-[calc(50%-1.5rem)] justify-end text-right sm:right-5",
+        )}
+      >
         <span className="size-1.5 shrink-0 rounded-full bg-current opacity-70" aria-hidden />
         <span className="opacity-85">{caption}</span>
       </figcaption>
