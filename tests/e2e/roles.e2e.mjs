@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
+import { cleanerFlows } from "./cleaner.e2e.mjs";
 import { startFakeSupabase } from "./fake-supabase.mjs";
 
 const PORT = 3200;
@@ -184,6 +185,9 @@ try {
     });
     await ctx.close();
   }
+
+  // Track B's cleaner flows. Last, because they change data.
+  await cleanerFlows({ browser, BASE, check, signIn, SHOTS });
 } finally {
   await browser.close();
   stopApp();
