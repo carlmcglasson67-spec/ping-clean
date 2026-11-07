@@ -25,6 +25,7 @@ const ITEMS: Item[] = [
     href: "/work/today",
     label: "Today",
     activeOnly: true,
+    also: ["/work/visit"],
     icon: (
       <svg viewBox="0 0 24 24" className="size-6" aria-hidden>
         <rect {...stroke} x="4" y="5.5" width="16" height="14.5" rx="2" />
