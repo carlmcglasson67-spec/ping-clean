@@ -32,7 +32,7 @@ function localFaq(t: Town): Faq[] {
   return [
     {
       q: `Do you cover ${places}?`,
-      a: `Ping cleaners choose the postcode districts they travel to, and ${t.districts.join(" and ")} is the district for ${t.name}. Put your postcode into the price checker when booking opens and you’ll see straight away whether we can take your booking.`,
+      a: `Ping cleaners choose the postcode districts they travel to, and ${t.districts.join(" and ")} is the district for ${t.name}. Put your postcode into the instant price and you’ll see straight away whether we’re booking where you live.`,
     },
     {
       q: `Will I get the same cleaner in ${t.name} every time?`,
@@ -70,8 +70,8 @@ export default async function AreaPage({ params }: { params: Promise<{ town: str
             </h1>
             <p className="mt-10 max-w-2xl text-xl text-ink-2">{town.intro}</p>
             <div className="mt-10 flex flex-wrap gap-3">
-              <ButtonLink href="/#how" size="lg">
-                How Ping works
+              <ButtonLink href="/price" size="lg">
+                Get your price
               </ButtonLink>
               <ButtonLink href={FAQ_LINK.href} size="lg" variant="secondary">
                 Questions
