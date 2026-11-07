@@ -294,10 +294,10 @@ export function VisitDay({ visitId, items: initial, photos: existing }: { visitI
         <div className="flex items-baseline justify-between gap-4">
           <h2 id="progress" className="text-xl font-semibold">Checklist</h2>
           <p className="font-display text-2xl font-semibold tabular" aria-live="polite">
-            {resolved}<span className="text-ink-3">/{total}</span>
+            {resolved}<span className="text-navy-3">/{total}</span>
           </p>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-paper-2" aria-hidden>
+        <div className="h-2 overflow-hidden rounded-full bg-mist" aria-hidden>
           <div className="h-full rounded-full bg-ok transition-[width] duration-500" style={{ width: `${total ? (resolved / total) * 100 : 0}%` }} />
         </div>
         <SyncLine ticks={pendingCount} photos={photosWaiting} />
@@ -308,7 +308,7 @@ export function VisitDay({ visitId, items: initial, photos: existing }: { visitI
       <div className="grid gap-8">
         {rooms.map(([room, list]) => (
           <section key={room} aria-label={room} className="grid gap-3">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-ink-3">{room}</h3>
+            <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-navy-3">{room}</h3>
             <ul className="grid gap-2.5">
               {list.map((i) => (
                 <ChecklistRow key={i.id} item={i} state={items[i.id]!} error={itemErrors[i.id]} onChange={(s) => change(i.id, s)} />
@@ -320,15 +320,15 @@ export function VisitDay({ visitId, items: initial, photos: existing }: { visitI
 
       <PhotoBox kind="after" title="After photos" hint="When you're done: the same rooms, finished." existing={existing} queue={queue} error={photoError.after} onAdd={addPhoto} />
 
-      <section aria-labelledby="finish" className="grid gap-4 rounded-lg bg-ink p-6 text-paper sm:p-8">
+      <section aria-labelledby="finish" className="grain relative grid gap-4 overflow-hidden rounded-lg bg-navy-900 p-6 pb-10 text-on-navy sm:p-8 sm:pb-12">
         <h2 id="finish" className="text-xl font-semibold">Finished?</h2>
-        <ul className="grid gap-1.5 text-paper/80">
+        <ul className="grid gap-1.5 text-on-navy-2">
           <Check ok={resolved === total}>{resolved === total ? "Every item ticked or explained" : `${total - resolved} item${total - resolved === 1 ? "" : "s"} still to tick or explain`}</Check>
           <Check ok={photosOf("before") > 0}>{photosOf("before") > 0 ? "Before photo added" : "Add a before photo"}</Check>
           <Check ok={photosOf("after") > 0}>{photosOf("after") > 0 ? "After photo added" : "Add an after photo"}</Check>
         </ul>
         {completeError ? <p role="alert" className="rounded-md bg-bad-soft px-4 py-3 font-medium text-bad">{completeError}</p> : null}
-        <Button size="xl" pending={completing} onClick={() => void complete()} className="w-full">
+        <Button size="xl" variant="signal" pending={completing} onClick={() => void complete()} className="w-full">
           {completing ? "Completing…" : "Complete this clean"}
         </Button>
       </section>
@@ -351,19 +351,19 @@ function completeMessage(res: Extract<VisitResult, { ok: false }>): string {
 function Check({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return (
     <li className="flex items-center gap-3">
-      <span className={cn("grid size-6 shrink-0 place-items-center rounded-full", ok ? "bg-ok text-paper" : "ring-2 ring-paper/30")} aria-hidden>
+      <span className={cn("grid size-6 shrink-0 place-items-center rounded-full", ok ? "bg-ok text-on-navy" : "ring-2 ring-white/30")} aria-hidden>
         {ok ? (
           <svg viewBox="0 0 24 24" className="size-4"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>
         ) : null}
       </span>
-      <span className={ok ? "text-paper" : undefined}>{children}</span>
+      <span className={ok ? "text-on-navy" : undefined}>{children}</span>
     </li>
   );
 }
 
 function SyncLine({ ticks, photos }: { ticks: number; photos: number }) {
   if (!ticks && !photos) {
-    return <p className="text-sm text-ink-3">Everything&rsquo;s saved.</p>;
+    return <p className="text-sm text-navy-3">Everything&rsquo;s saved.</p>;
   }
   const parts = [ticks ? `${ticks} tick${ticks === 1 ? "" : "s"}` : null, photos ? `${photos} photo${photos === 1 ? "" : "s"}` : null].filter(Boolean);
   return (
@@ -396,7 +396,7 @@ function ChecklistRow({ item, state, error, onChange }: { item: Item; state: Sta
             aria-hidden
             className={cn(
               "grid size-8 shrink-0 place-items-center rounded-full ring-2 transition-colors",
-              state.done ? "bg-ok text-paper ring-ok" : skipped ? "bg-warn text-paper ring-warn" : "ring-line",
+              state.done ? "bg-ok text-on-navy ring-ok" : skipped ? "bg-warn text-on-navy ring-warn" : "ring-line",
             )}
           >
             {state.done ? (
@@ -406,7 +406,7 @@ function ChecklistRow({ item, state, error, onChange }: { item: Item; state: Sta
             ) : null}
           </span>
           <span className="grid gap-0.5">
-            <span className={cn("text-base font-semibold", state.done && "text-ink-2")}>{item.label}</span>
+            <span className={cn("text-base font-semibold", state.done && "text-navy-2")}>{item.label}</span>
             {skipped ? <span className="text-sm text-warn">Couldn&rsquo;t do: {state.reason}</span> : null}
           </span>
         </button>
@@ -419,7 +419,7 @@ function ChecklistRow({ item, state, error, onChange }: { item: Item; state: Sta
               setDraft(state.reason ?? "");
               setOpen((o) => !o);
             }}
-            className="min-h-16 shrink-0 border-l border-line/70 px-4 text-sm font-semibold text-ink-2 hover:bg-paper-2"
+            className="min-h-16 shrink-0 border-l border-line/70 px-4 text-sm font-semibold text-navy-2 hover:bg-mist"
           >
             {skipped ? "Change" : "Couldn’t do"}
           </button>
@@ -428,7 +428,7 @@ function ChecklistRow({ item, state, error, onChange }: { item: Item; state: Sta
       {open ? (
         <form
           id={`${id}-why`}
-          className="grid gap-3 border-t border-line/70 bg-paper px-4 py-4"
+          className="grid gap-3 border-t border-line/70 bg-canvas px-4 py-4"
           onSubmit={(e) => {
             e.preventDefault();
             if (!draftOk) return;
@@ -444,7 +444,7 @@ function ChecklistRow({ item, state, error, onChange }: { item: Item; state: Sta
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="For example: No access to the back bedroom"
-            className="w-full rounded-md bg-card px-4 py-3 text-base ring-1 ring-inset ring-line focus:outline-none focus:ring-2 focus:ring-ink"
+            className="w-full rounded-md bg-card px-4 py-3 text-base ring-1 ring-inset ring-line focus:outline-none focus:ring-2 focus:ring-navy"
           />
           {!draftOk && draft.trim() ? <p className="text-sm font-medium text-bad">Say why in a few words.</p> : null}
           <div className="flex gap-3">
@@ -492,21 +492,21 @@ function PhotoBox({
         <h2 id={`${id}-h`} className="text-xl font-semibold">{title}</h2>
         {count ? <Badge tone="ok">{count} added</Badge> : <Badge tone="warn">At least one</Badge>}
       </div>
-      <p className="-mt-2 text-ink-2">{hint}</p>
+      <p className="-mt-2 text-navy-2">{hint}</p>
       {count ? (
         <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {mine.map((p) => (
-            <li key={p.id} className="relative aspect-square overflow-hidden rounded-md bg-paper-2">
+            <li key={p.id} className="relative aspect-square overflow-hidden rounded-md bg-mist">
               {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL, not an optimisable asset */}
               {p.url ? <img src={p.url} alt={`${title.replace(" photos", "")} photo`} className="size-full object-cover" /> : null}
             </li>
           ))}
           {queued.map((p) => (
-            <li key={p.localId} className="relative aspect-square overflow-hidden rounded-md bg-paper-2">
+            <li key={p.localId} className="relative aspect-square overflow-hidden rounded-md bg-mist">
               {/* eslint-disable-next-line @next/next/no-img-element -- a local preview of a photo still sending */}
               <img src={p.preview} alt={`${title.replace(" photos", "")} photo${p.status === "sent" ? "" : ", sending"}`} className={cn("size-full object-cover", p.status !== "sent" && "opacity-60")} />
               {p.status !== "sent" ? (
-                <span className="absolute inset-x-1 bottom-1 flex items-center justify-center gap-1 rounded bg-ink/80 py-0.5 text-xs font-semibold text-paper">
+                <span className="absolute inset-x-1 bottom-1 flex items-center justify-center gap-1 rounded bg-navy/80 py-0.5 text-xs font-semibold text-on-navy">
                   <Spinner className="size-3" /> Sending
                 </span>
               ) : null}
@@ -530,7 +530,7 @@ function PhotoBox({
       />
       <label
         htmlFor={`${id}-file`}
-        className={buttonClass(count ? "secondary" : "primary", "lg", "w-full cursor-pointer peer-focus-visible:outline-3 peer-focus-visible:outline-offset-3 peer-focus-visible:outline-signal")}
+        className={buttonClass(count ? "secondary" : "primary", "lg", "w-full cursor-pointer peer-focus-visible:outline-3 peer-focus-visible:outline-offset-3 peer-focus-visible:outline-navy")}
       >
         <svg viewBox="0 0 24 24" className="size-6" aria-hidden>
           <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />

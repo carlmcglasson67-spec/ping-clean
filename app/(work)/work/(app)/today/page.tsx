@@ -126,30 +126,30 @@ function TodayJob({ n, job }: { n: number; job: Job }) {
   const p = job.property;
 
   return (
-    <article aria-labelledby={`visit-${job.id}`} className={cn("grid content-start overflow-hidden rounded-lg ring-1", live ? "bg-card shadow-card ring-line/70" : "bg-paper-2/70 ring-line")}>
+    <article aria-labelledby={`visit-${job.id}`} className={cn("grid content-start overflow-hidden rounded-lg ring-1", live ? "bg-card shadow-card ring-line/70" : "bg-mist/70 ring-line")}>
       <header className="flex flex-wrap items-center justify-between gap-3 px-6 pt-6 sm:px-8 sm:pt-8">
         <div className="flex items-baseline gap-4">
-          <span className="font-display text-xl font-semibold text-ink-3 tabular">{String(n).padStart(2, "0")}</span>
+          <span className="font-display text-xl font-semibold text-navy-3 tabular">{String(n).padStart(2, "0")}</span>
           <p className="font-display text-3xl font-semibold tabular">{formatWindow(job.window_start, job.window_end)}</p>
         </div>
         <Badge tone={st.tone}>{st.label}</Badge>
       </header>
-      <p className="flex flex-wrap gap-x-3 px-6 pt-1 text-ink-2 sm:px-8">
+      <p className="flex flex-wrap gap-x-3 px-6 pt-1 text-navy-2 sm:px-8">
         <span>Arrive in this window · {formatDuration(job.duration_minutes)}</span>
-        {p ? <span className="font-semibold text-ink">You earn {formatPence(job.cleaner_earnings_pence)}</span> : null}
+        {p ? <span className="font-semibold text-navy">You earn {formatPence(job.cleaner_earnings_pence)}</span> : null}
       </p>
 
       {!p ? (
         <div className="m-6 grid gap-2 rounded-md bg-warn-soft p-5 sm:m-8">
           <p id={`visit-${job.id}`} className="text-lg font-semibold text-warn">This clean is with the Ping office now</p>
-          <p className="text-ink-2">It&rsquo;s no longer on your list, so the address has been taken off your phone. Call the office if you think that&rsquo;s wrong.</p>
+          <p className="text-navy-2">It&rsquo;s no longer on your list, so the address has been taken off your phone. Call the office if you think that&rsquo;s wrong.</p>
         </div>
       ) : !live ? (
         <div className="grid gap-1 px-6 py-6 sm:px-8 sm:py-8">
           <h2 id={`visit-${job.id}`} className="text-xl font-semibold">{p.address_line1}, {p.town}</h2>
-          <p className="text-ink-2">{job.status === "completed" ? "All done. Thank you." : "Not going ahead today. Nothing to do."}</p>
+          <p className="text-navy-2">{job.status === "completed" ? "All done. Thank you." : "Not going ahead today. Nothing to do."}</p>
           {job.status === "completed" ? (
-            <Link href={`/work/visit/${job.id}`} className="mt-2 inline-flex min-h-12 items-center font-semibold text-ink underline decoration-line decoration-2 underline-offset-4">
+            <Link href={`/work/visit/${job.id}`} className="mt-2 inline-flex min-h-12 items-center font-semibold text-navy underline decoration-line decoration-2 underline-offset-4">
               See what you sent
             </Link>
           ) : null}
@@ -184,19 +184,19 @@ function TodayJob({ n, job }: { n: number; job: Job }) {
             )}
           </div>
 
-          <dl className="grid gap-5 border-t border-line/70 bg-paper-2/40 px-6 py-6 sm:px-8">
+          <dl className="grid gap-5 border-t border-line/70 bg-mist/40 px-6 py-6 sm:px-8">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <dt className="text-sm text-ink-3">Home</dt>
+                <dt className="text-sm text-navy-3">Home</dt>
                 <dd className="font-semibold">{p.bedrooms} bed · {p.bathrooms} bath</dd>
               </div>
               <div>
-                <dt className="text-sm text-ink-3">Pets</dt>
+                <dt className="text-sm text-navy-3">Pets</dt>
                 <dd className="font-semibold">{p.pets?.trim() || "None"}</dd>
               </div>
             </div>
             <div>
-              <dt className="text-sm text-ink-3">Getting in</dt>
+              <dt className="text-sm text-navy-3">Getting in</dt>
               <dd className="mt-1 rounded-md bg-mist/70 px-4 py-3 text-lg">{p.access_notes?.trim() || "No access notes. Knock or ring when you arrive."}</dd>
             </div>
             {p.key_code?.trim() ? (

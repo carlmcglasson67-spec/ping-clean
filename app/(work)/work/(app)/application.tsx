@@ -62,17 +62,17 @@ export async function Application({ name, cleanerId }: { name: string; cleanerId
       {header}
       <div className="grid gap-8 lg:grid-cols-[1fr_1.5fr] lg:gap-12">
         <div className="grid content-start gap-6">
-          <section className="grain relative overflow-hidden rounded-lg bg-ink p-7 text-paper sm:p-9">
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">Checks complete</p>
+          <section className="grain relative overflow-hidden rounded-lg bg-navy-900 p-7 text-on-navy sm:p-9">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-teal">Checks complete</p>
             <p className="mt-5 font-display text-4xl font-semibold tabular">
               {verified}
-              <span className="text-paper/40">/{REQUIRED_DOCS.length}</span>
+              <span className="text-on-navy-3">/{REQUIRED_DOCS.length}</span>
             </p>
-            <p className="mt-4 max-w-xs text-paper/70">
+            <p className="mt-4 max-w-xs text-on-navy-2">
               When all four are verified, the Ping team approves you and jobs start appearing.
             </p>
             {next ? (
-              <Link href={next.href} className={buttonClass("primary", "lg", "mt-8 w-full sm:w-auto")}>
+              <Link href={next.href} className={buttonClass("signal", "lg", "mt-8 w-full sm:w-auto")}>
                 {next.label}
               </Link>
             ) : (
@@ -92,7 +92,7 @@ export async function Application({ name, cleanerId }: { name: string; cleanerId
                 const st = doc ? DOCUMENT_STATUS[doc.status] : null;
                 return (
                   <li key={kind} className="flex items-center justify-between gap-3 border-t border-line/70 pt-2 first:border-0 first:pt-0">
-                    <span className="text-ink">{DOCUMENT_KIND[kind]}</span>
+                    <span className="text-navy">{DOCUMENT_KIND[kind]}</span>
                     {st ? <Badge tone={st.tone}>{st.label}</Badge> : <Badge>Not sent yet</Badge>}
                   </li>
                 );
@@ -118,7 +118,7 @@ function Step({ n, title, state, href, children }: { n: number; title: string; s
       <span
         className={cn(
           "grid size-10 shrink-0 place-items-center rounded-full font-display text-lg font-semibold tabular",
-          state === "done" ? "bg-ok text-paper" : "bg-paper-2 text-ink-2",
+          state === "done" ? "bg-ok text-on-navy" : "bg-mist text-navy-2",
         )}
         aria-hidden
       >
@@ -133,7 +133,7 @@ function Step({ n, title, state, href, children }: { n: number; title: string; s
           <h2 className="text-lg font-semibold">{title}</h2>
           {badge}
         </div>
-        <div className="text-ink-2">{children}</div>
+        <div className="text-navy-2">{children}</div>
       </div>
     </>
   );

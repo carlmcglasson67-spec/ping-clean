@@ -46,25 +46,25 @@ export default async function ApplyPage() {
         <ol className="grid content-start gap-3">
           {POINTS.map((p) => (
             <li key={p.n} className="flex gap-5 rounded-lg bg-card p-6 shadow-card ring-1 ring-line/70 sm:p-7">
-              <span className="font-display text-2xl font-semibold text-signal-ink tabular">{p.n}</span>
+              <span className="font-display text-2xl font-semibold text-teal-ink tabular">{p.n}</span>
               <div className="grid gap-1">
                 <h2 className="text-xl font-semibold">{p.title}</h2>
-                <p className="text-ink-2">{p.body}</p>
+                <p className="text-navy-2">{p.body}</p>
               </div>
             </li>
           ))}
         </ol>
-        <section className="grain relative grid content-start gap-6 overflow-hidden rounded-lg bg-ink p-7 text-paper sm:p-9">
+        <section className="grain relative grid content-start gap-6 overflow-hidden rounded-lg bg-navy-900 p-7 text-on-navy sm:p-9">
           <h2 className="text-xl font-semibold">What you&rsquo;ll need</h2>
           <ul className="grid gap-3">
             {REQUIRED_DOCS.map((k) => (
-              <li key={k} className="flex items-center gap-3 text-paper/85">
-                <span className="size-2 rounded-full bg-signal" aria-hidden />
+              <li key={k} className="flex items-center gap-3 text-on-navy-2">
+                <span className="size-2 rounded-full bg-teal" aria-hidden />
                 {DOCUMENT_KIND[k]}
               </li>
             ))}
           </ul>
-          <p className="text-paper/70">
+          <p className="text-on-navy-2">
             You can photograph them on your phone as you go. Your login stays the same.
           </p>
           <ApplyButton />

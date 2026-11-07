@@ -66,7 +66,7 @@ export default async function WorkHome() {
         lede={
           <>
             You cover {me.areas.length ? me.areas.join(", ") : "no areas yet"}.{" "}
-            <Link href="/work/areas" className="inline-flex min-h-12 items-center font-semibold text-ink underline decoration-line decoration-2 underline-offset-4 hover:decoration-ink">
+            <Link href="/work/areas" className="inline-flex min-h-12 items-center font-semibold text-navy underline decoration-line decoration-2 underline-offset-4 hover:decoration-navy">
               {me.areas.length ? "Change" : "Choose your areas"}
             </Link>
           </>
@@ -97,13 +97,13 @@ export default async function WorkHome() {
             )}
           </section>
 
-          <Card className="grain relative overflow-hidden bg-signal text-ink ring-0 lg:col-start-2 lg:row-start-1 lg:self-start">
+          <Card className="grain relative overflow-hidden bg-teal text-navy ring-0 lg:col-start-2 lg:row-start-1 lg:self-start">
             <div className="flex items-center gap-3">
-              <PingMark pulse dot="ink" className="text-ink" />
+              <PingMark pulse dot="ink" className="text-navy" />
               <p className="text-sm font-bold uppercase tracking-[0.14em]">New jobs for you</p>
             </div>
             <p className="mt-5 font-display text-4xl font-semibold tabular">{offers.data?.length ?? 0}</p>
-            <p className="mt-2 max-w-xs text-ink/80">
+            <p className="mt-2 max-w-xs text-navy/80">
               {offers.data?.length ? "Waiting in your areas now. First to claim gets the job." : "We'll ping you the moment one comes up in your areas."}
             </p>
             <Link href="/work/jobs" className={buttonClass("ink", "lg", "mt-6 w-full sm:w-auto")}>
@@ -114,7 +114,7 @@ export default async function WorkHome() {
           <section aria-labelledby="coming" className="grid content-start gap-4 lg:col-start-1 lg:row-start-2">
             <div className="flex items-baseline justify-between gap-4">
               <h2 id="coming" className="text-xl font-semibold">Coming up</h2>
-              <Link href="/work/calendar" className="inline-flex min-h-12 items-center font-semibold text-ink underline decoration-line decoration-2 underline-offset-4 hover:decoration-ink">
+              <Link href="/work/calendar" className="inline-flex min-h-12 items-center font-semibold text-navy underline decoration-line decoration-2 underline-offset-4 hover:decoration-navy">
                 Your calendar
               </Link>
             </div>
@@ -160,14 +160,14 @@ function VisitRow({ v, showDay = false }: { v: VisitLite; showDay?: boolean }) {
       <Card className="flex items-center gap-5 p-5 sm:p-6">
         <div className="grid flex-1 gap-1">
           <p className="text-lg font-semibold">{showDay ? relativeDay(v.scheduled_date) : formatWindow(v.window_start, v.window_end)}</p>
-          <p className="text-sm text-ink-2">
+          <p className="text-sm text-navy-2">
             {showDay ? `${formatWindow(v.window_start, v.window_end)} · ` : ""}
             {formatDuration(v.duration_minutes)}
           </p>
         </div>
         <div className="grid justify-items-end gap-2">
           <Badge tone={st.tone}>{st.label}</Badge>
-          <span className="text-sm font-semibold tabular text-ink-2">You earn {formatPence(v.cleaner_earnings_pence)}</span>
+          <span className="text-sm font-semibold tabular text-navy-2">You earn {formatPence(v.cleaner_earnings_pence)}</span>
         </div>
       </Card>
     </li>

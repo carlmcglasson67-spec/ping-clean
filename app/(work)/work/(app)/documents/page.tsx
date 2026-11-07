@@ -54,28 +54,28 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
                 <Card className="grid content-start gap-5">
                   <div className="grid gap-2">
                     <div className="flex items-center justify-between gap-4">
-                      <span className="font-display text-2xl font-semibold text-ink-3 tabular">{String(i + 1).padStart(2, "0")}</span>
+                      <span className="font-display text-2xl font-semibold text-navy-3 tabular">{String(i + 1).padStart(2, "0")}</span>
                       {st ? <Badge tone={st.tone}>{st.label}</Badge> : <Badge>Not sent yet</Badge>}
                     </div>
                     <h2 className="text-xl font-semibold">{DOCUMENT_KIND[kind]}</h2>
-                    <p className="text-ink-2">{DOC_GUIDE[kind].hint}</p>
+                    <p className="text-navy-2">{DOC_GUIDE[kind].hint}</p>
                   </div>
 
                   {doc ? (
-                    <dl className="grid gap-3 rounded-md bg-paper-2/70 p-4 text-sm sm:grid-cols-2">
+                    <dl className="grid gap-3 rounded-md bg-mist/70 p-4 text-sm sm:grid-cols-2">
                       <div>
-                        <dt className="text-ink-3">Sent</dt>
+                        <dt className="text-navy-3">Sent</dt>
                         <dd className="font-semibold">{formatStamp(doc.created_at)}</dd>
                       </div>
                       {doc.expires_on ? (
                         <div>
-                          <dt className="text-ink-3">{kind === "insurance" ? "Cover ends" : "Expires"}</dt>
+                          <dt className="text-navy-3">{kind === "insurance" ? "Cover ends" : "Expires"}</dt>
                           <dd className="font-semibold">{formatDay(doc.expires_on)}</dd>
                         </div>
                       ) : null}
                       {doc.status === "rejected" && doc.rejection_reason ? (
                         <div className="sm:col-span-2">
-                          <dt className="text-ink-3">What the Ping team said</dt>
+                          <dt className="text-navy-3">What the Ping team said</dt>
                           <dd className="font-semibold text-bad">{doc.rejection_reason}</dd>
                         </div>
                       ) : null}
@@ -85,7 +85,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
                           href={`/work/documents/${doc.id}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex min-h-12 items-center gap-2 font-semibold text-ink underline decoration-line decoration-2 underline-offset-4 hover:decoration-ink"
+                          className="inline-flex min-h-12 items-center gap-2 font-semibold text-navy underline decoration-line decoration-2 underline-offset-4 hover:decoration-navy"
                         >
                           View what you sent
                           <svg viewBox="0 0 24 24" className="size-4" aria-hidden>
@@ -100,7 +100,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
                     needsNew || doc?.status === "verified" ? (
                       <DocumentUpload kind={kind} cleanerId={session.userId} replacing={!needsNew} />
                     ) : (
-                      <p className="text-sm text-ink-3">We&rsquo;re checking this one, and we&rsquo;ll let you know as soon as it&rsquo;s done.</p>
+                      <p className="text-sm text-navy-3">We&rsquo;re checking this one, and we&rsquo;ll let you know as soon as it&rsquo;s done.</p>
                     )
                   ) : null}
                 </Card>

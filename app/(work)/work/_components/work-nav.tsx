@@ -97,11 +97,11 @@ export function WorkNav({ active }: { active: boolean }) {
             variant === "bar"
               ? "flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-semibold transition-colors"
               : "inline-flex min-h-12 items-center gap-2.5 rounded-full px-5 text-base font-semibold transition-colors",
-            variant === "bar" && (current ? "text-ink" : "text-ink-3"),
-            variant === "tabs" && (current ? "bg-ink text-paper" : "text-ink-2 hover:bg-paper-2"),
+            variant === "bar" && (current ? "text-navy" : "text-navy-3"),
+            variant === "tabs" && (current ? "bg-navy text-on-navy" : "text-navy-2 hover:bg-mist"),
           )}
         >
-          <span className={cn("relative", variant === "bar" && current && "text-signal-ink")}>
+          <span className={cn("relative", variant === "bar" && current && "text-teal-ink")}>
             {i.icon}
           </span>
           {label}
@@ -117,7 +117,7 @@ export function WorkNav({ active }: { active: boolean }) {
       </nav>
       <nav
         aria-label="Cleaner app"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-paper/85 sm:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-canvas/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-canvas/85 sm:hidden"
       >
         <ul className="mx-auto flex max-w-lg">{items.map((i) => link(i, "bar"))}</ul>
       </nav>

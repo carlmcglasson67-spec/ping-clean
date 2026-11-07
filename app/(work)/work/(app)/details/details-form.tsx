@@ -28,7 +28,7 @@ export function DetailsForm({ initial }: { initial: { fullName: string; phone: s
         hint="We call or text about your application and new jobs. Never shared with customers."
       />
       <div className="grid gap-2">
-        <label htmlFor={bioId} className="text-sm font-semibold">A few lines about you <span className="font-normal text-ink-3">(optional)</span></label>
+        <label htmlFor={bioId} className="text-sm font-semibold">A few lines about you <span className="font-normal text-navy-3">(optional)</span></label>
         <textarea
           id={bioId}
           name="bio"
@@ -37,10 +37,10 @@ export function DetailsForm({ initial }: { initial: { fullName: string; phone: s
           defaultValue={v.bio}
           aria-invalid={state.fieldErrors?.bio ? true : undefined}
           aria-describedby={`${bioId}-hint`}
-          className="w-full rounded-md bg-card px-4 py-3.5 text-base text-ink ring-1 ring-inset ring-line placeholder:text-ink-3 focus:outline-none focus:ring-2 focus:ring-ink"
+          className="w-full rounded-md bg-card px-4 py-3.5 text-base text-navy ring-1 ring-inset ring-line placeholder:text-navy-3 focus:outline-none focus:ring-2 focus:ring-navy"
           placeholder="How long you've been cleaning, what you take pride in."
         />
-        <p id={`${bioId}-hint`} className={state.fieldErrors?.bio ? "text-sm font-medium text-bad" : "text-sm text-ink-3"}>
+        <p id={`${bioId}-hint`} className={state.fieldErrors?.bio ? "text-sm font-medium text-bad" : "text-sm text-navy-3"}>
           {state.fieldErrors?.bio ?? "The Ping team reads this when checking your application."}
         </p>
       </div>

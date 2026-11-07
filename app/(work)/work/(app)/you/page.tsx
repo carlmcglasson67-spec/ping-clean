@@ -70,10 +70,10 @@ export default async function YouPage() {
             >
               <div className="grid flex-1 gap-1">
                 <span className="text-lg font-semibold">{r.title}</span>
-                <span className="text-sm text-ink-2">{r.note}</span>
+                <span className="text-sm text-navy-2">{r.note}</span>
               </div>
               {r.badge ? <Badge tone={r.badge.tone}>{r.badge.label}</Badge> : null}
-              <svg viewBox="0 0 24 24" className="size-6 text-ink-3 transition-transform group-hover:translate-x-0.5" aria-hidden>
+              <svg viewBox="0 0 24 24" className="size-6 text-navy-3 transition-transform group-hover:translate-x-0.5" aria-hidden>
                 <path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </Link>

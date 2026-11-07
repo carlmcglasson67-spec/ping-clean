@@ -36,7 +36,7 @@ export default async function JobsPage() {
         {header}
         <EmptyState title="Jobs appear once you're approved">
           The Ping team switches on your job board when your checks are done.{" "}
-          <Link href="/work" className="font-semibold text-ink underline underline-offset-4">See your application</Link>
+          <Link href="/work" className="font-semibold text-navy underline underline-offset-4">See your application</Link>
         </EmptyState>
       </>
     );
@@ -83,7 +83,7 @@ export default async function JobsPage() {
       {header}
       {jobs.length === 0 ? (
         <EmptyState
-          icon={<PingMark pulse className="text-ink" />}
+          icon={<PingMark pulse className="text-navy" />}
           title="No new jobs right now"
           action={
             <Link href="/work/areas" className={buttonClass("secondary", "lg")}>

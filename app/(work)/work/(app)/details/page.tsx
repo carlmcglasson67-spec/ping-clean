@@ -28,7 +28,7 @@ export default async function DetailsPage() {
           </Card>
           <aside className="grid content-start gap-3 rounded-lg bg-mist/60 p-7 ring-1 ring-inset ring-line sm:p-9">
             <h2 className="text-xl font-semibold">Your number stays with us</h2>
-            <p className="text-ink-2">
+            <p className="text-navy-2">
               Customers message you through Ping, so they never see your phone number and you never see theirs.
             </p>
           </aside>

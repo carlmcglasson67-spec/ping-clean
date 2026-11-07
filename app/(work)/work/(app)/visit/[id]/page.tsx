@@ -80,7 +80,7 @@ export default async function VisitPage({ params }: { params: Promise<{ id: stri
         {header}
         <section className="grid gap-4 rounded-lg bg-ok-soft p-7 ring-1 ring-ok/25 sm:p-9">
           <p className="font-display text-3xl font-semibold text-ok">Done. Thank you.</p>
-          <p className="text-ink-2">
+          <p className="text-navy-2">
             {v.couldnt_do_count
               ? `${v.couldnt_do_count} item${v.couldnt_do_count === 1 ? "" : "s"} marked “couldn't do”: the customer can see your reasons.`
               : "Every item ticked. The customer can see your checklist and photos."}
@@ -147,8 +147,8 @@ export default async function VisitPage({ params }: { params: Promise<{ id: stri
   return (
     <>
       {header}
-      <p className="-mt-4 mb-8 text-ink-2">
-        {p.access_notes?.trim() ? <>Getting in: <span className="font-semibold text-ink">{p.access_notes.trim()}</span></> : null}
+      <p className="-mt-4 mb-8 text-navy-2">
+        {p.access_notes?.trim() ? <>Getting in: <span className="font-semibold text-navy">{p.access_notes.trim()}</span></> : null}
       </p>
       {/* A phone-shaped column even on a desktop: it's a checklist, read top to bottom. */}
       <div className="max-w-3xl">

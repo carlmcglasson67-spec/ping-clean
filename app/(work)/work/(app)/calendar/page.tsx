@@ -138,7 +138,7 @@ function CalendarHead({ view, anchor, today }: { view: View; anchor: string; tod
     <Link
       href={href(v, anchor)}
       aria-current={view === v ? "page" : undefined}
-      className={cn("inline-flex min-h-12 flex-1 items-center justify-center rounded-full px-5 font-semibold sm:flex-none", view === v ? "bg-ink text-paper" : "text-ink-2 hover:bg-paper-2")}
+      className={cn("inline-flex min-h-12 flex-1 items-center justify-center rounded-full px-5 font-semibold sm:flex-none", view === v ? "bg-navy text-on-navy" : "text-navy-2 hover:bg-mist")}
     >
       {label}
     </Link>
@@ -147,7 +147,7 @@ function CalendarHead({ view, anchor, today }: { view: View; anchor: string; tod
     <Link
       href={href(view, step(view, anchor, dir))}
       aria-label={dir < 0 ? `Previous ${view}` : `Next ${view}`}
-      className="grid size-12 place-items-center rounded-full bg-card ring-1 ring-inset ring-line hover:ring-ink-3"
+      className="grid size-12 place-items-center rounded-full bg-card ring-1 ring-inset ring-line hover:ring-navy-3"
     >
       <svg viewBox="0 0 24 24" className="size-5" aria-hidden>
         <path d={dir < 0 ? "m15 5-7 7 7 7" : "m9 5 7 7-7 7"} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
@@ -156,18 +156,18 @@ function CalendarHead({ view, anchor, today }: { view: View; anchor: string; tod
   );
   return (
     <header className="grid gap-5 pb-8">
-      <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal-ink">Your calendar</p>
+      <p className="text-sm font-semibold uppercase tracking-[0.14em] text-teal-ink">Your calendar</p>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">{viewTitle(view, anchor)}</h1>
         <div className="flex items-center gap-2">
           {arrow(-1)}
-          <Link href={href(view, today)} className="inline-flex min-h-12 items-center rounded-full bg-card px-5 font-semibold ring-1 ring-inset ring-line hover:ring-ink-3">
+          <Link href={href(view, today)} className="inline-flex min-h-12 items-center rounded-full bg-card px-5 font-semibold ring-1 ring-inset ring-line hover:ring-navy-3">
             Today
           </Link>
           {arrow(1)}
         </div>
       </div>
-      <nav aria-label="Calendar view" className="flex gap-1 rounded-full bg-paper-2 p-1 sm:w-fit">
+      <nav aria-label="Calendar view" className="flex gap-1 rounded-full bg-mist p-1 sm:w-fit">
         {tab("week", "Week")}
         {tab("month", "Month")}
       </nav>
@@ -176,11 +176,11 @@ function CalendarHead({ view, anchor, today }: { view: View; anchor: string; tod
 }
 
 const TONE: Record<Enums<"visit_status">, string> = {
-  scheduled: "bg-mist text-ink ring-ink/10",
-  in_progress: "bg-signal-soft text-signal-ink ring-signal/30",
+  scheduled: "bg-mist text-navy ring-navy/10",
+  in_progress: "bg-teal-soft text-teal-ink ring-teal/30",
   completed: "bg-ok-soft text-ok ring-ok/20",
-  skipped: "bg-paper-2 text-ink-3 ring-line line-through",
-  cancelled: "bg-paper-2 text-ink-3 ring-line line-through",
+  skipped: "bg-mist text-navy-3 ring-line line-through",
+  cancelled: "bg-mist text-navy-3 ring-line line-through",
   no_show: "bg-bad-soft text-bad ring-bad/20",
 };
 
@@ -202,9 +202,9 @@ function MonthGrid({ days, anchor, today, byDay }: { days: string[]; anchor: str
   const month = anchor.slice(0, 7);
   return (
     <div className="overflow-hidden rounded-lg bg-card shadow-card ring-1 ring-line/70">
-      <div className="grid grid-cols-7 border-b border-line/70 bg-paper-2/50">
+      <div className="grid grid-cols-7 border-b border-line/70 bg-mist/50">
         {days.slice(0, 7).map((d) => (
-          <div key={d} className="px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-ink-3">{shortWeekday(d)}</div>
+          <div key={d} className="px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-navy-3">{shortWeekday(d)}</div>
         ))}
       </div>
       <div className="grid grid-cols-7">
@@ -212,11 +212,11 @@ function MonthGrid({ days, anchor, today, byDay }: { days: string[]; anchor: str
           const list = byDay.get(d) ?? [];
           const out = d.slice(0, 7) !== month;
           return (
-            <div key={d} className={cn("grid min-h-32 content-start gap-1.5 border-b border-r border-line/60 p-2 [&:nth-child(7n)]:border-r-0", out && "bg-paper-2/40")}>
+            <div key={d} className={cn("grid min-h-32 content-start gap-1.5 border-b border-r border-line/60 p-2 [&:nth-child(7n)]:border-r-0", out && "bg-mist/40")}>
               <span
                 className={cn(
                   "grid size-7 place-items-center rounded-full text-sm font-semibold tabular",
-                  d === today ? "bg-signal text-ink" : out ? "text-ink-3/70" : "text-ink-2",
+                  d === today ? "bg-teal text-navy" : out ? "text-navy-3/70" : "text-navy-2",
                 )}
                 aria-label={formatDay(d)}
               >
@@ -236,25 +236,25 @@ function WeekGrid({ days, today, byDay }: { days: string[]; today: string; byDay
   const height = hours.length * HOUR_PX;
   return (
     <div className="overflow-hidden rounded-lg bg-card shadow-card ring-1 ring-line/70">
-      <div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))] border-b border-line/70 bg-paper-2/50">
+      <div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))] border-b border-line/70 bg-mist/50">
         <div />
         {days.map((d) => (
           <div key={d} className="grid justify-items-start gap-0.5 px-3 py-2.5">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-3">{shortWeekday(d)}</span>
-            <span className={cn("grid size-8 place-items-center rounded-full font-display text-lg font-semibold tabular", d === today && "bg-signal text-ink")}>{dayOfMonth(d)}</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-navy-3">{shortWeekday(d)}</span>
+            <span className={cn("grid size-8 place-items-center rounded-full font-display text-lg font-semibold tabular", d === today && "bg-teal text-navy")}>{dayOfMonth(d)}</span>
           </div>
         ))}
       </div>
       <div className="grid grid-cols-[4rem_repeat(7,minmax(0,1fr))]">
         <div className="relative" style={{ height }}>
           {hours.map((h, i) => (
-            <span key={h} className="absolute right-2 -translate-y-1/2 text-xs text-ink-3 tabular" style={{ top: i * HOUR_PX }}>
+            <span key={h} className="absolute right-2 -translate-y-1/2 text-xs text-navy-3 tabular" style={{ top: i * HOUR_PX }}>
               {i === 0 ? "" : formatTime(`${String(h).padStart(2, "0")}:00`)}
             </span>
           ))}
         </div>
         {days.map((d) => (
-          <div key={d} className={cn("relative border-l border-line/60", d === today && "bg-signal-soft/30")} style={{ height }}>
+          <div key={d} className={cn("relative border-l border-line/60", d === today && "bg-teal-soft/30")} style={{ height }}>
             {hours.map((h, i) => (
               <div key={h} className="absolute inset-x-0 border-t border-line/50" style={{ top: i * HOUR_PX }} aria-hidden />
             ))}
@@ -279,7 +279,7 @@ function WeekGrid({ days, today, byDay }: { days: string[]; today: string; byDay
           </div>
         ))}
       </div>
-      <p className="border-t border-line/70 px-4 py-3 text-sm text-ink-3">
+      <p className="border-t border-line/70 px-4 py-3 text-sm text-navy-3">
         Each clean is drawn from the start of its arrival window, as long as the clean takes. You can arrive any time in the window.
       </p>
     </div>
@@ -292,7 +292,7 @@ function MiniGrid({ view, days, anchor, today, byDay }: { view: View; days: stri
     <div className="rounded-lg bg-card p-3 shadow-card ring-1 ring-line/70">
       <div className="grid grid-cols-7 text-center">
         {days.slice(0, 7).map((d) => (
-          <span key={d} className="py-1 text-xs font-semibold text-ink-3">{shortWeekday(d).slice(0, 1)}</span>
+          <span key={d} className="py-1 text-xs font-semibold text-navy-3">{shortWeekday(d).slice(0, 1)}</span>
         ))}
         {days.map((d) => {
           const n = (byDay.get(d) ?? []).length;
@@ -304,10 +304,10 @@ function MiniGrid({ view, days, anchor, today, byDay }: { view: View; days: stri
               aria-label={`${formatDay(d)}${n ? `, ${n} clean${n === 1 ? "" : "s"}` : ""}`}
               className="grid min-h-12 place-items-center content-center gap-1"
             >
-              <span className={cn("grid size-8 place-items-center rounded-full text-sm font-semibold tabular", d === today ? "bg-signal text-ink" : out ? "text-ink-3/60" : "text-ink")}>
+              <span className={cn("grid size-8 place-items-center rounded-full text-sm font-semibold tabular", d === today ? "bg-teal text-navy" : out ? "text-navy-3/60" : "text-navy")}>
                 {dayOfMonth(d)}
               </span>
-              <span className={cn("size-1.5 rounded-full", n ? "bg-ink" : "bg-transparent")} aria-hidden />
+              <span className={cn("size-1.5 rounded-full", n ? "bg-navy" : "bg-transparent")} aria-hidden />
             </a>
           );
         })}
@@ -328,9 +328,9 @@ function Agenda({ view, days, byDay, today }: { view: View; days: string[]; byDa
         const list = byDay.get(d) ?? [];
         return (
           <li key={d} id={`day-${d}`} className="grid scroll-mt-24 gap-2.5">
-            <h2 className={cn("text-sm font-semibold uppercase tracking-[0.14em]", d === today ? "text-signal-ink" : "text-ink-3")}>{relativeDay(d)}</h2>
+            <h2 className={cn("text-sm font-semibold uppercase tracking-[0.14em]", d === today ? "text-teal-ink" : "text-navy-3")}>{relativeDay(d)}</h2>
             {list.length === 0 ? (
-              <p className="rounded-md bg-paper-2/60 px-4 py-3 text-ink-3">Nothing booked</p>
+              <p className="rounded-md bg-mist/60 px-4 py-3 text-navy-3">Nothing booked</p>
             ) : (
               <ul className="grid gap-2.5">
                 {list.map((c) => (

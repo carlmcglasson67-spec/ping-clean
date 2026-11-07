@@ -116,7 +116,7 @@ export function DocumentUpload({ kind, cleanerId, replacing }: { kind: DocumentK
             disabled={sending}
             required={rule === "required"}
             onChange={(e) => setExpiresOn(e.target.value)}
-            className="min-h-14 w-full rounded-md bg-card px-4 text-base text-ink ring-1 ring-inset ring-line focus:outline-none focus:ring-2 focus:ring-ink"
+            className="min-h-14 w-full rounded-md bg-card px-4 text-base text-navy ring-1 ring-inset ring-line focus:outline-none focus:ring-2 focus:ring-navy"
           />
         </div>
       ) : null}
@@ -141,7 +141,7 @@ export function DocumentUpload({ kind, cleanerId, replacing }: { kind: DocumentK
       <label
         htmlFor={`${id}-file`}
         aria-disabled={sending || undefined}
-        className={buttonClass(replacing ? "secondary" : "primary", "lg", `w-full cursor-pointer peer-focus-visible:outline-3 peer-focus-visible:outline-offset-3 peer-focus-visible:outline-signal ${sending ? "pointer-events-none opacity-70" : ""}`)}
+        className={buttonClass(replacing ? "secondary" : "primary", "lg", `w-full cursor-pointer peer-focus-visible:outline-3 peer-focus-visible:outline-offset-3 peer-focus-visible:outline-navy ${sending ? "pointer-events-none opacity-70" : ""}`)}
       >
         {sending ? <Spinner /> : (
           <svg viewBox="0 0 24 24" className="size-6" aria-hidden>

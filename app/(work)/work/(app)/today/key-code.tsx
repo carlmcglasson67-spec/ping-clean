@@ -13,9 +13,9 @@ export function KeyCode({ code }: { code: string }) {
       type="button"
       onClick={() => setShown((s) => !s)}
       aria-pressed={shown}
-      className="flex min-h-14 w-full items-center justify-between gap-4 rounded-md bg-ink px-5 text-left text-paper transition-colors hover:bg-[#1d2732]"
+      className="flex min-h-14 w-full items-center justify-between gap-4 rounded-md bg-navy px-5 text-left text-on-navy transition-colors hover:bg-navy-800"
     >
-      <span className="text-sm font-semibold uppercase tracking-[0.14em] text-paper/70">Key code</span>
+      <span className="text-sm font-semibold uppercase tracking-[0.14em] text-on-navy-2">Key code</span>
       {shown ? (
         <span className="font-display text-2xl font-semibold tracking-[0.2em] tabular">{code}</span>
       ) : (

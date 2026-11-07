@@ -38,12 +38,12 @@ export function AreasForm({ districts, areas, slots }: Props) {
     >
       <fieldset className="grid gap-5" aria-describedby="areas-hint">
         <legend className="mb-2 text-xl font-semibold">Where you&rsquo;ll travel to</legend>
-        <p id="areas-hint" className="text-ink-2">
+        <p id="areas-hint" className="text-navy-2">
           Tick every postcode area you&rsquo;re happy to clean in. You&rsquo;re only offered jobs in these.
         </p>
         {state.fieldError === "areas" && state.error ? <p role="alert" className="font-medium text-bad">{state.error}</p> : null}
         {districts.length === 0 ? (
-          <p className="rounded-md bg-paper-2 p-5 text-ink-2">Ping hasn&rsquo;t opened any areas yet. We&rsquo;ll let you know as soon as we do.</p>
+          <p className="rounded-md bg-mist p-5 text-navy-2">Ping hasn&rsquo;t opened any areas yet. We&rsquo;ll let you know as soon as we do.</p>
         ) : (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {districts.map((d) => {
@@ -53,8 +53,8 @@ export function AreasForm({ districts, areas, slots }: Props) {
                   <label
                     className={cn(
                       "relative flex min-h-20 cursor-pointer flex-col justify-center gap-0.5 rounded-md px-5 py-3 ring-1 ring-inset transition-colors select-none",
-                      "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-signal",
-                      checked ? "bg-ink text-paper ring-ink" : "bg-card text-ink ring-line hover:ring-ink-3",
+                      "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-navy",
+                      checked ? "bg-navy text-on-navy ring-navy" : "bg-card text-navy ring-line hover:ring-navy-3",
                     )}
                   >
                     <input
@@ -71,9 +71,9 @@ export function AreasForm({ districts, areas, slots }: Props) {
                       className="sr-only"
                     />
                     <span className="font-display text-2xl font-semibold tabular">{d}</span>
-                    <span className={cn("text-sm", checked ? "text-paper/70" : "text-ink-3")}>{DISTRICT_TOWN[d] ?? "West Cumbria"}</span>
+                    <span className={cn("text-sm", checked ? "text-on-navy-2" : "text-navy-3")}>{DISTRICT_TOWN[d] ?? "West Cumbria"}</span>
                     {checked ? (
-                      <svg viewBox="0 0 24 24" className="absolute right-4 top-4 size-5 text-signal" aria-hidden>
+                      <svg viewBox="0 0 24 24" className="absolute right-4 top-4 size-5 text-teal" aria-hidden>
                         <path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     ) : null}
@@ -87,7 +87,7 @@ export function AreasForm({ districts, areas, slots }: Props) {
 
       <fieldset className="grid gap-5" aria-describedby="days-hint">
         <legend className="mb-2 text-xl font-semibold">The days you work</legend>
-        <p id="days-hint" className="text-ink-2">
+        <p id="days-hint" className="text-navy-2">
           You&rsquo;re offered jobs on the days you switch on. Leave them all off and you&rsquo;ll see jobs on any day.
         </p>
         {state.fieldError === "days" && state.error ? <p role="alert" className="font-medium text-bad">{state.error}</p> : null}
@@ -96,7 +96,7 @@ export function AreasForm({ districts, areas, slots }: Props) {
             const working = on.has(d);
             const name = weekdayName(d);
             return (
-              <li key={d} className={cn("flex flex-wrap items-center gap-x-4 gap-y-3 rounded-md p-4 ring-1 ring-inset sm:flex-nowrap sm:p-5", working ? "bg-card ring-line" : "bg-paper-2/60 ring-line/60")}>
+              <li key={d} className={cn("flex flex-wrap items-center gap-x-4 gap-y-3 rounded-md p-4 ring-1 ring-inset sm:flex-nowrap sm:p-5", working ? "bg-card ring-line" : "bg-mist/60 ring-line/60")}>
                 <label className="flex min-h-12 flex-1 cursor-pointer items-center gap-4 select-none sm:w-48 sm:flex-none">
                   <input
                     type="checkbox"
@@ -113,22 +113,22 @@ export function AreasForm({ districts, areas, slots }: Props) {
                   <span
                     aria-hidden
                     className={cn(
-                      "relative h-8 w-14 shrink-0 rounded-full transition-colors peer-focus-visible:outline-3 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-signal",
+                      "relative h-8 w-14 shrink-0 rounded-full transition-colors peer-focus-visible:outline-3 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-navy",
                       working ? "bg-ok" : "bg-line",
                     )}
                   >
-                    <span className={cn("absolute top-1 size-6 rounded-full bg-paper shadow transition-transform", working ? "translate-x-7" : "translate-x-1")} />
+                    <span className={cn("absolute top-1 size-6 rounded-full bg-canvas shadow transition-transform", working ? "translate-x-7" : "translate-x-1")} />
                   </span>
                   <span className="text-lg font-semibold">{name}</span>
                 </label>
                 {working ? (
                   <div className="grid basis-full grid-cols-[1fr_auto_1fr] items-center gap-3 sm:basis-auto sm:flex-1">
                     <TimeSelect label={`${name} start`} name={`from-${d}`} value={times[d]!.from} onChange={(v) => setTime(d, "from", v)} />
-                    <span className="text-ink-3">to</span>
+                    <span className="text-navy-3">to</span>
                     <TimeSelect label={`${name} finish`} name={`to-${d}`} value={times[d]!.to} onChange={(v) => setTime(d, "to", v)} />
                   </div>
                 ) : (
-                  <p className="text-ink-3">Day off</p>
+                  <p className="text-navy-3">Day off</p>
                 )}
               </li>
             );
@@ -156,7 +156,7 @@ function TimeSelect({ label, name, value, onChange }: { label: string; name: str
       name={name}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="min-h-12 w-full appearance-none rounded-md bg-card px-4 text-base font-semibold text-ink ring-1 ring-inset ring-line focus:outline-none focus:ring-2 focus:ring-ink"
+      className="min-h-12 w-full appearance-none rounded-md bg-card px-4 text-base font-semibold text-navy ring-1 ring-inset ring-line focus:outline-none focus:ring-2 focus:ring-navy"
     >
       {options.map((t) => (
         <option key={t} value={t}>{formatTime(t)}</option>
