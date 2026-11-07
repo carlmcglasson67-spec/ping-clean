@@ -33,7 +33,7 @@ PostgREST does), PATCH/POST with `Prefer: return=…`, Storage upload / sign / f
 signed URL (gated by the real `storage.objects` policies), and CORS for the browser.
 Track A will likely need the same for checkout; worth merging this first.
 
-### B4. `public.start_visit(p_visit uuid) returns void` (schema: needs Carl's sign-off)
+### B4. `public.start_visit(p_visit uuid)`: DONE in #11
 - **Why:** item 5 (checklist, photos, complete). `visits` has no UPDATE grant for
   cleaners, and `checklist_items` has no INSERT grant, by design. Ticks and photo
   uploads are only allowed while a visit is `in_progress`, so something has to move it
@@ -50,7 +50,7 @@ Track A will likely need the same for checkout; worth merging this first.
   - **Errors** in the `claim_series` style, so the app can word them:
     `PC010` not your visit · `PC011` not today · `PC012` already finished or cancelled.
 
-### B5. `public.complete_visit(p_visit uuid) returns void` (schema: needs Carl's sign-off)
+### B5. `public.complete_visit(p_visit uuid)`: DONE in #11 (with "couldn't do" reasons)
 - **Why:** item 5. "Mark complete" is the trigger for charging (Phase 5), so the
   database must decide whether a visit is complete, not the phone.
 - **Proposed:** security definer.

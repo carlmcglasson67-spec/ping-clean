@@ -25,11 +25,16 @@ export type BoardJob = {
   /** Already worded: "Every Wednesday", "Every other Wednesday"… */
   rhythm: string;
   firstVisit: string;
+  /** "4 cleans, last one 23 Dec": the true number they'd do if they took it now. */
+  block: string;
+  cleans: number;
   window: string;
   hours: string;
   earnings: string;
   topFirst: boolean;
   urgent: boolean;
+  /** Their own customer has booked again, and they get first refusal. */
+  firstRefusal: boolean;
 };
 
 export function JobCard({ job }: { job: BoardJob }) {
@@ -53,7 +58,7 @@ export function JobCard({ job }: { job: BoardJob }) {
     <article
       aria-labelledby={`job-${job.offerId}`}
       className={cn(
-        "grid gap-6 rounded-lg p-6 ring-1 transition-colors sm:p-8",
+        "grid min-w-0 gap-6 rounded-lg p-6 ring-1 transition-colors sm:p-8",
         won ? "bg-ok-soft ring-ok/30" : closed ? "bg-paper-2/70 ring-line" : "bg-card shadow-card ring-line/70",
       )}
     >
@@ -67,10 +72,21 @@ export function JobCard({ job }: { job: BoardJob }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {job.firstRefusal ? <Badge tone="signal">Your customer has booked again</Badge> : null}
           {job.urgent ? <Badge tone="warn">Needs a cleaner soon</Badge> : null}
-          {job.topFirst ? <Badge tone="ink">Top cleaners first</Badge> : null}
+          {job.topFirst && !job.firstRefusal ? <Badge tone="ink">Top cleaners first</Badge> : null}
         </div>
       </header>
+
+      <p className="-mt-2 flex items-center gap-3 font-display text-xl font-semibold">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-ink text-base text-paper tabular" aria-hidden>{job.cleans}</span>
+        {job.block}
+      </p>
+      {job.firstRefusal ? (
+        <p className="-mt-2 rounded-md bg-signal-soft px-4 py-3 text-signal-ink">
+          You cleaned here last time, so it&rsquo;s yours first if you want it. Same home, a new block.
+        </p>
+      ) : null}
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-5 border-y border-line/70 py-5 sm:grid-cols-3">
         <div className="col-span-full flex flex-wrap items-baseline gap-x-3">
@@ -95,8 +111,8 @@ export function JobCard({ job }: { job: BoardJob }) {
 
       {won ? (
         <div role="status" className="grid gap-4">
-          <p className="text-xl font-semibold text-ok">It&rsquo;s yours. {job.rhythm}, starting {job.firstVisit}.</p>
-          <p className="text-ink-2">The full address, access notes and any key code appear in Today on the day of each clean.</p>
+          <p className="text-xl font-semibold text-ok">It&rsquo;s yours: {job.block}. {job.rhythm}, starting {job.firstVisit}.</p>
+          <p className="text-ink-2">{job.cleans === 1 ? "It's" : `All ${job.cleans} cleans are`} booked in for you now. The full address, access notes and any key code appear in Today on the day of each clean.</p>
           <Link href="/work" className={buttonClass("ink", "lg", "w-full sm:w-auto")}>See your week</Link>
         </div>
       ) : closed ? (
@@ -113,13 +129,15 @@ export function JobCard({ job }: { job: BoardJob }) {
         <div className="grid gap-3">
           {result && !result.ok ? (
             <p role="alert" className="rounded-md bg-bad-soft px-4 py-3 font-medium text-bad">
-              <span className="font-semibold">{CLAIM_COPY.retry.title}.</span> {CLAIM_COPY.retry.body}
+              <span className="font-semibold">{CLAIM_COPY.retry.title}</span> {CLAIM_COPY.retry.body}
             </p>
           ) : null}
           <Button size="xl" pending={pending} onClick={claim} className="w-full">
-            {pending ? "Claiming…" : "Claim this regular clean"}
+            {pending ? "Claiming…" : job.cleans === 1 ? "Claim this clean" : `Claim these ${job.cleans} cleans`}
           </Button>
-          <p className="text-center text-sm text-ink-3">You take every visit, not just the first. First to claim gets it.</p>
+          <p className="text-center text-sm text-ink-3">
+            {job.cleans === 1 ? "One clean." : `You take all ${job.cleans} cleans, not just the first.`} First to claim gets it.
+          </p>
         </div>
       )}
     </article>

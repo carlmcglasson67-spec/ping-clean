@@ -8,6 +8,11 @@ function toUtc(ymd: string): Date {
 }
 const toYmd = (d: Date) => d.toISOString().slice(0, 10);
 
+/** "2026-12-23" → "23 Dec". For the block's last clean, where the weekday is already known. */
+export function formatShortDay(ymd: string): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short" }).format(toUtc(ymd));
+}
+
 /**
  * The first visit a cleaner would do if they claimed now. Mirrors the engine
  * (private.generate_visits_for_series): the first preferred weekday on or after the

@@ -189,11 +189,13 @@ export async function cleanerFlows({ browser, BASE, check, signIn, SHOTS }) {
 
   console.log("e2e: job board and claiming (Track B)");
   {
-    // Ben's fortnightly Wednesday clean in Whitehaven CA28 is on offer to Tara (Top).
-    // Give Alex an offer too, so two cleaners race for it.
+    // Ben's block of 4 fortnightly Wednesday cleans in Whitehaven CA28 is on offer to Tara
+    // (Top). Make Alex Top too and give him an offer, so two cleaners can race for it (the
+    // board only shows what a cleaner could claim right now).
+    await sql(`update public.cleaners set tier = 'top' where id = $1`, [ALEX]);
     await sql(
       `insert into public.job_offers (series_id, cleaner_id, tier, round, opens_at, status)
-       values ($1, $2, 'approved', 1, now() - interval '1 minute', 'open') on conflict do nothing`,
+       values ($1, $2, 'top', 1, now() - interval '1 minute', 'open') on conflict do nothing`,
       [BEN_SERIES, ALEX],
     );
     const tara = await (await browser.newContext(PHONE)).newPage();
@@ -215,6 +217,12 @@ export async function cleanerFlows({ browser, BASE, check, signIn, SHOTS }) {
       for (const s of ["Whitehaven", "CA28", "2 bed", "1 bath", "No pets", "Every other Wednesday", "10am–2pm", "2 hours", "£30.00"]) {
         assert.ok(text.includes(s), `expected "${s}" on the card`);
       }
+      // The true clean count and the projected last clean, from job_board().
+      const [b] = await sql(
+        `select private.block_capacity($1) as cleans, to_char(private.block_projected_end($1), 'FMDD Mon') as last`,
+        [BEN_SERIES],
+      );
+      assert.ok(text.includes(`${b.cleans} cleans, last one ${b.last}`), `expected "${b.cleans} cleans, last one ${b.last}"`);
       const page = await tara.content(); // the whole document, RSC payload included
       for (const secret of ["8 Sample Road", "CA28 9ZZ", "Ring the bell", "Sample"]) {
         assert.ok(!page.includes(secret), `must not reach the browser before claim: "${secret}"`);
@@ -224,16 +232,16 @@ export async function cleanerFlows({ browser, BASE, check, signIn, SHOTS }) {
 
     await check("first tap claims the whole regular clean", async () => {
       await alex.goto(`${BASE}/work/jobs`);
-      await alex.getByRole("button", { name: "Claim this regular clean" }).waitFor();
-      await tara.getByRole("button", { name: "Claim this regular clean" }).click();
-      await tara.getByText(/It.s yours\. Every other Wednesday/).waitFor({ timeout: 15_000 });
+      await alex.getByRole("button", { name: /^Claim (this clean|these \d cleans)$/ }).waitFor();
+      await tara.getByRole("button", { name: /^Claim (this clean|these \d cleans)$/ }).click();
+      await tara.getByText(/It.s yours: 4 cleans, last one .+\. Every other Wednesday/).waitFor({ timeout: 15_000 });
       await tara.screenshot({ path: `${SHOTS}/work-jobs-claimed-390.png`, fullPage: true });
       const [s] = await sql(`select status, cleaner_id from public.series where id = $1`, [BEN_SERIES]);
       assert.deepEqual({ ...s }, { status: "claimed", cleaner_id: TARA });
     });
 
     await check("the second cleaner is told kindly that someone got there first", async () => {
-      await alex.getByRole("button", { name: "Claim this regular clean" }).click();
+      await alex.getByRole("button", { name: /^Claim (this clean|these \d cleans)$/ }).click();
       await alex.getByText("Another cleaner claimed this one first").waitFor({ timeout: 15_000 });
       assert.ok(!/went wrong|PC00\d|error/i.test(await alex.locator("main").innerText()), "no raw error");
       await alex.screenshot({ path: `${SHOTS}/work-jobs-taken-390.png`, fullPage: true });
