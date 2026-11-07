@@ -240,6 +240,54 @@ export type Database = {
         };
         Relationships: [];
       };
+      interest_signups: {
+        Row: {
+          id: string;
+          kind: string;
+          postcode: string;
+          postcode_district: string | null;
+          email: string | null;
+          phone: string | null;
+          consent_text_version: string;
+          source: string;
+          created_at: string;
+          registered_at: string;
+          notified_at: string | null;
+          unsubscribed_at: string | null;
+          delete_after: string;
+        };
+        Insert: {
+          id?: string;
+          kind?: string;
+          postcode: string;
+          postcode_district?: never;
+          email?: string | null;
+          phone?: string | null;
+          consent_text_version: string;
+          source: string;
+          created_at?: string;
+          registered_at?: string;
+          notified_at?: string | null;
+          unsubscribed_at?: string | null;
+          delete_after: string;
+        };
+        Update: {
+          id?: string;
+          kind?: string;
+          postcode?: string;
+          postcode_district?: never;
+          email?: string | null;
+          phone?: string | null;
+          consent_text_version?: string;
+          source?: string;
+          created_at?: string;
+          registered_at?: string;
+          notified_at?: string | null;
+          unsubscribed_at?: string | null;
+          delete_after?: string;
+        };
+        Relationships: [];
+      };
       job_offers: {
         Row: {
           id: string;
@@ -641,6 +689,7 @@ export type Database = {
           launch_districts: string[];
           updated_at: string;
           rebook_first_refusal_minutes: number | null;
+          interest_retention_months: number | null;
         };
         Insert: {
           id?: boolean;
@@ -658,6 +707,7 @@ export type Database = {
           launch_districts?: string[];
           updated_at?: string;
           rebook_first_refusal_minutes?: number | null;
+          interest_retention_months?: number | null;
         };
         Update: {
           id?: boolean;
@@ -675,6 +725,7 @@ export type Database = {
           launch_districts?: string[];
           updated_at?: string;
           rebook_first_refusal_minutes?: number | null;
+          interest_retention_months?: number | null;
         };
         Relationships: [];
       };
@@ -885,6 +936,37 @@ export type Database = {
       admin_reopen_series: {
         Args: { p_series: string };
         Returns: undefined;
+      };
+      register_interest: {
+        Args: {
+          p_postcode: string;
+          p_email: string | null;
+          p_phone: string | null;
+          p_notify: boolean;
+          p_source: "instant_price" | "holding_page";
+          p_consent_version: string;
+        };
+        Returns: "thanks";
+      };
+      interest_retention_months: {
+        Args: Record<PropertyKey, never>;
+        Returns: number | null;
+      };
+      admin_interest_counts: {
+        Args: Record<PropertyKey, never>;
+        Returns: { postcode_district: string; signups: number; not_yet_notified: number; newest: string }[];
+      };
+      admin_export_interest: {
+        Args: { p_district?: string | null };
+        Returns: {
+          id: string;
+          postcode: string;
+          postcode_district: string;
+          email: string | null;
+          phone: string | null;
+          registered_at: string;
+          notified_at: string | null;
+        }[];
       };
     };
     Enums: {
