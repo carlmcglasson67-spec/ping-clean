@@ -86,9 +86,14 @@ export default async function WorkHome() {
                 New jobs in your areas will show up here once you claim them.
               </EmptyState>
             ) : (
-              <ol className="grid gap-3">
-                {jobs.map((v) => <VisitRow key={v.id} v={v} />)}
-              </ol>
+              <>
+                <ol className="grid gap-3">
+                  {jobs.map((v) => <VisitRow key={v.id} v={v} />)}
+                </ol>
+                <Link href="/work/today" className={buttonClass("ink", "lg", "w-full sm:w-auto sm:justify-self-start")}>
+                  Addresses and directions
+                </Link>
+              </>
             )}
           </section>
 

@@ -22,6 +22,18 @@ const ITEMS: Item[] = [
     ),
   },
   {
+    href: "/work/today",
+    label: "Today",
+    activeOnly: true,
+    icon: (
+      <svg viewBox="0 0 24 24" className="size-6" aria-hidden>
+        <rect {...stroke} x="4" y="5.5" width="16" height="14.5" rx="2" />
+        <path {...stroke} d="M4 10h16M8.5 3.5v4m7-4v4" />
+        <path {...stroke} d="m9.5 14.75 1.75 1.75 3.5-3.5" />
+      </svg>
+    ),
+  },
+  {
     href: "/work/jobs",
     label: "Jobs",
     activeOnly: true,
