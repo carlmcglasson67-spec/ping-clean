@@ -101,6 +101,18 @@ async function signIn(page, who, password = PASSWORD) {
 }
 
 try {
+  // Public screens, for design review (the signed-in screens are captured per role below).
+  for (const [path, name] of [["/", "holding"], ["/login", "login"]]) {
+    for (const width of [1440, 390]) {
+      const page = await browser.newPage({ viewport: { width, height: width === 390 ? 844 : 900 }, deviceScaleFactor: width === 390 ? 2 : 1 });
+      await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(1200); // let entrance animations settle
+      await page.screenshot({ path: `${SHOTS}/${name}-${width}.png`, fullPage: true });
+      await page.close();
+    }
+  }
+
   console.log("e2e: signed out");
   await check("signed-out visitors are sent to sign-in, and come back afterwards", async () => {
     const page = await browser.newPage();

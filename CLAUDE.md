@@ -35,6 +35,26 @@ https://claude.ai/artifact/1WEp7QQgrj5dGn1wzooEWz (summary in intent/v1/spec.md)
 - Done = works on the Vercel preview URL with test accounts, checked by the verifier agent.
 - UI follows the pervonio-premium-design skill from the first commit.
 
+## Brand (Carl's official brand, 7 Nov 2026)
+- What Ping sells: REGULAR DOMESTIC CLEANS ONLY at launch. Never list deep cleans, end of
+  tenancy or Airbnb changeovers (those are Cumbria Bright, not Ping V1).
+- Price is not decided. Never write a price anywhere (the flyers' £22.50 is provisional);
+  the settings table is the only source.
+- Logo: `<Logo>`, `<LogoMark>`, `<Wordmark>` from components/ui. Never retype "PingClean"
+  as text in place of it. Files in public/brand/ (full colour, white, navy, mark, icons,
+  signal-waves.svg); Carl's original crop is pingclean-logo-original.png. Rebuild with
+  scripts/brand/gen-logo.py, then scripts/brand/icons.sh.
+- Colours (tokens in app/globals.css, contrast tested in components/ui/tokens.test.ts):
+  navy #010C26 / #011A3A / text #001D44, brand blue #0052FE, bright blue #1B7EFA,
+  teal #00C2D1 (glow #18F5E8), teal-deep #0C93AC, teal-ink #08707F, mist #E2E7E9 / #F2F1F1.
+  Signature gradient blue #0052FE to teal #00C2D1, left to right, big type only.
+  Teal is never small text on light: use teal-ink. Use the token names, never hex in pages.
+- Feel: deep navy heroes with fine teal signal waves (`signal-waves`, `NavyPanel`), white
+  and mist content sections, bold Sora headings, Figtree body.
+- Taglines: "A cleaner home is just a Ping away." and "The new way of connecting cleaners
+  to clients". Domain pingclean.co.uk.
+- No AI-generated people presented as real Ping cleaners. Photo slots stay placeholders.
+
 ## Things Claude gets wrong
 - Do not use the Supabase service-role key in any client component or route group page.
 - Do not let a cleaner see a customer's full address before they have claimed the series.
