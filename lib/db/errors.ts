@@ -26,6 +26,11 @@ export const PING_ERRORS = {
   PC026: "That day or time isn't valid.",
   PC027: "You already have cleans booked at this home on those dates.",
   PC028: "That booking was already made with different details. Start the booking again.",
+  // Register interest
+  PC030: "Enter a full UK postcode, like CA14 3XX.",
+  PC031: "Enter an email address or a UK mobile number.",
+  PC032: "We're not taking names for the waiting list just now. Please try again later.",
+  PC033: "Something went wrong. Please try again.",
 } as const;
 
 export type PingErrorCode = keyof typeof PING_ERRORS;
