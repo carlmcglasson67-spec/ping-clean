@@ -35,6 +35,18 @@ const ITEMS: Item[] = [
     ),
   },
   {
+    href: "/work/calendar",
+    label: "Calendar",
+    activeOnly: true,
+    icon: (
+      <svg viewBox="0 0 24 24" className="size-6" aria-hidden>
+        <rect {...stroke} x="4" y="5.5" width="16" height="14.5" rx="2" />
+        <path {...stroke} d="M4 10h16M8.5 3.5v4m7-4v4" />
+        <path {...stroke} d="M8 13.5h2m3 0h2m-7 3h2m3 0h2" />
+      </svg>
+    ),
+  },
+  {
     href: "/work/jobs",
     label: "Jobs",
     activeOnly: true,
