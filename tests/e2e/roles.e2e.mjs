@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
+import { authFlows } from "./auth.flows.mjs";
 import { startFakeSupabase } from "./fake-supabase.mjs";
 
 const PORT = 3200;
@@ -184,6 +185,8 @@ try {
     });
     await ctx.close();
   }
+
+  await authFlows({ browser, BASE, check, shots: process.env.SIGNUP_SHOT_DIR ?? SHOTS });
 } finally {
   await browser.close();
   stopApp();

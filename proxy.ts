@@ -35,7 +35,9 @@ export async function proxy(request: NextRequest) {
   const signedIn = Boolean(data?.claims?.sub);
 
   if (area && !signedIn) {
-    const login = new URL("/login", request.url);
+    // The configured site, not the host the request reports (they can differ behind a proxy).
+    const site = process.env.NEXT_PUBLIC_SITE_URL;
+    const login = new URL("/login", site ? new URL(site).origin : request.url);
     login.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
     const redirect = NextResponse.redirect(login);
     for (const c of response.cookies.getAll()) redirect.cookies.set(c);

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { siteUrl } from "@/lib/auth/links";
 import { createClient } from "@/lib/db/server";
 import { hasSupabaseEnv } from "@/lib/env";
 
@@ -8,5 +9,5 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     await supabase.auth.signOut();
   }
-  return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
+  return NextResponse.redirect(siteUrl("/login", request), { status: 303 });
 }
