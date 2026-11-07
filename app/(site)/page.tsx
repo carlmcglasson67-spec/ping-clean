@@ -11,7 +11,7 @@ const STATS = [
   { value: "1", label: "cleaner for your home", note: "The same person every visit, not whoever is free." },
   { value: "4", label: "checks before any job", note: "DBS, insurance, photo ID and right to work." },
   { value: String(STANDARD_CLEAN_COUNT), label: "ticks on every clean", note: "A room-by-room checklist, with photos to prove it." },
-  { value: "£0", label: "taken before the clean", note: "Your card is charged only once it’s done." },
+  { value: "0", label: "charges before the clean", note: "Your card is saved at booking and charged only once it’s done." },
 ];
 
 const STEPS = [
@@ -139,8 +139,8 @@ export default function Home() {
             <div className="lg:sticky lg:top-32 lg:col-span-6 lg:self-start">
               <BeforeAfter
                 label="Drag to compare the room before and after"
-                before={<Photo slot="home-before" tone="dusk" caption="Before: the kitchen on a Monday" className="aspect-[4/5] rounded-none" />}
-                after={<Photo slot="home-after" tone="mist" caption="After: the same kitchen, two hours later" className="aspect-[4/5] rounded-none" />}
+                before={<Photo slot="home-before" tone="dusk" caption="The kitchen on a Monday" className="aspect-[4/5] rounded-none [&_figcaption]:max-w-[calc(50%-1.5rem)]" />}
+                after={<Photo slot="home-after" tone="mist" caption="Two hours later" captionSide="right" className="aspect-[4/5] rounded-none" />}
               />
               <p className="mt-4 text-base text-ink-3">Every clean comes with photos like these, in your account.</p>
             </div>
