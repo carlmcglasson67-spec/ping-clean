@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ButtonLink, PingMark } from "@/components/ui";
+import { ButtonLink, LogoMark } from "@/components/ui";
 import { ChecklistGrid, Crumbs, Eyebrow, Rings, StepList } from "../../_components/blocks";
 import { FaqList } from "../../_components/faq-list";
 import { Photo } from "../../_components/photo";
@@ -62,13 +62,13 @@ export default async function AreaPage({ params }: { params: Promise<{ town: str
           <div className="rise flex flex-col lg:col-span-7">
             <Crumbs items={[{ href: "/", label: "Home" }, { href: "/areas", label: "Areas" }, { label: town.name }]} />
             <p className="mt-10 inline-flex w-fit items-center gap-3 rounded-full bg-card py-2 pl-2 pr-5 text-sm font-semibold ring-1 ring-line lg:mt-14">
-              <PingMark pulse className="text-signal-ink" />
+              <LogoMark className="size-7" />
               {town.line}
             </p>
             <h1 className="mt-8 text-4xl font-semibold">
-              Regular cleaning in <span className="text-signal-ink">{town.name}</span>
+              Regular cleaning in <span className="text-teal-ink">{town.name}</span>
             </h1>
-            <p className="mt-10 max-w-2xl text-xl text-ink-2">{town.intro}</p>
+            <p className="mt-10 max-w-2xl text-xl text-navy-2">{town.intro}</p>
             <div className="mt-10 flex flex-wrap gap-3">
               <ButtonLink href="/price" size="lg">
                 Get your price
@@ -80,11 +80,11 @@ export default async function AreaPage({ params }: { params: Promise<{ town: str
           </div>
 
           <div className="rise relative grid min-h-[26rem] grid-cols-5 gap-3 [animation-delay:140ms] sm:gap-4 lg:col-span-5 lg:-mr-16 lg:min-h-[40rem]">
-            <Photo slot={`area-${town.slug}-street`} tone="dusk" caption={`A street in ${town.name}`} priority className="col-span-3" />
+            <Photo slot={`area-${town.slug}-street`} tone="steel" caption={`A street in ${town.name}`} priority className="col-span-3" />
             <div className="col-span-2 grid gap-3 sm:gap-4">
-              <Photo slot={`area-${town.slug}-home`} tone="linen" caption="A home, after" />
-              <div className="grain grid content-between rounded-lg bg-ink p-5 text-paper sm:p-6">
-                <span className="text-sm font-semibold uppercase tracking-[0.16em] text-signal">Postcode</span>
+              <Photo slot={`area-${town.slug}-home`} tone="cloud" caption="A home, after" />
+              <div className="grid content-between rounded-lg signal-waves p-5 text-on-navy sm:p-6">
+                <span className="text-sm font-semibold uppercase tracking-[0.16em] text-teal">Postcode</span>
                 <span className="font-display text-[clamp(2.5rem,1.5rem+3vw,4.5rem)] font-semibold leading-none tracking-[-0.04em]">
                   {town.districts.join(" ")}
                 </span>
@@ -102,16 +102,16 @@ export default async function AreaPage({ params }: { params: Promise<{ town: str
             <h2 id="around-title" className="mt-5 text-3xl font-semibold">
               Cleaners who choose to work here.
             </h2>
-            <p className="mt-6 max-w-sm text-lg text-ink-2">
+            <p className="mt-6 max-w-sm text-lg text-navy-2">
               Ping cleaners pick the postcode districts they travel to, so whoever takes on your home has chosen to cover it.
             </p>
           </div>
           <ul className="flex flex-wrap content-start gap-x-8 gap-y-3 lg:col-span-8">
             {[town.name, ...town.around].map((p, i) => (
               <li key={p} className="font-display text-[clamp(1.875rem,1.3rem+2vw,3.25rem)] font-semibold leading-tight">
-                <span className={i === 0 ? "text-signal-ink" : "text-ink"}>{p}</span>
+                <span className={i === 0 ? "text-teal-ink" : "text-navy"}>{p}</span>
                 {i < town.around.length ? (
-                  <span className="ml-8 text-signal" aria-hidden>
+                  <span className="ml-8 text-teal-deep" aria-hidden>
                     ·
                   </span>
                 ) : null}
@@ -122,14 +122,14 @@ export default async function AreaPage({ params }: { params: Promise<{ town: str
       </section>
 
       {/* ------------------------------------------------------------ What's included */}
-      <section aria-labelledby="included-title" className="bg-paper-2/70">
+      <section aria-labelledby="included-title" className="bg-mist/70">
         <div className="mx-auto grid max-w-[96rem] gap-14 px-5 py-20 sm:px-10 lg:grid-cols-12 lg:gap-10 lg:px-16 lg:py-28">
           <div className="lg:col-span-4">
             <Eyebrow>Every clean in {town.name}</Eyebrow>
             <h2 id="included-title" className="mt-5 text-3xl font-semibold">
               The same {STANDARD_CLEAN_COUNT}&#8209;point checklist.
             </h2>
-            <p className="mt-6 text-lg text-ink-2">
+            <p className="mt-6 text-lg text-navy-2">
               Ticked off in the app as your cleaner goes, with before and after photos you can see from wherever you are.
             </p>
           </div>
@@ -138,7 +138,7 @@ export default async function AreaPage({ params }: { params: Promise<{ town: str
       </section>
 
       {/* ------------------------------------------------------------ How it works: ink */}
-      <section aria-labelledby="how-title" className="grain relative overflow-hidden bg-ink text-paper">
+      <section aria-labelledby="how-title" className="relative overflow-hidden signal-waves text-on-navy">
         <div className="mx-auto grid max-w-[96rem] gap-14 px-5 py-20 sm:px-10 lg:grid-cols-12 lg:gap-10 lg:px-16 lg:py-28">
           <div className="lg:col-span-5">
             <Eyebrow tone="onInk">How it works</Eyebrow>
@@ -150,7 +150,7 @@ export default async function AreaPage({ params }: { params: Promise<{ town: str
             <StepList steps={STEPS} tone="ink" />
           </div>
         </div>
-        <Rings className="-bottom-72 -left-56 size-[44rem] text-paper/[0.05]" />
+        <Rings className="-bottom-72 -left-56 size-[44rem] text-on-navy/[0.05]" />
       </section>
 
       {/* ------------------------------------------------------------ Local questions */}
@@ -180,9 +180,9 @@ export default async function AreaPage({ params }: { params: Promise<{ town: str
               {near.map((t) => (
                 <li key={t.slug} className="border-b border-line last:border-b-0">
                   <Link href={areaHref(t.slug)} className="group flex min-h-20 items-center justify-between gap-6 py-4">
-                    <span className="min-w-0 font-display text-[clamp(1.75rem,1.2rem+1.6vw,2.75rem)] font-semibold leading-none group-hover:text-signal-ink">{t.name}</span>
+                    <span className="min-w-0 font-display text-[clamp(1.75rem,1.2rem+1.6vw,2.75rem)] font-semibold leading-none group-hover:text-teal-ink">{t.name}</span>
                     <span className="flex shrink-0 items-center gap-3 sm:gap-4">
-                      <span className="rounded-full bg-paper-2 px-3 py-1 text-sm font-semibold text-ink-2 tabular">{t.districts.join(" ")}</span>
+                      <span className="rounded-full bg-mist px-3 py-1 text-sm font-semibold text-navy-2 tabular">{t.districts.join(" ")}</span>
                       <span aria-hidden className="text-2xl transition-transform group-hover:translate-x-1">
                         &rarr;
                       </span>
@@ -192,11 +192,11 @@ export default async function AreaPage({ params }: { params: Promise<{ town: str
               ))}
             </ul>
           </div>
-          <div className="grain relative grid content-between gap-10 overflow-hidden rounded-xl bg-signal p-8 text-ink sm:p-12 lg:col-span-5">
-            <PingMark pulse dot="ink" className="text-ink" />
+          <div className="relative grid content-between gap-10 overflow-hidden rounded-xl bg-teal p-8 text-navy sm:p-12 lg:col-span-5">
+            <LogoMark colour="navy" className="size-10" />
             <div>
               <h2 className="text-2xl font-semibold">Clean in {town.name}? Clean for Ping.</h2>
-              <p className="mt-4 text-lg text-ink/85">Self-employed, your own areas and hours, regular homes that stay with you.</p>
+              <p className="mt-4 text-lg text-navy/85">Self-employed, your own areas and hours, regular homes that stay with you.</p>
               <ButtonLink href={CLEANERS_LINK.href} variant="ink" size="lg" className="mt-8">
                 Find out more
               </ButtonLink>

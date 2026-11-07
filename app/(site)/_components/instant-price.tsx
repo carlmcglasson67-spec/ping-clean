@@ -37,9 +37,9 @@ function OpenPrice({ pricing, tone }: { pricing: Open; tone: "card" | "ink" }) {
   const step = (d: number) => setMinutes((m) => clampMinutes(m + d * STEP_MINUTES, pricing.minBookingMinutes));
 
   return (
-    <div className={cn("grid overflow-hidden rounded-xl lg:grid-cols-2", tone === "ink" ? "ring-1 ring-line-dark" : "shadow-lift ring-1 ring-line/70")}>
+    <div className={cn("grid overflow-hidden rounded-xl lg:grid-cols-2", tone === "ink" ? "ring-1 ring-line-navy" : "shadow-lift ring-1 ring-line/70")}>
       {/* Inputs */}
-      <form className="grid content-start gap-8 bg-card p-7 text-ink sm:p-10" onSubmit={(e) => (e.preventDefault(), setTouched(true))} noValidate>
+      <form className="grid content-start gap-8 bg-card p-7 text-navy sm:p-10" onSubmit={(e) => (e.preventDefault(), setTouched(true))} noValidate>
         <div className="grid gap-3">
           <label htmlFor={ids.postcode} className="font-display text-xl font-semibold">
             Your postcode
@@ -59,12 +59,12 @@ function OpenPrice({ pricing, tone }: { pricing: Open; tone: "card" | "ink" }) {
             aria-invalid={showInvalid || undefined}
             aria-describedby={ids.hint}
             className={cn(
-              "min-h-16 w-full rounded-md bg-paper px-5 font-display text-2xl font-semibold uppercase tracking-[0.02em] text-ink placeholder:font-normal placeholder:normal-case placeholder:text-ink-3",
-              "ring-1 ring-inset ring-line transition-shadow focus:outline-none focus:ring-2 focus:ring-ink",
+              "min-h-16 w-full rounded-md bg-canvas px-5 font-display text-2xl font-semibold uppercase tracking-[0.02em] text-navy placeholder:font-normal placeholder:normal-case placeholder:text-navy-3",
+              "ring-1 ring-inset ring-line transition-shadow focus:outline-none focus:ring-2 focus:ring-navy",
               showInvalid && "ring-2 ring-bad focus:ring-bad",
             )}
           />
-          <p id={ids.hint} data-instant-hint className={cn("text-base", showInvalid ? "font-medium text-bad" : "text-ink-3")} role={showInvalid ? "alert" : undefined}>
+          <p id={ids.hint} data-instant-hint className={cn("text-base", showInvalid ? "font-medium text-bad" : "text-navy-3")} role={showInvalid ? "alert" : undefined}>
             {showInvalid ? "That doesn’t look like a UK postcode. Try something like CA14 3XX." : "Just the first half works too, like CA28."}
           </p>
         </div>
@@ -84,14 +84,14 @@ function OpenPrice({ pricing, tone }: { pricing: Open; tone: "card" | "ink" }) {
               <path d="M5 12h14M12 5v14" />
             </StepButton>
           </div>
-          <p className="text-base text-ink-3">
+          <p className="text-base text-navy-3">
             {formatDuration(pricing.minBookingMinutes)} minimum. Not sure? Start there: your cleaner will tell you after the first visit if your home needs longer.
           </p>
         </div>
       </form>
 
       {/* Result */}
-      <div id={ids.result} data-instant-result aria-live="polite" className="grain relative grid content-between gap-10 overflow-hidden bg-ink p-7 text-paper sm:p-10">
+      <div id={ids.result} data-instant-result aria-live="polite" className="relative grid content-between gap-10 overflow-hidden signal-waves p-7 text-on-navy sm:p-10">
         {parsed.kind === "empty" || parsed.kind === "invalid" ? (
           <Result eyebrow="Every clean" price={price} minutes={minutes} pph={pricing.pricePerHourPence}>
             Put your postcode in to check we&rsquo;re booking in your area.
@@ -102,27 +102,27 @@ function OpenPrice({ pricing, tone }: { pricing: Open; tone: "card" | "ink" }) {
           </Result>
         ) : (
           <div className="grid gap-5">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-signal">Not in {parsed.district} yet</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal">Not in {parsed.district} yet</p>
             <p className="font-display text-3xl font-semibold">We&rsquo;re not booking there yet.</p>
-            <p className="text-lg text-paper/75">
+            <p className="text-lg text-on-navy-2">
               Ping opens a postcode when there are enough vetted local cleaners to look after it properly. We&rsquo;re growing across West Cumbria first.
             </p>
-            <Link href="/areas" className="inline-flex min-h-12 w-fit items-center gap-2 font-semibold text-signal hover:text-paper">
+            <Link href="/areas" className="inline-flex min-h-12 w-fit items-center gap-2 font-semibold text-teal hover:text-on-navy">
               See where we clean <span aria-hidden>&rarr;</span>
             </Link>
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-4 border-t border-line-dark pt-6">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-4 border-t border-line-navy pt-6">
           {(parsed.kind !== "full" && parsed.kind !== "district") || covered ? (
           <ButtonLink
             href={`/account/book?${new URLSearchParams({ ...(parsed.kind === "full" ? { postcode: parsed.postcode } : {}), minutes: String(minutes) })}` as Route}
             size="lg"
-            variant={covered ? "primary" : "secondary"}
+            variant={covered ? "signal" : "onNavy"}
           >
             {covered ? "Book this clean" : "Start a booking"}
           </ButtonLink>
           ) : null}
-          <span className="text-base text-paper/70">No contract. Book up to 8 cleans; rebook any time.</span>
+          <span className="text-base text-on-navy-2">No contract. Book up to 8 cleans; rebook any time.</span>
         </div>
       </div>
     </div>
@@ -132,7 +132,7 @@ function OpenPrice({ pricing, tone }: { pricing: Open; tone: "card" | "ink" }) {
 function Result({ eyebrow, price, minutes, pph, good = false, children }: { eyebrow: string; price: number; minutes: number; pph: number; good?: boolean; children: ReactNode }) {
   return (
     <div className="grid gap-5">
-      <p className={cn("flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em]", good ? "text-[#7fd3a6]" : "text-signal")}>
+      <p className={cn("flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em]", good ? "text-ok-on-navy" : "text-teal")}>
         {good ? (
           <svg viewBox="0 0 20 20" className="size-4" aria-hidden>
             <path d="m5 10.5 3.2 3L15 6.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -142,9 +142,9 @@ function Result({ eyebrow, price, minutes, pph, good = false, children }: { eyeb
       </p>
       <p className="font-display text-[clamp(4rem,2.8rem+4.5vw,7rem)] font-semibold leading-[0.9] tracking-[-0.045em] tabular">
         {formatPenceShort(price)}
-        <span className="ml-3 align-baseline font-sans text-xl font-semibold tracking-normal text-paper/70">a clean</span>
+        <span className="ml-3 align-baseline font-sans text-xl font-semibold tracking-normal text-on-navy-2">a clean</span>
       </p>
-      <p className="text-lg text-paper/80">
+      <p className="text-lg text-on-navy-2">
         {formatDuration(minutes)} at {formatPence(pph)} an hour. {children}
       </p>
     </div>
@@ -158,7 +158,7 @@ function StepButton({ label, disabled, onClick, children }: { label: string; dis
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="grid size-16 shrink-0 place-items-center rounded-full bg-paper text-ink ring-1 ring-inset ring-line transition-[background-color,transform] hover:bg-paper-2 active:scale-95 disabled:opacity-35"
+      className="grid size-16 shrink-0 place-items-center rounded-full bg-canvas text-navy ring-1 ring-inset ring-line transition-[background-color,transform] hover:bg-mist active:scale-95 disabled:opacity-35"
     >
       <svg viewBox="0 0 24 24" className="size-6" aria-hidden fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
         {children}
@@ -171,23 +171,23 @@ function StepButton({ label, disabled, onClick, children }: { label: string; dis
 function NotOpen({ status, tone }: { status: "soon" | "unavailable"; tone: "card" | "ink" }) {
   const soon = status === "soon";
   return (
-    <div className={cn("grain relative grid gap-10 overflow-hidden rounded-xl bg-ink p-8 text-paper sm:p-12 lg:grid-cols-12 lg:items-end lg:p-16", tone === "ink" && "ring-1 ring-line-dark")}>
-      <svg aria-hidden viewBox="0 0 600 600" className="pointer-events-none absolute -bottom-72 -right-56 size-[40rem] text-paper/[0.07]">
+    <div className={cn("signal-waves relative grid gap-10 overflow-hidden rounded-xl p-8 text-on-navy sm:p-12 lg:grid-cols-12 lg:items-end lg:p-16", tone === "ink" && "ring-1 ring-line-navy")}>
+      <svg aria-hidden viewBox="0 0 600 600" className="pointer-events-none absolute -bottom-72 -right-56 size-[40rem] text-on-navy/[0.07]">
         {[80, 150, 220, 290].map((r) => (
           <circle key={r} cx="300" cy="300" r={r} fill="none" stroke="currentColor" strokeWidth="1.5" />
         ))}
       </svg>
       <div className="relative grid gap-5 lg:col-span-7">
-        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-signal">Instant price</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal">Instant price</p>
         <p className="font-display text-3xl font-semibold">{soon ? "Booking opens soon." : "Prices didn’t load."}</p>
       </div>
       <div className="relative grid gap-6 lg:col-span-5">
-        <p className="text-lg text-paper/75">
+        <p className="text-lg text-on-navy-2">
           {soon
             ? "We’re setting our prices and signing up local cleaners now. When booking opens, put in your postcode and hours here and you’ll see the exact price of a clean before you commit to anything."
             : "It’s probably a weak signal on our side or yours. Refresh the page to try again."}
         </p>
-        <Link href="/#how" className="inline-flex min-h-12 w-fit items-center gap-2 font-semibold text-signal hover:text-paper">
+        <Link href="/#how" className="inline-flex min-h-12 w-fit items-center gap-2 font-semibold text-teal hover:text-on-navy">
           How Ping works <span aria-hidden>&rarr;</span>
         </Link>
       </div>

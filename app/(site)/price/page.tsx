@@ -35,9 +35,9 @@ export default async function PricePage() {
             <h1 className="rise text-4xl font-semibold lg:col-span-8">
               Your price,
               <br />
-              <span className="text-signal-ink">in ten seconds.</span>
+              <span className="text-teal-ink">in ten seconds.</span>
             </h1>
-            <p className="rise text-xl text-ink-2 [animation-delay:120ms] lg:col-span-4 lg:pb-3">
+            <p className="rise text-xl text-navy-2 [animation-delay:120ms] lg:col-span-4 lg:pb-3">
               {pricing.status === "open"
                 ? "Your postcode and how long you’d like. No forms, no call back, no sign-up to see it."
                 : "When booking opens, this is where you’ll see it: no forms, no call back, no sign-up. Here’s how it will work."}
@@ -57,19 +57,19 @@ export default async function PricePage() {
               Simple on purpose.
             </h2>
           </div>
-          <ol className="grid gap-px overflow-hidden rounded-lg bg-ink/10 sm:grid-cols-3 lg:col-span-8">
+          <ol className="grid gap-px overflow-hidden rounded-lg bg-navy/10 sm:grid-cols-3 lg:col-span-8">
             {HOW_PRICED.map((h, i) => (
-              <li key={h.title} className="grid content-start gap-4 bg-paper/70 p-8 lg:p-10">
-                <span className="font-display text-xl font-semibold text-signal-ink tabular">{String(i + 1).padStart(2, "0")}</span>
+              <li key={h.title} className="grid content-start gap-4 bg-canvas/70 p-8 lg:p-10">
+                <span className="font-display text-xl font-semibold text-teal-ink tabular">{String(i + 1).padStart(2, "0")}</span>
                 <h3 className="text-2xl font-semibold">{h.title}</h3>
-                <p className="text-lg text-ink-2">{h.body}</p>
+                <p className="text-lg text-navy-2">{h.body}</p>
               </li>
             ))}
           </ol>
         </div>
       </section>
 
-      <section aria-labelledby="included-title" className="bg-paper-2/70">
+      <section aria-labelledby="included-title" className="bg-mist/70">
         <div className="mx-auto grid max-w-[96rem] gap-14 px-5 py-20 sm:px-10 lg:grid-cols-12 lg:gap-10 lg:px-16 lg:py-28">
           <div className="lg:col-span-4">
             <Eyebrow>What you&rsquo;re paying for</Eyebrow>

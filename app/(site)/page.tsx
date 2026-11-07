@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ButtonLink, PingMark } from "@/components/ui";
+import { ButtonLink, LogoMark } from "@/components/ui";
 import { BeforeAfter } from "./_components/before-after";
 import { ChecklistGrid, StepList } from "./_components/blocks";
 import { FaqList } from "./_components/faq-list";
@@ -34,45 +34,41 @@ export default async function Home() {
   return (
     <>
       {/* ------------------------------------------------------------ Hero */}
-      <section className="relative overflow-hidden">
-        <div className="mx-auto grid max-w-[96rem] gap-12 px-5 pb-16 pt-8 sm:px-10 sm:pt-12 lg:grid-cols-12 lg:gap-10 lg:px-16 lg:pb-28 lg:pt-16">
-          <div className="rise flex flex-col lg:col-span-7 lg:pt-10">
-            <p className="inline-flex w-fit items-center gap-3 rounded-full bg-card py-2 pl-2 pr-5 text-sm font-semibold ring-1 ring-line">
-              <PingMark pulse className="text-signal-ink" />
-              Regular cleaning, West Cumbria
+      <section aria-labelledby="hero-title" className="signal-waves relative overflow-hidden text-on-navy">
+        <div className="mx-auto grid max-w-[96rem] gap-14 px-5 pb-24 pt-12 sm:px-10 sm:pt-16 lg:grid-cols-12 lg:gap-x-10 lg:gap-y-12 lg:px-16 lg:pb-32 lg:pt-14">
+          {/* Headline across the full width; copy and tiles split unevenly beneath it. */}
+          <div className="rise lg:col-span-12">
+            <p className="inline-flex w-fit items-center gap-3 rounded-full bg-white/8 py-2 pl-2 pr-5 text-sm font-semibold text-on-navy-2 ring-1 ring-inset ring-white/15">
+              <LogoMark className="size-7" />
+              The new way of connecting cleaners to clients
             </p>
-            <h1 className="mt-10 text-4xl font-semibold lg:mt-14">
-              Your regular
-              <br />
-              clean,{" "}
-              <span className="relative inline-block text-signal-ink">
-                sorted
-                <span className="absolute -right-[0.22em] bottom-[0.18em] size-[0.16em] rounded-full bg-signal" aria-hidden />
-              </span>
+            <h1 id="hero-title" className="mt-10 text-[clamp(3rem,1.4rem+5vw,7.25rem)] font-semibold leading-[0.95] lg:mt-10">
+              A cleaner home is just <br className="hidden md:block" />
+              <span className="text-brand-gradient-navy">a Ping away.</span>
             </h1>
-            <div className="mt-10 grid gap-8 sm:grid-cols-[minmax(0,32rem)_auto] sm:items-end lg:mt-14">
-              <p className="text-xl text-ink-2">
-                The same vetted, insured cleaner every visit. A proper checklist, photos when they&rsquo;re done, and your card charged only afterwards.
-              </p>
-            </div>
+          </div>
+          <div className="rise flex flex-col [animation-delay:80ms] lg:col-span-5 lg:pt-2">
+            <p className="max-w-[34rem] text-xl text-on-navy-2">
+              Regular home cleaning across West Cumbria. The same vetted, insured cleaner every visit, a proper checklist, photos when they&rsquo;re done, and your card charged only afterwards.
+            </p>
             <div className="mt-10 flex flex-wrap gap-3">
-              <ButtonLink href="/#price" size="lg">
+              <ButtonLink href="/#price" size="lg" variant="signal">
                 Get your price
               </ButtonLink>
-              <ButtonLink href="/#how" size="lg" variant="secondary">
+              <ButtonLink href="/#how" size="lg" variant="onNavy">
                 See how it works
               </ButtonLink>
             </div>
           </div>
 
           {/* Image tiles, bleeding off the right edge on large screens. */}
-          <div className="rise relative grid grid-cols-6 grid-rows-[repeat(6,minmax(0,1fr))] gap-3 [animation-delay:140ms] sm:gap-4 lg:col-span-5 lg:-mr-16 lg:h-[44rem]">
-            <Photo slot="home-hero-kitchen" tone="moss" caption="A kitchen, finished" priority className="col-span-4 row-span-6 min-h-[26rem] lg:min-h-0" />
-            <Photo slot="home-hero-cleaner" tone="linen" caption="Your cleaner" className="col-span-2 row-span-3" />
-            <Photo slot="home-hero-detail" tone="mist" caption="The detail" className="col-span-2 row-span-3" />
+          <div className="rise relative grid grid-cols-6 grid-rows-[repeat(6,minmax(0,1fr))] gap-3 [animation-delay:140ms] sm:gap-4 lg:col-span-7 lg:-mr-16 lg:h-[32rem]">
+            <Photo slot="home-hero-kitchen" tone="cloud" caption="A kitchen, finished" priority className="col-span-4 row-span-6 min-h-[26rem] lg:min-h-0" />
+            <Photo slot="home-hero-cleaner" tone="deep" caption="Your cleaner" className="col-span-2 row-span-3" />
+            <Photo slot="home-hero-detail" tone="teal" caption="The detail" className="col-span-2 row-span-3" />
 
             {/* A moment from the customer app, floating over the photos. */}
-            <div className="absolute -bottom-6 left-4 right-10 max-w-[22rem] rounded-lg bg-card p-5 shadow-lift ring-1 ring-line/70 sm:left-8 sm:p-6 lg:-left-14 lg:bottom-14">
+            <div className="absolute -bottom-6 left-4 right-10 max-w-[22rem] rounded-lg bg-card p-5 text-navy shadow-lift ring-1 ring-line/70 sm:left-8 sm:p-6 lg:-bottom-10 lg:left-10">
               <div className="flex items-center gap-3">
                 <span className="grid size-10 place-items-center rounded-full bg-ok-soft text-ok">
                   <svg viewBox="0 0 20 20" className="size-5" aria-hidden>
@@ -81,7 +77,7 @@ export default async function Home() {
                 </span>
                 <div>
                   <p className="font-semibold leading-tight">Clean complete</p>
-                  <p className="text-sm text-ink-3">Just now</p>
+                  <p className="text-sm text-navy-3">Just now</p>
                 </div>
               </div>
               <div className="mt-5 grid grid-cols-2 gap-3 border-t border-line pt-4">
@@ -89,11 +85,11 @@ export default async function Home() {
                   <p className="font-display text-2xl font-semibold tabular">
                     {STANDARD_CLEAN_COUNT}/{STANDARD_CLEAN_COUNT}
                   </p>
-                  <p className="text-sm text-ink-2">checklist ticked</p>
+                  <p className="text-sm text-navy-2">checklist ticked</p>
                 </div>
                 <div>
                   <p className="font-display text-2xl font-semibold tabular">8</p>
-                  <p className="text-sm text-ink-2">photos to look at</p>
+                  <p className="text-sm text-navy-2">photos to look at</p>
                 </div>
               </div>
             </div>
@@ -102,7 +98,7 @@ export default async function Home() {
       </section>
 
       {/* ------------------------------------------------------------ Instant price */}
-      <section id="price" aria-labelledby="price-title" className="scroll-mt-24 px-5 pb-16 sm:px-10 lg:px-16 lg:pb-24">
+      <section id="price" aria-labelledby="price-title" className="scroll-mt-24 px-5 pb-16 pt-16 sm:px-10 lg:px-16 lg:pb-24 lg:pt-24">
         <div className="mx-auto max-w-[96rem]">
           {/* While prices are unset the panel speaks for itself; the heading would promise a number. */}
           <div className={pricing.status === "open" ? "mb-8 flex flex-wrap items-end justify-between gap-4 lg:mb-10" : "sr-only"}>
@@ -110,7 +106,7 @@ export default async function Home() {
               {pricing.status === "open" ? "Your price, before anything else." : "Instant price"}
             </h2>
             {pricing.status === "open" ? (
-              <Link href="/price" className="inline-flex min-h-12 items-center gap-2 text-lg font-semibold text-ink-2 hover:text-ink">
+              <Link href="/price" className="inline-flex min-h-12 items-center gap-2 text-lg font-semibold text-navy-2 hover:text-navy">
                 How pricing works <span aria-hidden>&rarr;</span>
               </Link>
             ) : null}
@@ -134,8 +130,8 @@ export default async function Home() {
               }
             >
               <dt className="order-2 font-display text-xl font-semibold">{s.label}</dt>
-              <dd className="order-1 font-display text-[clamp(4rem,2.5rem+5vw,7.5rem)] font-semibold leading-[0.9] tracking-[-0.04em] text-ink tabular">{s.value}</dd>
-              <dd className="order-3 max-w-xs text-base text-ink-2">{s.note}</dd>
+              <dd className="order-1 font-display text-[clamp(4rem,2.5rem+5vw,7.5rem)] font-semibold leading-[0.9] tracking-[-0.04em] text-navy tabular">{s.value}</dd>
+              <dd className="order-3 max-w-xs text-base text-navy-2">{s.note}</dd>
             </div>
           ))}
         </dl>
@@ -145,11 +141,11 @@ export default async function Home() {
       <section id="how" aria-labelledby="how-title" className="scroll-mt-24">
         <div className="mx-auto max-w-[96rem] px-5 py-20 sm:px-10 lg:px-16 lg:py-32">
           <div className="grid gap-6 lg:grid-cols-12 lg:items-end">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-signal-ink lg:col-span-12">How it works</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal-ink lg:col-span-12">How it works</p>
             <h2 id="how-title" className="text-3xl font-semibold lg:col-span-7">
               From postcode to a clean home in five steps.
             </h2>
-            <p className="text-lg text-ink-2 lg:col-span-4 lg:col-start-9">
+            <p className="text-lg text-navy-2 lg:col-span-4 lg:col-start-9">
               No phone tag, no quotes to chase, no wondering if it got done. Every step happens in the Ping app.
             </p>
           </div>
@@ -158,10 +154,10 @@ export default async function Home() {
             <div className="lg:sticky lg:top-32 lg:col-span-6 lg:self-start">
               <BeforeAfter
                 label="Drag to compare the room before and after"
-                before={<Photo slot="home-before" tone="dusk" caption="The kitchen on a Monday" className="aspect-[4/5] rounded-none [&_figcaption]:max-w-[calc(50%-1.5rem)]" />}
+                before={<Photo slot="home-before" tone="steel" caption="The kitchen on a Monday" className="aspect-[4/5] rounded-none [&_figcaption]:max-w-[calc(50%-1.5rem)]" />}
                 after={<Photo slot="home-after" tone="mist" caption="Two hours later" captionSide="right" className="aspect-[4/5] rounded-none" />}
               />
-              <p className="mt-4 text-base text-ink-3">Every clean comes with photos like these, in your account.</p>
+              <p className="mt-4 text-base text-navy-3">Every clean comes with photos like these, in your account.</p>
             </div>
 
             <div className="lg:col-span-5 lg:col-start-8">
@@ -172,17 +168,17 @@ export default async function Home() {
       </section>
 
       {/* ------------------------------------------------------------ What’s included */}
-      <section id="included" aria-labelledby="included-title" className="scroll-mt-24 bg-paper-2/70">
+      <section id="included" aria-labelledby="included-title" className="scroll-mt-24 bg-mist/70">
         <div className="mx-auto grid max-w-[96rem] gap-14 px-5 py-20 sm:px-10 lg:grid-cols-12 lg:gap-10 lg:px-16 lg:py-32">
           <div className="lg:col-span-4">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-signal-ink">What&rsquo;s included</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal-ink">What&rsquo;s included</p>
             <h2 id="included-title" className="mt-5 text-3xl font-semibold">
               The same {STANDARD_CLEAN_COUNT}‑point clean, every visit.
             </h2>
-            <p className="mt-6 text-lg text-ink-2">
+            <p className="mt-6 text-lg text-navy-2">
               Your cleaner ticks each one off in the app as they go. Extras like oven cleans and ironing aren&rsquo;t part of a regular Ping clean yet.
             </p>
-            <Photo slot="home-included-bathroom" tone="linen" caption="A bathroom, after" className="mt-10 hidden aspect-[4/3] lg:block" />
+            <Photo slot="home-included-bathroom" tone="cloud" caption="A bathroom, after" className="mt-10 hidden aspect-[4/3] lg:block" />
           </div>
 
           <ChecklistGrid className="lg:col-span-8" />
@@ -190,27 +186,27 @@ export default async function Home() {
       </section>
 
       {/* ------------------------------------------------------------ Promises: ink */}
-      <section id="promises" aria-labelledby="promises-title" className="grain relative scroll-mt-24 overflow-hidden bg-ink text-paper">
+      <section id="promises" aria-labelledby="promises-title" className="relative scroll-mt-24 overflow-hidden signal-waves text-on-navy">
         <div className="mx-auto max-w-[96rem] px-5 py-20 sm:px-10 lg:px-16 lg:py-32">
           <div className="grid gap-12 lg:grid-cols-12">
             <div className="lg:col-span-4">
-              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-signal">Why Ping</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal">Why Ping</p>
               <h2 id="promises-title" className="mt-5 text-3xl font-semibold">
                 Built so the clean is right, every time.
               </h2>
             </div>
-            <ol className="grid gap-px overflow-hidden rounded-lg bg-line-dark sm:grid-cols-2 lg:col-span-8">
+            <ol className="grid gap-px overflow-hidden rounded-lg bg-line-navy sm:grid-cols-2 lg:col-span-8">
               {PROMISES.map((p, i) => (
-                <li key={p.title} className="grid content-start gap-4 bg-ink p-8 lg:p-12">
-                  <span className="font-display text-xl font-semibold text-signal tabular">{String(i + 1).padStart(2, "0")}</span>
+                <li key={p.title} className="grid content-start gap-4 bg-navy p-8 lg:p-12">
+                  <span className="font-display text-xl font-semibold text-teal tabular">{String(i + 1).padStart(2, "0")}</span>
                   <h3 className="text-2xl font-semibold">{p.title}</h3>
-                  <p className="text-lg text-paper/70">{p.body}</p>
+                  <p className="text-lg text-on-navy-2">{p.body}</p>
                 </li>
               ))}
             </ol>
           </div>
         </div>
-        <svg aria-hidden viewBox="0 0 600 600" className="pointer-events-none absolute -bottom-64 -left-48 size-[40rem] text-paper/[0.05]">
+        <svg aria-hidden viewBox="0 0 600 600" className="pointer-events-none absolute -bottom-64 -left-48 size-[40rem] text-on-navy/[0.05]">
           {[90, 170, 250].map((r) => (
             <circle key={r} cx="300" cy="300" r={r} fill="none" stroke="currentColor" strokeWidth="1.5" />
           ))}
@@ -221,22 +217,22 @@ export default async function Home() {
       <section id="areas" aria-labelledby="areas-title" className="scroll-mt-24 bg-mist">
         <div className="mx-auto grid max-w-[96rem] gap-12 px-5 py-20 sm:px-10 lg:grid-cols-12 lg:px-16 lg:py-32">
           <div className="lg:col-span-4">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-ink-2">Where Ping cleans</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-navy-2">Where Ping cleans</p>
             <h2 id="areas-title" className="mt-5 text-3xl font-semibold">
               West Cumbria first.
             </h2>
-            <p className="mt-6 max-w-sm text-lg text-ink-2">
-              Ten towns and the villages between them, from Maryport down the coast to Seascale. Your cleaner lives locally and chooses the areas they cover.
+            <p className="mt-6 max-w-sm text-lg text-navy-2">
+              Ten towns and the villages between them, from Maryport down the coast to Seascale. Ping cleaners choose the areas they cover, so the one who takes on your home wants to be there.
             </p>
           </div>
           <ul className="grid content-start gap-x-10 sm:grid-cols-2 lg:col-span-8">
             {AREA_LINKS.map((t) => (
-              <li key={t.label} className="border-b border-ink/15">
+              <li key={t.label} className="border-b border-navy/15">
                 <Link href={t.href} className="group flex min-h-20 items-center justify-between gap-6 py-4">
-                  <span className="font-display text-[clamp(1.75rem,1.2rem+1.6vw,2.75rem)] font-semibold leading-none transition-colors group-hover:text-signal-ink">
+                  <span className="font-display text-[clamp(1.75rem,1.2rem+1.6vw,2.75rem)] font-semibold leading-none transition-colors group-hover:text-teal-ink">
                     {t.label}
                   </span>
-                  <span className="rounded-full bg-paper/70 px-3 py-1 text-sm font-semibold text-ink-2 tabular">{t.districts.join(" ")}</span>
+                  <span className="rounded-full bg-canvas/70 px-3 py-1 text-sm font-semibold text-navy-2 tabular">{t.districts.join(" ")}</span>
                 </Link>
               </li>
             ))}
@@ -247,10 +243,10 @@ export default async function Home() {
       {/* ------------------------------------------------------------ Cleaners: signal */}
       <section id="cleaners" aria-labelledby="cleaners-title" className="scroll-mt-24">
         <div className="mx-auto max-w-[96rem] px-5 py-20 sm:px-10 lg:px-16 lg:py-32">
-          <div className="grain relative grid overflow-hidden rounded-xl bg-signal text-ink lg:grid-cols-12">
+          <div className="relative grid overflow-hidden rounded-xl bg-teal text-navy lg:grid-cols-12">
             <div className="grid content-between gap-10 p-8 sm:p-12 lg:col-span-7 lg:p-16">
               <div>
-                <PingMark pulse dot="ink" className="text-ink" />
+                <LogoMark colour="navy" className="size-10" />
                 <h2 id="cleaners-title" className="mt-8 text-3xl font-semibold">
                   Clean for Ping. Pick your own work.
                 </h2>
@@ -262,9 +258,9 @@ export default async function Home() {
                   ["Paid for every clean", "Straight to your bank account once each clean clears. No chasing customers for money."],
                   ["The best get first pick", "Great scores move you up, and Top cleaners see new jobs before anyone else."],
                 ].map(([t, b]) => (
-                  <li key={t} className="grid gap-1.5 border-t border-ink/20 pt-5">
+                  <li key={t} className="grid gap-1.5 border-t border-navy/20 pt-5">
                     <span className="font-display text-xl font-semibold">{t}</span>
-                    <span className="text-ink/80">{b}</span>
+                    <span className="text-navy/80">{b}</span>
                   </li>
                 ))}
               </ul>
@@ -274,7 +270,7 @@ export default async function Home() {
                 </ButtonLink>
               </div>
             </div>
-            <Photo slot="home-cleaner-portrait" tone="ink" caption="A Ping cleaner, on the way to a regular" className="min-h-[22rem] rounded-none lg:col-span-5 lg:min-h-full" />
+            <Photo slot="home-cleaner-portrait" tone="navy" caption="A Ping cleaner, on the way to a regular" className="min-h-[22rem] rounded-none lg:col-span-5 lg:min-h-full" />
           </div>
         </div>
       </section>
@@ -283,11 +279,11 @@ export default async function Home() {
       <section id="faq" aria-labelledby="faq-title" className="scroll-mt-24 border-t border-line">
         <div className="mx-auto grid max-w-[96rem] gap-12 px-5 py-20 sm:px-10 lg:grid-cols-12 lg:px-16 lg:py-32">
           <div className="lg:sticky lg:top-32 lg:col-span-4 lg:self-start">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-signal-ink">Questions</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal-ink">Questions</p>
             <h2 id="faq-title" className="mt-5 text-3xl font-semibold">
               Before you book.
             </h2>
-            <p className="mt-6 max-w-sm text-lg text-ink-2">The things people ask most before they let someone new into their home.</p>
+            <p className="mt-6 max-w-sm text-lg text-navy-2">The things people ask most before they let someone new into their home.</p>
             <ButtonLink href={FAQ_LINK.href} variant="secondary" size="lg" className="mt-8">
               Every question, answered
             </ButtonLink>
@@ -300,20 +296,20 @@ export default async function Home() {
 
       {/* ------------------------------------------------------------ Closing */}
       <section aria-labelledby="close-title" className="px-5 pb-20 sm:px-10 lg:px-16 lg:pb-28">
-        <div className="grain relative mx-auto grid max-w-[96rem] gap-10 overflow-hidden rounded-xl bg-moss p-8 text-paper sm:p-12 lg:grid-cols-12 lg:items-end lg:p-20">
-          <svg aria-hidden viewBox="0 0 600 600" className="pointer-events-none absolute -right-40 -top-48 size-[36rem] text-paper/[0.08] lg:-right-24 lg:-top-56 lg:size-[46rem]">
+        <div className="signal-waves relative mx-auto grid max-w-[96rem] gap-10 overflow-hidden rounded-xl p-8 text-on-navy sm:p-12 lg:grid-cols-12 lg:items-end lg:p-20">
+          <svg aria-hidden viewBox="0 0 600 600" className="pointer-events-none absolute -right-40 -top-48 size-[36rem] text-on-navy/[0.08] lg:-right-24 lg:-top-56 lg:size-[46rem]">
             {[80, 150, 220, 290].map((r) => (
               <circle key={r} cx="300" cy="300" r={r} fill="none" stroke="currentColor" strokeWidth="1.5" />
             ))}
-            <circle cx="300" cy="300" r="22" className="fill-signal" />
+            <circle cx="300" cy="300" r="22" className="fill-teal" />
           </svg>
           <h2 id="close-title" className="relative text-4xl font-semibold lg:col-span-8">
-            Get your weekends back.
+            Get your <span className="text-brand-gradient-navy">weekends back.</span>
           </h2>
           <div className="relative grid gap-6 lg:col-span-4">
-            <p className="text-lg text-paper/80">One cleaner who knows your home, a checklist on every visit, and nothing to pay until it&rsquo;s done.</p>
+            <p className="text-lg text-on-navy-2">One cleaner who knows your home, a checklist on every visit, and nothing to pay until it&rsquo;s done.</p>
             <div className="flex flex-wrap gap-3">
-              <ButtonLink href="/price" size="lg">
+              <ButtonLink href="/price" size="lg" variant="signal">
                 Get your price
               </ButtonLink>
             </div>

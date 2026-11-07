@@ -93,7 +93,7 @@ export function CheckoutForm({
               {homes.map((h) => (
                 <Choice key={h.id} name="home-choice" checked={home === h.id} onChange={() => setHome(h.id)}>
                   <span className="font-semibold">{h.address_line1}</span>
-                  <span className="text-ink-2">
+                  <span className="text-navy-2">
                     {h.town} {h.postcode} · {h.bedrooms} bed, {h.bathrooms} bath
                   </span>
                 </Choice>
@@ -160,7 +160,7 @@ export function CheckoutForm({
                 return (
                   <Chip key={a.id} name="arrival-choice" checked={arrival === a.id} onChange={() => setArrival(a.id)} disabled={!fits} label={`${a.note}, ${a.label}`}>
                     <span className="block font-display text-lg font-semibold">{a.label}</span>
-                    <span className="block text-sm text-ink-3">{fits ? a.note : "Too late for this length"}</span>
+                    <span className="block text-sm text-navy-3">{fits ? a.note : "Too late for this length"}</span>
                   </Chip>
                 );
               })}
@@ -194,11 +194,11 @@ export function CheckoutForm({
               <path d="M5 12h14M12 5v14" />
             </RoundButton>
           </div>
-          <p className="mt-3 text-base text-ink-3">{formatDuration(pricing.minBookingMinutes)} minimum per clean.</p>
+          <p className="mt-3 text-base text-navy-3">{formatDuration(pricing.minBookingMinutes)} minimum per clean.</p>
 
           <fieldset className="mt-8 grid gap-3">
             <legend className="mb-1 text-base font-semibold">Number of cleans</legend>
-            <p className="mb-3 text-base text-ink-2">No contract. Book up to 8 cleans; rebook any time.</p>
+            <p className="mb-3 text-base text-navy-2">No contract. Book up to 8 cleans; rebook any time.</p>
             <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
               {BLOCKS.map((b) => (
                 <Chip key={b} name="block-choice" checked={block === b} onChange={() => setBlock(b)} label={`${b} ${b === 1 ? "clean" : "cleans"}`}>
@@ -211,7 +211,7 @@ export function CheckoutForm({
 
         {/* 05 Card: A-4. Stripe SetupIntent and the Payment Element go here. */}
         <Step n={5} title="Your card" muted>
-          <p className="text-lg text-ink-2">
+          <p className="text-lg text-navy-2">
             Card saving is switched on just before launch. We&rsquo;ll ask for your card before your first clean, and nothing is ever charged until a clean is finished.
           </p>
         </Step>
@@ -219,29 +219,29 @@ export function CheckoutForm({
 
       {/* Summary */}
       <aside aria-labelledby="summary-title" className="lg:col-span-5">
-        <div className="grain relative grid gap-6 overflow-hidden rounded-xl bg-ink p-7 text-paper sm:p-9 lg:sticky lg:top-28">
-          <h2 id="summary-title" className="text-sm font-semibold uppercase tracking-[0.16em] text-signal">
+        <div className="relative grid gap-6 overflow-hidden rounded-xl signal-waves p-7 text-on-navy sm:p-9 lg:sticky lg:top-28">
+          <h2 id="summary-title" className="text-sm font-semibold uppercase tracking-[0.16em] text-teal">
             Your booking
           </h2>
           <div aria-live="polite" className="grid gap-6">
             <div>
               <p className="font-display text-[clamp(3.25rem,2.4rem+3vw,5rem)] font-semibold leading-[0.9] tracking-[-0.04em] tabular">{formatPenceShort(perClean)}</p>
-              <p className="mt-2 text-lg text-paper/75">
+              <p className="mt-2 text-lg text-on-navy-2">
                 a clean · {formatDuration(minutes)} at {formatPence(pricing.pricePerHourPence)} an hour
               </p>
             </div>
-            <dl className="grid gap-3 border-t border-line-dark pt-6 text-lg">
+            <dl className="grid gap-3 border-t border-line-navy pt-6 text-lg">
               <Row label="Cleans">{block}</Row>
               <Row label="How often">{FREQUENCIES.find((x) => x.id === frequency)!.label}</Row>
               <Row label="Day">{day ? `${weekdayName(day)}s` : "Pick a day"}</Row>
               <Row label="Arrives">{ARRIVALS.find((a) => a.id === arrival)!.label}</Row>
               {first && last ? <Row label="Dates">{block === 1 ? formatDay(first) : `${formatDay(first)} to ${formatDay(last)}`}</Row> : null}
             </dl>
-            <div className="flex items-baseline justify-between gap-4 border-t border-line-dark pt-6">
-              <span className="text-lg text-paper/75">All {block} {block === 1 ? "clean" : "cleans"}</span>
+            <div className="flex items-baseline justify-between gap-4 border-t border-line-navy pt-6">
+              <span className="text-lg text-on-navy-2">All {block} {block === 1 ? "clean" : "cleans"}</span>
               <span className="font-display text-3xl font-semibold tabular">{formatPence(total)}</span>
             </div>
-            <p className="text-base text-paper/65">
+            <p className="text-base text-on-navy-3">
               {slot ? `Your cleaner arrives ${ARRIVALS.find((a) => a.id === arrival)!.label} and is done by ${formatTime(slot.end)}. ` : ""}Paid one clean at a time, after each one is finished. If a cleaner takes your block on after the first date, the dates move later rather than you losing a clean.
             </p>
           </div>
@@ -252,11 +252,11 @@ export function CheckoutForm({
             </p>
           ) : null}
 
-          <Button type="submit" size="xl" pending={pending} disabled={!ready} className="w-full">
+          <Button type="submit" size="xl" variant="signal" pending={pending} disabled={!ready} className="w-full">
             Book {block} {block === 1 ? "clean" : "cleans"}
           </Button>
           {!ready && !pending ? (
-            <p className="-mt-2 text-center text-base text-paper/65">
+            <p className="-mt-2 text-center text-base text-on-navy-3">
               {!day ? "Pick a day to book." : !covered ? "We’re not booking at that postcode yet." : !slot ? "That clean would run past 8pm." : "Getting ready…"}
             </p>
           ) : null}
@@ -271,9 +271,9 @@ export function CheckoutForm({
 function Step({ n, title, error, muted = false, children }: { n: number; title: string; error?: string; muted?: boolean; children: ReactNode }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className={cn("rounded-xl p-7 ring-1 sm:p-9", muted ? "bg-paper-2/70 ring-line" : "bg-card shadow-card ring-line/70")}>
+    <section aria-labelledby={id} className={cn("rounded-xl p-7 ring-1 sm:p-9", muted ? "bg-mist/70 ring-line" : "bg-card shadow-card ring-line/70")}>
       <div className="mb-6 flex items-baseline gap-4">
-        <span className="font-display text-2xl font-semibold text-signal-ink tabular" aria-hidden>
+        <span className="font-display text-2xl font-semibold text-teal-ink tabular" aria-hidden>
           {String(n).padStart(2, "0")}
         </span>
         <h2 id={id} className="text-2xl font-semibold">
@@ -294,14 +294,14 @@ function Choice({ name, checked, onChange, big = false, children }: { name: stri
   return (
     <label
       className={cn(
-        "flex min-h-16 cursor-pointer items-center gap-4 rounded-lg px-5 ring-1 ring-inset transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-signal",
+        "flex min-h-16 cursor-pointer items-center gap-4 rounded-lg px-5 ring-1 ring-inset transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal",
         big ? "py-5" : "py-4",
-        checked ? "bg-ink text-paper ring-ink [&_.text-ink-2]:text-paper/70" : "bg-paper ring-line hover:ring-ink-3",
+        checked ? "bg-navy text-on-navy ring-navy [&_.text-navy-2]:text-on-navy-2" : "bg-canvas ring-line hover:ring-navy-3",
       )}
     >
       <input type="radio" name={name} checked={checked} onChange={onChange} className="sr-only" />
-      <span aria-hidden className={cn("grid size-6 shrink-0 place-items-center rounded-full ring-2", checked ? "ring-signal" : "ring-line")}>
-        {checked ? <span className="size-2.5 rounded-full bg-signal" /> : null}
+      <span aria-hidden className={cn("grid size-6 shrink-0 place-items-center rounded-full ring-2", checked ? "ring-teal" : "ring-line")}>
+        {checked ? <span className="size-2.5 rounded-full bg-teal" /> : null}
       </span>
       <span className="grid gap-0.5">{children}</span>
     </label>
@@ -312,8 +312,8 @@ function Chip({ name, checked, onChange, disabled = false, label, children }: { 
   return (
     <label
       className={cn(
-        "grid min-h-14 cursor-pointer place-items-center rounded-md px-2 py-3 text-center font-semibold ring-1 ring-inset transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-signal",
-        checked ? "bg-ink text-paper ring-ink [&_.text-ink-3]:text-paper/70" : "bg-paper ring-line hover:ring-ink-3",
+        "grid min-h-14 cursor-pointer place-items-center rounded-md px-2 py-3 text-center font-semibold ring-1 ring-inset transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal",
+        checked ? "bg-navy text-on-navy ring-navy [&_.text-navy-3]:text-on-navy-2" : "bg-canvas ring-line hover:ring-navy-3",
         disabled && "cursor-not-allowed opacity-45 hover:ring-line",
       )}
     >
@@ -359,9 +359,9 @@ function TextArea({ label, name, hint, error }: { label: string; name: string; h
         maxLength={1000}
         aria-describedby={hint ? `${id}-hint` : undefined}
         aria-invalid={error ? true : undefined}
-        className={cn("w-full rounded-md bg-card px-4 py-3 text-base ring-1 ring-inset ring-line focus:outline-none focus:ring-2 focus:ring-ink", error && "ring-2 ring-bad")}
+        className={cn("w-full rounded-md bg-card px-4 py-3 text-base ring-1 ring-inset ring-line focus:outline-none focus:ring-2 focus:ring-navy", error && "ring-2 ring-bad")}
       />
-      {error ? <p className="text-sm font-medium text-bad">{error}</p> : hint ? <p id={`${id}-hint`} className="text-sm text-ink-3">{hint}</p> : null}
+      {error ? <p className="text-sm font-medium text-bad">{error}</p> : hint ? <p id={`${id}-hint`} className="text-sm text-navy-3">{hint}</p> : null}
     </div>
   );
 }
@@ -374,7 +374,7 @@ function RoundButton({ label, disabled, onClick, small = false, children }: { la
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "grid shrink-0 place-items-center rounded-full bg-paper text-ink ring-1 ring-inset ring-line transition-[background-color,transform] hover:bg-paper-2 active:scale-95 disabled:opacity-35",
+        "grid shrink-0 place-items-center rounded-full bg-canvas text-navy ring-1 ring-inset ring-line transition-[background-color,transform] hover:bg-mist active:scale-95 disabled:opacity-35",
         small ? "size-12" : "size-14",
       )}
     >
@@ -388,7 +388,7 @@ function RoundButton({ label, disabled, onClick, small = false, children }: { la
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-6">
-      <dt className="text-paper/65">{label}</dt>
+      <dt className="text-on-navy-3">{label}</dt>
       <dd className="text-right font-semibold">{children}</dd>
     </div>
   );

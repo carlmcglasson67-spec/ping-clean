@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from "react";
-import { ButtonLink, PingMark, Wordmark, cn } from "@/components/ui";
+import { ButtonLink, LogoMark, Wordmark, cn } from "@/components/ui";
 import { AREAS_LINK, AREA_LINKS, CLEANERS_LINK, CLEANING_LINKS, FAQ_LINK } from "../_content/nav";
 
 type Menu = "cleaning" | "areas" | null;
@@ -80,7 +80,7 @@ export function SiteHeader() {
         "sticky top-0 z-40 transition-[background-color,box-shadow] duration-300",
         // No backdrop-filter while the phone sheet is open: it would become the sheet’s
         // containing block and pin the "fixed" sheet inside the 80px header.
-        sheet ? "bg-paper" : scrolled || open ? "bg-paper/95 shadow-[0_1px_0_var(--color-line)] backdrop-blur" : "bg-paper",
+        sheet ? "bg-canvas" : scrolled || open ? "bg-canvas/95 shadow-[0_1px_0_var(--color-line)] backdrop-blur" : "bg-canvas",
       )}
       onPointerLeave={(e) => e.pointerType === "mouse" && hoverClose()}
     >
@@ -92,20 +92,20 @@ export function SiteHeader() {
           <Trigger id="areas" label="Areas" open={open} setOpen={setOpen} onHover={hoverOpen} controls={ids.areas} />
           <Link
             href={CLEANERS_LINK.href}
-            className="inline-flex min-h-12 items-center rounded-full px-4 text-[1.0625rem] font-semibold text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
+            className="inline-flex min-h-12 items-center rounded-full px-4 text-[1.0625rem] font-semibold text-navy-2 transition-colors hover:bg-mist hover:text-navy"
           >
             {CLEANERS_LINK.label}
           </Link>
           <Link
             href={FAQ_LINK.href}
-            className="inline-flex min-h-12 items-center rounded-full px-4 text-[1.0625rem] font-semibold text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
+            className="inline-flex min-h-12 items-center rounded-full px-4 text-[1.0625rem] font-semibold text-navy-2 transition-colors hover:bg-mist hover:text-navy"
           >
             {FAQ_LINK.label}
           </Link>
         </nav>
 
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
-          <Link href="/login" className="hidden min-h-12 items-center rounded-full px-4 text-[1.0625rem] font-semibold text-ink hover:bg-paper-2 sm:inline-flex">
+          <Link href="/login" className="hidden min-h-12 items-center rounded-full px-4 text-[1.0625rem] font-semibold text-navy hover:bg-mist sm:inline-flex">
             Sign in
           </Link>
           {/* Wrapped: ButtonLink’s own inline-flex would beat a "hidden" on the link itself. */}
@@ -114,7 +114,7 @@ export function SiteHeader() {
           </span>
           <button
             type="button"
-            className="inline-flex min-h-12 items-center gap-3 rounded-full bg-ink pl-5 pr-4 text-base font-semibold text-paper lg:hidden"
+            className="inline-flex min-h-12 items-center gap-3 rounded-full bg-navy pl-5 pr-4 text-base font-semibold text-on-navy lg:hidden"
             aria-expanded={sheet}
             aria-controls={ids.sheet}
             onClick={() => setSheet((s) => !s)}
@@ -133,23 +133,23 @@ export function SiteHeader() {
         id={ids.cleaning}
         hidden={open !== "cleaning"}
         onPointerEnter={(e) => e.pointerType === "mouse" && hoverOpen("cleaning")}
-        className="absolute inset-x-0 top-full hidden border-t border-line bg-paper shadow-lift lg:block [&[hidden]]:hidden"
+        className="absolute inset-x-0 top-full hidden border-t border-line bg-canvas shadow-lift lg:block [&[hidden]]:hidden"
       >
         <div className="mx-auto grid max-w-[96rem] grid-cols-12 gap-8 px-16 py-12">
-          <div className="grain relative col-span-4 flex flex-col justify-between overflow-hidden rounded-lg bg-ink p-9 text-paper">
-            <PingMark pulse className="text-paper" />
+          <div className="relative col-span-4 flex flex-col justify-between overflow-hidden rounded-lg signal-waves p-9 text-on-navy">
+            <LogoMark className="size-10" />
             <div className="mt-16">
               <p className="font-display text-2xl font-semibold leading-tight">The same cleaner. Every visit. Proof every time.</p>
-              <p className="mt-4 text-paper/70">One fixed hourly rate, a checklist on every clean, and your card charged only once it&rsquo;s done.</p>
+              <p className="mt-4 text-on-navy-2">One fixed hourly rate, a checklist on every clean, and your card charged only once it&rsquo;s done.</p>
             </div>
           </div>
           <ul className="col-span-8 grid grid-cols-2 gap-x-10 gap-y-2 self-center">
             {CLEANING_LINKS.map((l, i) => (
               <li key={l.label}>
                 <Link href={l.href} onClick={close} className="group grid grid-cols-[3rem_1fr] gap-x-2 rounded-md p-5 transition-colors hover:bg-card">
-                  <span className="font-display text-lg font-semibold text-signal-ink tabular">{String(i + 1).padStart(2, "0")}</span>
-                  <span className="font-display text-xl font-semibold group-hover:text-signal-ink">{l.label}</span>
-                  <span className="col-start-2 mt-1 text-base text-ink-2">{l.note}</span>
+                  <span className="font-display text-lg font-semibold text-teal-ink tabular">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="font-display text-xl font-semibold group-hover:text-teal-ink">{l.label}</span>
+                  <span className="col-start-2 mt-1 text-base text-navy-2">{l.note}</span>
                 </Link>
               </li>
             ))}
@@ -161,15 +161,15 @@ export function SiteHeader() {
         id={ids.areas}
         hidden={open !== "areas"}
         onPointerEnter={(e) => e.pointerType === "mouse" && hoverOpen("areas")}
-        className="absolute inset-x-0 top-full hidden border-t border-line bg-paper shadow-lift lg:block [&[hidden]]:hidden"
+        className="absolute inset-x-0 top-full hidden border-t border-line bg-canvas shadow-lift lg:block [&[hidden]]:hidden"
       >
         <div className="mx-auto grid max-w-[96rem] grid-cols-12 gap-8 px-16 py-12">
           <div className="col-span-4 grid content-between gap-8 rounded-lg bg-mist p-9">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-ink-2">Where Ping cleans</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-navy-2">Where Ping cleans</p>
             <div>
               <p className="font-display text-2xl font-semibold leading-tight">West Cumbria, from the Solway to Seascale.</p>
-              <p className="mt-4 text-ink-2">Ten towns and the villages around them. Pick yours to see what a regular clean looks like there.</p>
-              <Link href={AREAS_LINK.href} onClick={close} className="mt-6 inline-flex min-h-12 items-center gap-2 rounded-full bg-ink px-5 text-base font-semibold text-paper hover:bg-[#1d2732]">
+              <p className="mt-4 text-navy-2">Ten towns and the villages around them. Pick yours to see what a regular clean looks like there.</p>
+              <Link href={AREAS_LINK.href} onClick={close} className="mt-6 inline-flex min-h-12 items-center gap-2 rounded-full bg-navy px-5 text-base font-semibold text-on-navy hover:bg-navy-800">
                 {AREAS_LINK.label} <span aria-hidden>&rarr;</span>
               </Link>
             </div>
@@ -178,8 +178,8 @@ export function SiteHeader() {
             {AREA_LINKS.map((l) => (
               <li key={l.label}>
                 <Link href={l.href} onClick={close} className="group flex min-h-14 items-baseline justify-between gap-4 rounded-md px-5 py-3 transition-colors hover:bg-card">
-                  <span className="font-display text-xl font-semibold group-hover:text-signal-ink">{l.label}</span>
-                  <span className="text-sm font-semibold text-ink-3 tabular">{l.districts.join(" ")}</span>
+                  <span className="font-display text-xl font-semibold group-hover:text-teal-ink">{l.label}</span>
+                  <span className="text-sm font-semibold text-navy-3 tabular">{l.districts.join(" ")}</span>
                 </Link>
               </li>
             ))}
@@ -191,7 +191,7 @@ export function SiteHeader() {
       <div
         id={ids.sheet}
         hidden={!sheet}
-        className="fixed inset-x-0 bottom-0 top-20 overflow-y-auto overscroll-contain bg-paper px-5 pb-10 pt-4 sm:px-10 lg:hidden [&[hidden]]:hidden"
+        className="fixed inset-x-0 bottom-0 top-20 overflow-y-auto overscroll-contain bg-canvas px-5 pb-10 pt-4 sm:px-10 lg:hidden [&[hidden]]:hidden"
       >
         <nav aria-label="Main" className="grid gap-10">
           <SheetGroup title="Regular cleaning">
@@ -256,7 +256,7 @@ function Trigger({
       onPointerEnter={(e) => e.pointerType === "mouse" && onHover(id)}
       className={cn(
         "inline-flex min-h-12 items-center gap-2 rounded-full px-4 text-[1.0625rem] font-semibold transition-colors",
-        isOpen ? "bg-ink text-paper" : "text-ink-2 hover:bg-paper-2 hover:text-ink",
+        isOpen ? "bg-navy text-on-navy" : "text-navy-2 hover:bg-mist hover:text-navy",
       )}
     >
       {label}
@@ -270,7 +270,7 @@ function Trigger({
 function SheetGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="grid gap-2 border-t border-line pt-6">
-      <h2 className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-ink-3">{title}</h2>
+      <h2 className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-navy-3">{title}</h2>
       {children}
     </section>
   );

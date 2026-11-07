@@ -47,7 +47,7 @@ export default async function AccountHome() {
       <PageHeader
         eyebrow="My cleans"
         title={`Hello, ${firstName(session)}.`}
-        lede={next ? <>Your next clean is <strong className="text-ink">{whenPhrase(next.scheduled_date)}</strong>, {formatWindow(next.window_start, next.window_end)}.</> : "Everything to do with your regular clean, in one place."}
+        lede={next ? <>Your next clean is <strong className="text-navy">{whenPhrase(next.scheduled_date)}</strong>, {formatWindow(next.window_start, next.window_end)}.</> : "Everything to do with your regular clean, in one place."}
         action={
           <ButtonLink href="/account/book" size="lg">
             {active.length ? "Book more cleans" : "Book a clean"}
@@ -69,9 +69,9 @@ export default async function AccountHome() {
               const home = propertyById.get(s.property_id);
               const status = SERIES_STATUS[s.status];
               return (
-                <Card key={s.id} className="grain relative overflow-hidden bg-ink text-paper ring-0">
+                <Card key={s.id} className="relative overflow-hidden signal-waves text-on-navy ring-0">
                   <div className="flex flex-wrap items-start justify-between gap-4">
-                    <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">
+                    <p className="text-sm font-semibold uppercase tracking-[0.14em] text-teal">
                       {s.block_size} {s.block_size === 1 ? "clean" : "cleans"} · until {formatDay(s.ends_on)}
                     </p>
                     <Badge tone={status.tone}>{status.label}</Badge>
@@ -79,15 +79,15 @@ export default async function AccountHome() {
                   <p className="mt-6 font-display text-3xl font-semibold">
                     {weekdayName(s.preferred_day)}s
                   </p>
-                  <p className="mt-2 text-lg text-paper/75">
+                  <p className="mt-2 text-lg text-on-navy-2">
                     {FREQUENCY[s.frequency]} · {formatWindow(s.window_start, s.window_end)} · {formatDuration(s.duration_minutes)}
                   </p>
                   {home ? (
-                    <p className="mt-8 border-t border-line-dark pt-5 text-paper/70">
+                    <p className="mt-8 border-t border-line-navy pt-5 text-on-navy-2">
                       {home.address_line1}, {home.town} {home.postcode}
                     </p>
                   ) : null}
-                  <Link href={`/account/booking/${s.id}` as Route} className="mt-5 inline-flex min-h-12 items-center gap-2 font-semibold text-signal hover:text-paper">
+                  <Link href={`/account/booking/${s.id}` as Route} className="mt-5 inline-flex min-h-12 items-center gap-2 font-semibold text-teal hover:text-on-navy">
                     Booking details <span aria-hidden>&rarr;</span>
                   </Link>
                 </Card>
@@ -96,9 +96,9 @@ export default async function AccountHome() {
             <Card className="flex items-center justify-between gap-6">
               <div>
                 <p className="font-display text-2xl font-semibold tabular">{payments.data?.length ?? 0}</p>
-                <p className="text-sm text-ink-2">Paid cleans with receipts</p>
+                <p className="text-sm text-navy-2">Paid cleans with receipts</p>
               </div>
-              <p className="max-w-[14rem] text-right text-sm text-ink-3">You&rsquo;re only charged after each clean is finished.</p>
+              <p className="max-w-[14rem] text-right text-sm text-navy-3">You&rsquo;re only charged after each clean is finished.</p>
             </Card>
           </section>
 
@@ -117,13 +117,13 @@ export default async function AccountHome() {
                       <Card className="flex items-center gap-5 p-5 sm:p-6">
                         <div className="grid flex-1 gap-1">
                           <p className="text-lg font-semibold">{relativeDay(v.scheduled_date)}</p>
-                          <p className="text-sm text-ink-2">
+                          <p className="text-sm text-navy-2">
                             {formatWindow(v.window_start, v.window_end)} · {formatDuration(v.duration_minutes)}
                           </p>
                         </div>
                         <div className="grid justify-items-end gap-2">
                           <Badge tone={st.tone}>{st.label}</Badge>
-                          <span className="text-sm font-semibold tabular text-ink-2">{formatPence(v.price_pence)}</span>
+                          <span className="text-sm font-semibold tabular text-navy-2">{formatPence(v.price_pence)}</span>
                         </div>
                       </Card>
                     </li>

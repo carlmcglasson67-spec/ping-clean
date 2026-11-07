@@ -8,21 +8,24 @@ import { cn } from "@/components/ui";
  * and a caption, so the page reads as designed today and the real shot drops into the
  * same frame later. The PR lists every slot with its subject, crop and size.
  */
-type Tone = "moss" | "ink" | "mist" | "linen" | "signal" | "dusk";
+type Tone = "navy" | "deep" | "steel" | "mist" | "cloud" | "teal";
 
+// Brand placeholders, built only from the tokens in app/globals.css: navy frames for the
+// moody shots, mist and cloud for bright rooms, teal for the odd accent.
+const mix = (token: string, pct: number) => `color-mix(in srgb, var(--color-${token}) ${pct}%, transparent)`;
 const tones: Record<Tone, { bg: string; light: string; line: string; text: string }> = {
-  moss: { bg: "bg-[linear-gradient(160deg,#2c5a49_0%,#23493b_45%,#17322a_100%)]", light: "rgb(255 236 200 / 0.28)", line: "rgb(255 255 255 / 0.07)", text: "text-paper" },
-  ink: { bg: "bg-[linear-gradient(160deg,#25313c_0%,#11181f_60%,#0b1015_100%)]", light: "rgb(255 190 150 / 0.20)", line: "rgb(255 255 255 / 0.06)", text: "text-paper" },
-  mist: { bg: "bg-[linear-gradient(165deg,#eef3f7_0%,#dbe6ef_50%,#c4d4e1_100%)]", light: "rgb(255 255 255 / 0.75)", line: "rgb(17 24 31 / 0.06)", text: "text-ink" },
-  linen: { bg: "bg-[linear-gradient(165deg,#f3ede1_0%,#e6dccb_55%,#d6c9b2_100%)]", light: "rgb(255 255 255 / 0.6)", line: "rgb(17 24 31 / 0.06)", text: "text-ink" },
-  signal: { bg: "bg-[linear-gradient(160deg,#ff8a63_0%,#ff5a2b_50%,#e2461a_100%)]", light: "rgb(255 240 220 / 0.45)", line: "rgb(17 24 31 / 0.08)", text: "text-ink" },
-  dusk: { bg: "bg-[linear-gradient(170deg,#9aa7b3_0%,#6f7d89_55%,#4c5863_100%)]", light: "rgb(255 226 196 / 0.35)", line: "rgb(255 255 255 / 0.07)", text: "text-paper" },
+  navy: { bg: "bg-[linear-gradient(160deg,var(--color-navy-800)_0%,var(--color-navy-900)_50%,var(--color-navy-950)_100%)]", light: mix("blue-bright", 30), line: mix("teal", 16), text: "text-on-navy" },
+  deep: { bg: "bg-[linear-gradient(160deg,var(--color-teal-ink)_0%,var(--color-navy-900)_70%,var(--color-navy-950)_100%)]", light: mix("teal-glow", 22), line: mix("teal", 18), text: "text-on-navy" },
+  steel: { bg: "bg-[linear-gradient(170deg,var(--color-navy-3)_0%,var(--color-navy-2)_55%,var(--color-navy)_100%)]", light: mix("on-navy-2", 35), line: mix("card", 10), text: "text-on-navy" },
+  mist: { bg: "bg-[linear-gradient(165deg,var(--color-card)_0%,var(--color-mist)_55%,var(--color-line)_100%)]", light: mix("card", 80), line: mix("navy", 7), text: "text-navy" },
+  cloud: { bg: "bg-[linear-gradient(165deg,var(--color-card)_0%,var(--color-canvas)_50%,var(--color-teal-soft)_100%)]", light: mix("card", 70), line: mix("navy", 6), text: "text-navy" },
+  teal: { bg: "bg-[linear-gradient(160deg,var(--color-teal-glow)_0%,var(--color-teal)_45%,var(--color-teal-deep)_100%)]", light: mix("card", 40), line: mix("navy", 10), text: "text-navy" },
 };
 
 export function Photo({
   slot,
   caption,
-  tone = "moss",
+  tone = "navy",
   className,
   children,
   priority = false,
@@ -56,9 +59,9 @@ export function Photo({
       />
       {/* Fine architectural lines: a frame inside the frame. */}
       <svg aria-hidden className="absolute inset-0 size-full" preserveAspectRatio="none" viewBox="0 0 100 100">
-        <line x1="0" y1="72" x2="100" y2="72" stroke={t.line} strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
-        <line x1="62" y1="0" x2="62" y2="72" stroke={t.line} strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
-        <rect x="8" y="10" width="40" height="46" fill="none" stroke={t.line} strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
+        <line x1="0" y1="72" x2="100" y2="72" style={{ stroke: t.line }} strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
+        <line x1="62" y1="0" x2="62" y2="72" style={{ stroke: t.line }} strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
+        <rect x="8" y="10" width="40" height="46" fill="none" style={{ stroke: t.line }} strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
       </svg>
       {children}
       <figcaption
