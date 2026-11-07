@@ -104,11 +104,40 @@ out += `${ind(2)}};
           starts_on: string;
           earnings_per_visit_pence: number;
           status: Database["public"]["Enums"]["series_status"];
+          block_size: number;
+          ends_on: string;
+          first_refusal: boolean;
         }[];
       };
       claim_series: {
         Args: { p_offer: string };
         Returns: string;
+      };
+      book_series: {
+        Args: {
+          p_property: string;
+          p_frequency: Database["public"]["Enums"]["series_frequency"];
+          p_preferred_day: number;
+          p_window_start: string;
+          p_window_end: string;
+          p_duration_minutes: number;
+          p_starts_on: string;
+          p_block_size: number;
+          p_request_id: string;
+        };
+        Returns: string;
+      };
+      admin_end_block: {
+        Args: { p_series: string; p_reason: string };
+        Returns: undefined;
+      };
+      start_visit: {
+        Args: { p_visit: string };
+        Returns: undefined;
+      };
+      complete_visit: {
+        Args: { p_visit: string };
+        Returns: undefined;
       };
       admin_assign_series: {
         Args: { p_series: string; p_cleaner: string };

@@ -49,9 +49,10 @@ describe("generate_visits", () => {
     expect(dates).toEqual([3, 17, 31]);
   });
 
-  it("never creates visits for a paused or ended series, or past its end date", async () => {
+  it("never creates visits for a paused or ended series, or past the end of its block", async () => {
     const n = await as("superuser", async (q) => {
-      await q.rows(`update public.series set ends_on = private.london_today() + 10 where id = $1`, [IDS.annaSeries]);
+      // Anna has 3 visits already: a block of 3 is fully booked.
+      await q.rows(`update public.series set block_size = 3 where id = $1`, [IDS.annaSeries]);
       const [a] = await q.rows<{ n: number }>(`select private.generate_visits() as n`);
       await q.rows(`update public.series set status = 'paused' where id = $1`, [IDS.annaSeries]);
       const [b] = await q.rows<{ n: number }>(`select private.generate_visits() as n`);
@@ -274,6 +275,9 @@ describe("engine review fixes", () => {
   it("never books a visit for today, when the slot may already have passed", async () => {
     const dates = await setupThen(async (su) => {
       await su.rows(`update public.series set starts_on = private.london_today(), preferred_day = extract(isodow from private.london_today())::smallint, frequency = 'weekly' where id = $1`, [IDS.benSeries]);
+      // Tara's seeded working days don't cover every weekday; an empty list means "any day",
+      // so this test doesn't depend on which day of the week it runs.
+      await su.rows(`update public.cleaners set availability = '[]'::jsonb where id = $1`, [U.tara]);
     }, U.tara, async (q) => {
       await q.rows(`select public.claim_series((select id from public.job_offers where series_id = '${IDS.benSeries}' and cleaner_id = '${U.tara}'))`);
       await q.rows(`reset role`);

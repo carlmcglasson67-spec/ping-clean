@@ -15,6 +15,11 @@ and stop that piece of work. Carl passes it to the main session.
 2. Area pages for launch postcodes, recruitment page, FAQ.
 3. Instant price: postcode + hours → price from settings table.
 4. Checkout: create property + series, save card (Stripe SetupIntent, test mode).
+   The customer picks a **block of 1 to 8 cleans** (Carl, 7 Nov 2026: no open-ended
+   regular cleans; 8 is the maximum). Book through `book_series(...)` with a request id made
+   once per checkout (validate with `bookSeriesInput` in `lib/booking.ts`; word errors with
+   `pingErrorMessage()` from `lib/db/errors.ts`). A customer booking again at the same home
+   is a rebook: the database gives their last cleaner first refusal on its own.
 5. Customer account: upcoming visits, skip/cancel, rate, messages, receipts. PWA manifest.
 
 ## Done when

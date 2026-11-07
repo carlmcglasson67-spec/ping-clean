@@ -49,6 +49,8 @@ export type Database = {
           position: number;
           done: boolean;
           done_at: string | null;
+          skipped_reason: string | null;
+          skipped_at: string | null;
         };
         Insert: {
           id?: string;
@@ -59,6 +61,8 @@ export type Database = {
           position?: number;
           done?: boolean;
           done_at?: string | null;
+          skipped_reason?: string | null;
+          skipped_at?: string | null;
         };
         Update: {
           id?: string;
@@ -69,6 +73,8 @@ export type Database = {
           position?: number;
           done?: boolean;
           done_at?: string | null;
+          skipped_reason?: string | null;
+          skipped_at?: string | null;
         };
         Relationships: [];
       };
@@ -246,6 +252,7 @@ export type Database = {
           responded_at: string | null;
           created_at: string;
           round: number;
+          first_refusal: boolean;
         };
         Insert: {
           id?: string;
@@ -258,6 +265,7 @@ export type Database = {
           responded_at?: string | null;
           created_at?: string;
           round?: number;
+          first_refusal?: boolean;
         };
         Update: {
           id?: string;
@@ -270,6 +278,7 @@ export type Database = {
           responded_at?: string | null;
           created_at?: string;
           round?: number;
+          first_refusal?: boolean;
         };
         Relationships: [];
       };
@@ -523,12 +532,18 @@ export type Database = {
           commission_value: number;
           status: Database["public"]["Enums"]["series_status"];
           starts_on: string;
-          ends_on: string | null;
+          ends_on: string;
           claimed_at: string | null;
           created_at: string;
           updated_at: string;
           offering_since: string | null;
           offer_round: number;
+          block_size: number;
+          client_request_id: string | null;
+          rebook_of: string | null;
+          first_refusal_cleaner_id: string | null;
+          cut_short_cleans: number;
+          end_reason: string | null;
         };
         Insert: {
           id?: string;
@@ -545,12 +560,18 @@ export type Database = {
           commission_value: number;
           status?: Database["public"]["Enums"]["series_status"];
           starts_on: string;
-          ends_on?: string | null;
+          ends_on: string;
           claimed_at?: string | null;
           created_at?: string;
           updated_at?: string;
           offering_since?: string | null;
           offer_round?: number;
+          block_size: number;
+          client_request_id?: string | null;
+          rebook_of?: string | null;
+          first_refusal_cleaner_id?: string | null;
+          cut_short_cleans?: number;
+          end_reason?: string | null;
         };
         Update: {
           id?: string;
@@ -567,12 +588,18 @@ export type Database = {
           commission_value?: number;
           status?: Database["public"]["Enums"]["series_status"];
           starts_on?: string;
-          ends_on?: string | null;
+          ends_on?: string;
           claimed_at?: string | null;
           created_at?: string;
           updated_at?: string;
           offering_since?: string | null;
           offer_round?: number;
+          block_size?: number;
+          client_request_id?: string | null;
+          rebook_of?: string | null;
+          first_refusal_cleaner_id?: string | null;
+          cut_short_cleans?: number;
+          end_reason?: string | null;
         };
         Relationships: [];
       };
@@ -613,6 +640,7 @@ export type Database = {
           dispute_window_hours: number | null;
           launch_districts: string[];
           updated_at: string;
+          rebook_first_refusal_minutes: number | null;
         };
         Insert: {
           id?: boolean;
@@ -629,6 +657,7 @@ export type Database = {
           dispute_window_hours?: number | null;
           launch_districts?: string[];
           updated_at?: string;
+          rebook_first_refusal_minutes?: number | null;
         };
         Update: {
           id?: boolean;
@@ -645,6 +674,7 @@ export type Database = {
           dispute_window_hours?: number | null;
           launch_districts?: string[];
           updated_at?: string;
+          rebook_first_refusal_minutes?: number | null;
         };
         Relationships: [];
       };
@@ -729,6 +759,7 @@ export type Database = {
           cancelled_by: string | null;
           created_at: string;
           updated_at: string;
+          couldnt_do_count: number;
         };
         Insert: {
           id?: string;
@@ -750,6 +781,7 @@ export type Database = {
           cancelled_by?: string | null;
           created_at?: string;
           updated_at?: string;
+          couldnt_do_count?: number;
         };
         Update: {
           id?: string;
@@ -771,6 +803,7 @@ export type Database = {
           cancelled_by?: string | null;
           created_at?: string;
           updated_at?: string;
+          couldnt_do_count?: number;
         };
         Relationships: [];
       };
@@ -810,11 +843,40 @@ export type Database = {
           starts_on: string;
           earnings_per_visit_pence: number;
           status: Database["public"]["Enums"]["series_status"];
+          block_size: number;
+          ends_on: string;
+          first_refusal: boolean;
         }[];
       };
       claim_series: {
         Args: { p_offer: string };
         Returns: string;
+      };
+      book_series: {
+        Args: {
+          p_property: string;
+          p_frequency: Database["public"]["Enums"]["series_frequency"];
+          p_preferred_day: number;
+          p_window_start: string;
+          p_window_end: string;
+          p_duration_minutes: number;
+          p_starts_on: string;
+          p_block_size: number;
+          p_request_id: string;
+        };
+        Returns: string;
+      };
+      admin_end_block: {
+        Args: { p_series: string; p_reason: string };
+        Returns: undefined;
+      };
+      start_visit: {
+        Args: { p_visit: string };
+        Returns: undefined;
+      };
+      complete_visit: {
+        Args: { p_visit: string };
+        Returns: undefined;
       };
       admin_assign_series: {
         Args: { p_series: string; p_cleaner: string };

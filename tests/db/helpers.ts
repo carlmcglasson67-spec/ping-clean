@@ -17,6 +17,8 @@ export const IDS = {
   benSeries: "00000000-0000-4000-c000-000000000002",
   visitDone: "00000000-0000-4000-e000-000000000001",
   visitToday: "00000000-0000-4000-e000-000000000002",
+  visitNextWeek: "00000000-0000-4000-e000-000000000003",
+  annaRequest: "00000000-0000-4000-9000-000000000001",
 } as const;
 
 const url = process.env.PING_TEST_DATABASE_URL;
@@ -54,6 +56,10 @@ export type Query = {
   count: (table: string) => Promise<number>;
   /** Resolves to the Postgres error code, or "ok" if the statement succeeded. Uses a savepoint. */
   attempt: (sql: string, params?: unknown[]) => Promise<string>;
+  /** Like attempt, but also returns the error's detail (e.g. how many checklist items are left). */
+  failure: (sql: string, params?: unknown[]) => Promise<{ code: string; detail?: string } | null>;
+  /** Switch this transaction to acting as a signed-in user (after superuser setup). */
+  actAs: (id: string) => Promise<void>;
 };
 
 function makeQuery(client: pg.PoolClient): Query {
@@ -73,7 +79,34 @@ function makeQuery(client: pg.PoolClient): Query {
         return (e as { code?: string }).code ?? "error";
       }
     },
+    failure: async (sql, params) => {
+      const name = `sp_${++sp}`;
+      await client.query(`savepoint ${name}`);
+      try {
+        await client.query(sql, params);
+        await client.query(`release savepoint ${name}`);
+        return null;
+      } catch (e) {
+        await client.query(`rollback to savepoint ${name}`);
+        const err = e as { code?: string; detail?: string };
+        return { code: err.code ?? "error", detail: err.detail };
+      }
+    },
+    actAs: async (id) => {
+      await client.query(`reset role`);
+      await client.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: id, role: "authenticated" })]);
+      await client.query(`set local role authenticated`);
+    },
   };
+}
+
+/** Superuser setup, then act as `who` (a user id) in the same rolled-back transaction. */
+export async function setupThen<T>(setup: (su: Query) => Promise<void>, who: string | null, fn: (q: Query) => Promise<T>): Promise<T> {
+  return as("superuser", async (su) => {
+    await setup(su);
+    if (who) await su.actAs(who);
+    return fn(su);
+  });
 }
 
 // Postgres error codes the tests expect.
