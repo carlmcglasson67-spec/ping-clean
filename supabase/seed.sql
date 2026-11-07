@@ -3,8 +3,8 @@
 --
 -- Test logins (password for all: ping-test-2026)
 --   admin@ping.test               admin
---   anna.customer@ping.test       customer, Workington, weekly clean held by Tara
---   ben.customer@ping.test        customer, Whitehaven, booking still on offer
+--   anna.customer@ping.test       customer, Workington, block of 8 weekly cleans held by Tara
+--   ben.customer@ping.test        customer, Whitehaven, block of 4 fortnightly cleans still on offer
 --   tara.cleaner@ping.test        cleaner, active, Top tier
 --   alex.cleaner@ping.test        cleaner, active, Approved tier
 --   sam.applicant@ping.test       cleaner applicant, not yet approved
@@ -81,14 +81,18 @@ insert into public.properties (id, customer_id, address_line1, town, postcode, b
   ('00000000-0000-4000-b000-000000000002', '00000000-0000-4000-a000-000000000003',
      '8 Sample Road', 'Whitehaven', 'CA28 9ZZ', 2, 1, null, 'Ring the bell', null);
 
+-- Every booking is a block of 1 to 8 cleans; ends_on (the block's last clean) is set by a trigger.
 insert into public.series (id, property_id, customer_id, cleaner_id, frequency, preferred_day, window_start, window_end,
-                           duration_minutes, price_per_hour_pence, commission_type, commission_value, status, starts_on, claimed_at) values
+                           duration_minutes, price_per_hour_pence, commission_type, commission_value, status, starts_on, claimed_at,
+                           block_size, client_request_id) values
   ('00000000-0000-4000-c000-000000000001', '00000000-0000-4000-b000-000000000001', '00000000-0000-4000-a000-000000000002',
      '00000000-0000-4000-a000-000000000004', 'weekly', extract(isodow from (now() at time zone 'Europe/London')::date)::smallint, '09:00', '12:00', 150, 2000, 'percent', 2500,
-     'claimed', (now() at time zone 'Europe/London')::date - 14, now() - interval '15 days'),
+     'claimed', (now() at time zone 'Europe/London')::date - 7, now() - interval '15 days',
+     8, '00000000-0000-4000-9000-000000000001'),
   ('00000000-0000-4000-c000-000000000002', '00000000-0000-4000-b000-000000000002', '00000000-0000-4000-a000-000000000003',
      null, 'fortnightly', 3, '10:00', '14:00', 120, 2000, 'percent', 2500,
-     'offering', (now() at time zone 'Europe/London')::date + 7, null);
+     'offering', (now() at time zone 'Europe/London')::date + 7, null,
+     4, '00000000-0000-4000-9000-000000000002');
 
 insert into public.job_offers (series_id, cleaner_id, tier, opens_at, expires_at, status, responded_at) values
   ('00000000-0000-4000-c000-000000000001', '00000000-0000-4000-a000-000000000004', 'top',
@@ -96,8 +100,8 @@ insert into public.job_offers (series_id, cleaner_id, tier, opens_at, expires_at
   ('00000000-0000-4000-c000-000000000002', '00000000-0000-4000-a000-000000000004', 'top',
      now() - interval '30 minutes', now() + interval '90 minutes', 'open', null);
 
--- Visits for Anna's weekly clean (her day is always "today's" weekday, so the dates line up):
--- one done and reviewed, one today, one next week.
+-- Visits for Anna's block (her day is always "today's" weekday, so the dates line up):
+-- clean 1 done and reviewed, clean 2 today, clean 3 next week; the nightly job books the rest.
 insert into public.visits (id, series_id, customer_id, cleaner_id, scheduled_date, window_start, window_end, duration_minutes,
                            status, started_at, completed_at, price_pence, cleaner_earnings_pence, ping_fee_pence)
 select v.id, '00000000-0000-4000-c000-000000000001', '00000000-0000-4000-a000-000000000002', '00000000-0000-4000-a000-000000000004',

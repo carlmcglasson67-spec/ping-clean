@@ -49,9 +49,10 @@ describe("generate_visits", () => {
     expect(dates).toEqual([3, 17, 31]);
   });
 
-  it("never creates visits for a paused or ended series, or past its end date", async () => {
+  it("never creates visits for a paused or ended series, or past the end of its block", async () => {
     const n = await as("superuser", async (q) => {
-      await q.rows(`update public.series set ends_on = private.london_today() + 10 where id = $1`, [IDS.annaSeries]);
+      // Anna has 3 visits already: a block of 3 is fully booked.
+      await q.rows(`update public.series set block_size = 3 where id = $1`, [IDS.annaSeries]);
       const [a] = await q.rows<{ n: number }>(`select private.generate_visits() as n`);
       await q.rows(`update public.series set status = 'paused' where id = $1`, [IDS.annaSeries]);
       const [b] = await q.rows<{ n: number }>(`select private.generate_visits() as n`);
