@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { cn } from "@/components/ui/cn";
 
-type Item = { href: Route; label: string; icon: ReactNode; activeOnly?: boolean; applicantLabel?: string };
+type Item = { href: Route; label: string; icon: ReactNode; activeOnly?: boolean; applicantLabel?: string; also?: string[] };
 
 const stroke = { fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" } as const;
 
@@ -24,6 +24,7 @@ const ITEMS: Item[] = [
   {
     href: "/work/you",
     label: "You",
+    also: ["/work/details", "/work/documents", "/work/areas"],
     icon: (
       <svg viewBox="0 0 24 24" className="size-6" aria-hidden>
         <circle {...stroke} cx="12" cy="8.5" r="3.75" />
@@ -33,9 +34,10 @@ const ITEMS: Item[] = [
   },
 ];
 
-/** True when `path` is this tab or a page inside it. Home only matches itself. */
-function isCurrent(href: string, path: string) {
-  return href === "/work" ? path === "/work" : path === href || path.startsWith(`${href}/`);
+/** True when `path` is this tab, a page inside it, or one of the pages it groups. Home only matches itself. */
+function isCurrent(item: Item, path: string) {
+  const under = (base: string) => path === base || path.startsWith(`${base}/`);
+  return item.href === "/work" ? path === "/work" : under(item.href) || (item.also ?? []).some(under);
 }
 
 /**
@@ -48,7 +50,7 @@ export function WorkNav({ active }: { active: boolean }) {
   const items = ITEMS.filter((i) => active || !i.activeOnly);
 
   const link = (i: Item, variant: "bar" | "tabs") => {
-    const current = isCurrent(i.href, path);
+    const current = isCurrent(i, path);
     const label = !active && i.applicantLabel ? i.applicantLabel : i.label;
     return (
       <li key={i.href} className={variant === "bar" ? "flex-1" : undefined}>
