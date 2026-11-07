@@ -60,8 +60,9 @@ export async function cleanerFlows({ browser, BASE, check, signIn, SHOTS }) {
 
     await check("the application shows what to do next", async () => {
       await page.goto(`${BASE}/work`);
+      // The page streams in behind a skeleton: wait for the real heading.
+      await page.getByRole("heading", { name: "Thanks for applying, Casey." }).waitFor();
       const text = await page.locator("main").innerText();
-      assert.ok(text.includes("Thanks for applying, Casey."));
       assert.ok(text.includes("Send your documents"));
       assert.ok(!/New jobs for you|You earn/.test(text), "an applicant must not see jobs");
     });
@@ -109,6 +110,64 @@ export async function cleanerFlows({ browser, BASE, check, signIn, SHOTS }) {
     await page.screenshot({ path: `${SHOTS}/work-application-1440.png`, fullPage: true });
     await page.goto(`${BASE}/work/documents`);
     await page.screenshot({ path: `${SHOTS}/work-documents-1440.png`, fullPage: true });
+    await ctx.close();
+  }
+
+  console.log("e2e: areas and working days (Track B)");
+  {
+    // Alex: Approved, CA22/CA25/CA28, Tuesdays and Thursdays.
+    const ctx = await browser.newContext(PHONE);
+    const page = await ctx.newPage();
+    await signIn(page, "alex.cleaner");
+    await page.waitForURL(`${BASE}/work`);
+
+    await check("shows Ping's areas with their towns, and the cleaner's current choices", async () => {
+      await page.goto(`${BASE}/work/areas`);
+      await page.getByRole("heading", { name: "You choose where and when." }).waitFor();
+      assert.ok(await page.getByRole("checkbox", { name: /CA28\s*Whitehaven/ }).isChecked());
+      assert.ok(!(await page.getByRole("checkbox", { name: /CA14\s*Workington/ }).isChecked()));
+      assert.ok(await page.getByRole("checkbox", { name: "Tuesday" }).isChecked());
+      assert.ok(!(await page.getByRole("checkbox", { name: "Wednesday" }).isChecked()));
+      assert.equal(await page.getByLabel("Tuesday start").inputValue(), "09:00");
+      await page.screenshot({ path: `${SHOTS}/work-areas-390.png`, fullPage: true });
+    });
+
+    await check("a day that finishes before it starts is refused in plain words", async () => {
+      await page.getByText("CA14", { exact: true }).click();
+      await page.getByText("Wednesday", { exact: true }).click();
+      await page.getByLabel("Wednesday start").selectOption("14:00");
+      await page.getByLabel("Wednesday finish").selectOption("10:00");
+      await page.getByRole("button", { name: "Save where and when I work" }).click();
+      await page.getByText("each working day needs to finish after it starts").waitFor();
+      assert.equal(await page.getByLabel("Wednesday start").inputValue(), "14:00", "a failed save keeps what they chose");
+      assert.ok(await page.getByRole("checkbox", { name: /CA14/ }).isChecked());
+    });
+
+    await check("saves areas and days, and the home screen reflects them", async () => {
+      await page.getByLabel("Wednesday finish").selectOption("15:30");
+      await page.getByRole("button", { name: "Save where and when I work" }).click();
+      await page.getByRole("status").filter({ hasText: "Saved." }).waitFor();
+      await page.reload();
+      assert.ok(await page.getByRole("checkbox", { name: /CA14/ }).isChecked());
+      assert.equal(await page.getByLabel("Wednesday start").inputValue(), "14:00");
+      assert.equal(await page.getByLabel("Wednesday finish").inputValue(), "15:30");
+      await page.goto(`${BASE}/work`);
+      await page.getByText("You cover CA14, CA22, CA25, CA28.").waitFor();
+    });
+
+    await check("an area Ping doesn't cover can't be slipped in from the browser", async () => {
+      await page.goto(`${BASE}/work/areas`);
+      const save = page.getByRole("button", { name: "Save where and when I work" });
+      await save.evaluate((b) => {
+        b.form.append(Object.assign(document.createElement("input"), { type: "hidden", name: "areas", value: "LA1" }));
+      });
+      await save.click();
+      await page.getByText("isn't covered by Ping yet").waitFor();
+    });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${BASE}/work/areas`);
+    await page.screenshot({ path: `${SHOTS}/work-areas-1440.png`, fullPage: true });
     await ctx.close();
   }
 
