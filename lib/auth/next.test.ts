@@ -4,7 +4,7 @@ import { safeNext, signedOutEntry } from "./next";
 import { passwordBytes, passwordChecks, passwordProblem } from "./password";
 import { parseConfirmForm } from "./confirm-fields";
 import { maskEmail } from "./mask";
-import { freshRecovery } from "./recovery";
+import { canChooseNewPassword, freshEmailLink, makeResetPass, resetPassSecret } from "./recovery";
 import { postLoginPath } from "./roles";
 
 describe("safeNext: only paths inside the apps", () => {
@@ -111,26 +111,54 @@ describe("site address (review fix 8)", () => {
   });
 });
 
-describe("who may choose a new password (re-review N1)", () => {
+describe("who may choose a new password (final check F1)", () => {
   const now = 1_800_000_000_000;
   const at = (minsAgo: number) => Math.floor((now - minsAgo * 60_000) / 1000);
-  it("needs a reset link (or one-time code) used in the last 15 minutes, from the signed token", () => {
-    expect(freshRecovery([{ method: "recovery", timestamp: at(1) }], now)).toBe(true);
-    expect(freshRecovery([{ method: "otp", timestamp: at(14) }], now)).toBe(true);
-    expect(freshRecovery([{ method: "password", timestamp: at(30) }, { method: "recovery", timestamp: at(2) }], now)).toBe(true);
+  const secret = "a-test-secret-that-is-long-enough-000000";
+  const sid = "11111111-2222-4333-8444-555555555555";
+  const otp = [{ method: "otp", timestamp: at(1) }];
+  const session = (over: Partial<{ sessionId: string | null; amr: { method: string; timestamp: number }[] }> = {}) =>
+    ({ sessionId: sid, amr: otp, ...over });
+
+  it("lets in the session a reset link created, with its signed pass, for 15 minutes", () => {
+    const pass = makeResetPass(sid, secret, now);
+    expect(canChooseNewPassword(pass, session(), secret, now)).toBe(true);
+    expect(canChooseNewPassword(pass, session({ amr: [{ method: "recovery", timestamp: at(2) }] }), secret, now)).toBe(true); // PKCE link
+    expect(canChooseNewPassword(pass, session(), secret, now + 16 * 60_000)).toBe(false); // expired
   });
-  it("refuses a normal sign-in, an email confirmation, an old reset, and anything malformed", () => {
-    expect(freshRecovery([{ method: "password", timestamp: at(1) }], now)).toBe(false); // a phone left signed in
-    expect(freshRecovery([{ method: "email/signup", timestamp: at(1) }], now)).toBe(false);
-    expect(freshRecovery([{ method: "recovery", timestamp: at(16) }], now)).toBe(false); // too old
-    expect(freshRecovery([{ method: "recovery", timestamp: at(-60) }], now)).toBe(false); // from the future
-    expect(freshRecovery(["recovery"], now)).toBe(false);
-    expect(freshRecovery(undefined, now)).toBe(false);
-    expect(freshRecovery([{ method: "recovery" }], now)).toBe(false);
+
+  it("refuses a forged, unsigned or wrongly signed pass", () => {
+    const exp = now + 10 * 60_000;
+    expect(canChooseNewPassword(`${sid}.${exp}`, session(), secret, now)).toBe(false); // unsigned
+    expect(canChooseNewPassword(`${sid}.${exp}.forged`, session(), secret, now)).toBe(false);
+    expect(canChooseNewPassword(makeResetPass(sid, "another-secret-that-is-long-enough-0000", now), session(), secret, now)).toBe(false);
+    const genuine = makeResetPass(sid, secret, now);
+    const [, , sig] = genuine.split(".");
+    expect(canChooseNewPassword(`${sid}.${now + 365 * 86_400_000}.${sig}`, session(), secret, now)).toBe(false); // edited expiry
+    expect(canChooseNewPassword("1", session(), secret, now)).toBe(false);
   });
-  it("has nothing a hand-built cookie could satisfy: the old cookie scheme is gone", async () => {
-    const mod = await import("./recovery");
-    expect(Object.keys(mod).sort()).toEqual(["RECOVERY_FRESH_MINUTES", "amrEntries", "freshRecovery"]);
+
+  it("refuses a pass made for another session", () => {
+    const pass = makeResetPass("99999999-2222-4333-8444-555555555555", secret, now);
+    expect(canChooseNewPassword(pass, session(), secret, now)).toBe(false);
+    expect(canChooseNewPassword(makeResetPass(sid, secret, now), session({ sessionId: null }), secret, now)).toBe(false);
+  });
+
+  it("refuses a sign-up confirmation (an otp session, but no pass) and a normal sign-in", () => {
+    expect(canChooseNewPassword(undefined, session(), secret, now)).toBe(false);
+    const pass = makeResetPass(sid, secret, now);
+    expect(canChooseNewPassword(pass, session({ amr: [{ method: "password", timestamp: at(1) }] }), secret, now)).toBe(false);
+    expect(canChooseNewPassword(pass, session({ amr: [{ method: "otp", timestamp: at(16) }] }), secret, now)).toBe(false);
+    expect(freshEmailLink([{ method: "otp", timestamp: at(-60) }], now)).toBe(false); // from the future
+    expect(freshEmailLink([{ method: "otp" }], now)).toBe(false);
+  });
+
+  it("fails closed in production without a long enough secret", () => {
+    expect(resetPassSecret({ NODE_ENV: "production" })).toBeNull();
+    expect(resetPassSecret({ NODE_ENV: "production", RESET_PASS_SECRET: "short" })).toBeNull();
+    expect(resetPassSecret({ NODE_ENV: "production", RESET_PASS_SECRET: secret })).toBe(secret);
+    expect(resetPassSecret({ NODE_ENV: "development" })).toMatch(/^[0-9a-f]{64}$/); // made per server start
+    expect(canChooseNewPassword(makeResetPass(sid, secret, now), session(), null, now)).toBe(false);
   });
 });
 

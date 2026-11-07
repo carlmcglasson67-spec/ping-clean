@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ButtonLink } from "@/components/ui";
-import { freshRecovery } from "@/lib/auth/recovery";
+import { cookies } from "next/headers";
+import { canChooseNewPassword, RESET_COOKIE, resetPassSecret } from "@/lib/auth/recovery";
 import { getSession } from "@/lib/auth/session";
 import { AuthFrame, FormIntro, Notice } from "../_components/auth-frame";
 import { ResetForm } from "./reset-form";
@@ -10,10 +11,10 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-/** Reached only from a reset email: the session must come from a reset link used in the last 15 minutes. */
+/** Reached only from a reset email: the session a reset link created, within 15 minutes (lib/auth/recovery.ts). */
 export default async function ResetPasswordPage() {
-  const session = await getSession();
-  const ready = Boolean(session) && freshRecovery(session!.amr);
+  const [session, jar] = await Promise.all([getSession(), cookies()]);
+  const ready = canChooseNewPassword(jar.get(RESET_COOKIE)?.value, session, resetPassSecret());
 
   return (
     <AuthFrame

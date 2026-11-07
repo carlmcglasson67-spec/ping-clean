@@ -45,20 +45,23 @@ async function userJson(id) {
   return u && { id: u.id, aud: "authenticated", role: "authenticated", email: u.email, user_metadata: u.raw_user_meta_data ?? {}, app_metadata: { provider: "email" }, created_at: u.created_at };
 }
 
-// How each session was signed in, as GoTrue's `amr` claim: password, recovery (a reset
-// link), email/signup (a confirmation link). Kept per refresh token, so a refreshed
-// session keeps its original method and time, as in GoTrue.
-const sessionAmr = new Map();
-async function session(userId, method = "password", amr = null) {
+// How each session was signed in, as GoTrue's `amr` claim: "password" for a sign-in, and
+// "otp" for EVERY email link verified with a token hash (reset, sign-up, magic link…),
+// exactly as GoTrue does (internal/api/verify.go, verifyPost:
+// `a.issueRefreshToken(r, w.Header(), tx, user, models.OTP, grantParams)`).
+// Kept per refresh token with the session id, so a refreshed session keeps its id, method
+// and time, as in GoTrue.
+const sessions = new Map();
+async function session(userId, method = "password", kept = null) {
   const user = await userJson(userId);
   const iat = Math.floor(Date.now() / 1000);
   const exp = iat + 3600;
-  const claimsAmr = amr ?? [{ method, timestamp: iat }];
+  const info = kept ?? { amr: [{ method, timestamp: iat }], sid: randomUUID() };
   const refresh = `rt.${userId}.${randomUUID()}`;
-  sessionAmr.set(refresh, claimsAmr);
+  sessions.set(refresh, info);
   return {
     access_token: signJwt({ sub: userId, role: "authenticated", aud: "authenticated", email: user.email, iat, exp,
-      session_id: randomUUID(), aal: "aal1", amr: claimsAmr }),
+      session_id: info.sid, aal: "aal1", amr: info.amr }),
     token_type: "bearer",
     expires_in: 3600,
     expires_at: exp,
@@ -92,11 +95,19 @@ async function asUser(claims, fn) {
 const outbox = []; // { email, type, link }
 const tokens = new Map(); // token_hash -> { userId, type }
 const config = { confirm: true }; // Supabase "Confirm email" setting
+// The links Ping's email templates produce. They're built from the Site URL alone, never
+// from RedirectTo (see the PR's template steps), so a redirect mismatch can't break them:
+//   {{ .SiteURL }}/auth/confirm?flow=signup&token_hash={{ .TokenHash }}&type=email
+//   {{ .SiteURL }}/auth/confirm?flow=reset&token_hash={{ .TokenHash }}&type=recovery
+// The Site URL here is the app's own address (the origin the request came back to).
 function mail(email, type, userId, redirectTo) {
   const hash = randomUUID().replace(/-/g, "");
   tokens.set(hash, { userId, type });
-  const base = redirectTo || "http://127.0.0.1:3200/auth/confirm?flow=missing";
-  outbox.push({ email, type, link: `${base}${base.includes("?") ? "&" : "?"}token_hash=${hash}&type=${type === "signup" ? "email" : type}` });
+  const site = redirectTo ? new URL(redirectTo).origin : "http://127.0.0.1:3200";
+  const link = type === "signup"
+    ? `${site}/auth/confirm?flow=signup&token_hash=${hash}&type=email`
+    : `${site}/auth/confirm?flow=reset&token_hash=${hash}&type=recovery`;
+  outbox.push({ email, type, link });
 }
 const userByEmail = async (email) =>
   (await pool.query(`select id, email_confirmed_at from auth.users where email = $1`, [String(email ?? "").toLowerCase()])).rows[0];
@@ -209,7 +220,7 @@ export function startFakeSupabase(port = 54321) {
         if (!t || t.type !== want) return send(res, 403, { code: 403, error_code: "otp_expired", msg: "Email link is invalid or has expired" });
         tokens.delete(String(token_hash)); // links work once
         if (t.type === "signup") await pool.query(`update auth.users set email_confirmed_at = now() where id = $1`, [t.userId]);
-        return send(res, 200, await session(t.userId, t.type === "recovery" ? "recovery" : "email/signup"));
+        return send(res, 200, await session(t.userId, "otp")); // every type, as GoTrue
       }
       if (url.pathname === "/auth/v1/user" && req.method === "PUT") {
         if (!claims) return send(res, 401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" });
@@ -225,7 +236,7 @@ export function startFakeSupabase(port = 54321) {
       if (url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "refresh_token") {
         const { refresh_token } = await readBody(req);
         const id = String(refresh_token).split(".")[1];
-        return send(res, 200, await session(id, "password", sessionAmr.get(String(refresh_token))));
+        return send(res, 200, await session(id, "password", sessions.get(String(refresh_token))));
       }
       if (url.pathname === "/auth/v1/user") {
         if (!claims) return send(res, 401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" });

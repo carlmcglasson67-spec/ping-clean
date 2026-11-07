@@ -90,6 +90,10 @@ export async function authFlows({ browser, BASE, check, shots }) {
     await c.end();
     // The phone now lives on the profile only (review fix 7).
     assert.deepEqual(rows[0], { role: "customer", phone: "07700 900321", terms: "draft-2026-11", meta_phone: null });
+    // A sign-up confirmation gives an "otp" session, just like a reset link, but no reset
+    // pass: the new-password page stays shut (final check F1).
+    await page.goto(`${BASE}/reset-password`);
+    await page.getByTestId("reset-expired").waitFor();
     await ctx.close();
   });
 
@@ -145,7 +149,8 @@ export async function authFlows({ browser, BASE, check, shots }) {
     await fillSignup(page, owen);
     await page.getByTestId("check-email").waitFor();
     const link = await mailFor(owen.email, "signup");
-    assert.match(link, /next=%2Fwork%2Fapply/);
+    // The link is built from the Site URL alone (F3); where they were going is kept with the account.
+    assert.match(link, /\/auth\/confirm\?flow=signup&token_hash=[0-9a-f]+&type=email$/);
     const seen = await pathsVisited(page, async () => {
       await openLink(page, link);
       await continueAfterConfirm(page, owen.email);
@@ -268,16 +273,47 @@ export async function authFlows({ browser, BASE, check, shots }) {
     await page.waitForURL(`${BASE}/account`);
     await page.goto(`${BASE}/reset-password`);
     await page.getByTestId("reset-expired").waitFor();
-    // A hand-built reset cookie (the old scheme, forged in the console) opens nothing:
-    // only the signed session token counts now (re-review N1).
+    // A hand-built reset cookie opens nothing: unsigned, badly signed, or the old flag.
     const anna = "00000000-0000-4000-a000-000000000002";
-    for (const value of [`${anna}.${Date.now() + 14 * 60_000}`, "1"]) {
+    const exp = Date.now() + 14 * 60_000;
+    for (const value of [`${anna}.${exp}`, `${anna}.${exp}.forged-signature`, "1"]) {
       await ctx.addCookies([{ name: "ping-reset", value, url: `${BASE}/reset-password` }]);
       await page.goto(`${BASE}/reset-password`);
       await page.getByTestId("reset-expired").waitFor();
       assert.equal(await page.getByLabel("New password").count(), 0);
     }
     await ctx.close();
+  });
+
+  await check("a reset pass only works for the session that used the reset link (final check F1)", async () => {
+    const request = async (ctx) => {
+      const page = await ctx.newPage();
+      await page.goto(`${BASE}/forgot-password`);
+      await page.getByLabel("Email").fill(nia.email);
+      await page.getByRole("button", { name: "Send me a reset link" }).click();
+      await page.getByTestId("reset-sent").waitFor();
+      await openLink(page, await mailFor(nia.email, "recovery"));
+      await page.waitForURL(`${BASE}/reset-password`);
+      await page.getByLabel("New password").waitFor(); // a genuine reset opens the form
+      return page;
+    };
+    const a = await browser.newContext();
+    const b = await browser.newContext();
+    const pageA = await request(a);
+    const pageB = await request(b);
+    const passA = (await a.cookies()).find((k) => k.name === "ping-reset");
+    assert.ok(passA?.httpOnly, "the reset pass is httpOnly");
+    // B's session, with A's (genuinely signed) pass: refused.
+    await b.addCookies([{ name: "ping-reset", value: passA.value, url: `${BASE}/reset-password` }]);
+    await pageB.reload();
+    await pageB.getByTestId("reset-expired").waitFor();
+    // A still works; signing out clears its pass.
+    await pageA.reload();
+    await pageA.getByLabel("New password").waitFor();
+    await pageA.request.post(`${BASE}/logout`, { maxRedirects: 0 });
+    assert.ok(!(await a.cookies()).some((k) => k.name === "ping-reset"), "signing out clears the reset pass");
+    await a.close();
+    await b.close();
   });
 
   if (shots) await check("screenshots for the review", async () => {

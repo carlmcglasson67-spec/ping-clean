@@ -74,6 +74,8 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
       data: {
         full_name: parsed.data.fullName,
         ...(phone ? { phone } : {}),
+        // Where to go after confirming (checked again by safeNext then). Cleared on confirm.
+        ...(next ? { next } : {}),
         terms_version: TERMS_VERSION,
         privacy_version: PRIVACY_VERSION,
         consented_at: new Date().toISOString(),
@@ -100,8 +102,8 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
     // Same as after confirming: the phone moves to the profile and leaves the metadata (N3).
     if (phone) {
       await supabase.from("profiles").update({ phone }).eq("id", data.user.id);
-      await supabase.auth.updateUser({ data: { phone: null } });
     }
+    if (phone || next) await supabase.auth.updateUser({ data: { phone: null, next: null } });
     redirect(postLoginPath("customer", next));
   }
   return { sent: { email: parsed.data.email } };

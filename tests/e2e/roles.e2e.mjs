@@ -20,6 +20,7 @@ const env = {
   NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
   NEXT_PUBLIC_SUPABASE_ANON_KEY: "e2e-anon-key-not-a-real-key-000000",
   NEXT_PUBLIC_SITE_URL: BASE,
+  RESET_PASS_SECRET: "e2e-reset-pass-secret-not-a-real-one-0000",
   PING_DIST_DIR: ".next-e2e",
 };
 

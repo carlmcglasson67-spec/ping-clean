@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { siteUrl } from "@/lib/auth/links";
+import { RESET_COOKIE, RESET_COOKIE_OPTIONS } from "@/lib/auth/recovery";
 import { createClient } from "@/lib/db/server";
 import { hasSupabaseEnv } from "@/lib/env";
 
@@ -9,5 +10,7 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     await supabase.auth.signOut();
   }
-  return NextResponse.redirect(siteUrl("/login", request), { status: 303 });
+  const res = NextResponse.redirect(siteUrl("/login", request), { status: 303 });
+  res.cookies.delete({ name: RESET_COOKIE, path: RESET_COOKIE_OPTIONS.path }); // a reset pass never outlives the session
+  return res;
 }

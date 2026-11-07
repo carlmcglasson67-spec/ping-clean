@@ -12,8 +12,10 @@ export type Session = {
   email: string | null;
   role: Role;
   fullName: string | null;
-  /** How this session was signed in (password, recovery, …), from the signed token. */
+  /** How this session was signed in (password, otp, …), from the signed token. */
   amr: AmrEntry[];
+  /** The Supabase session this token belongs to (the reset pass is tied to it). */
+  sessionId: string | null;
 };
 
 /**
@@ -36,7 +38,8 @@ export const getSession = cache(async (): Promise<Session | null> => {
     .maybeSingle();
   if (!profile) return null;
 
-  return { userId: sub, email: profile.email, role: profile.role, fullName: profile.full_name, amr: amrEntries(data.claims.amr) };
+  return { userId: sub, email: profile.email, role: profile.role, fullName: profile.full_name, amr: amrEntries(data.claims.amr),
+    sessionId: typeof data.claims.session_id === "string" ? data.claims.session_id : null };
 });
 
 /**
