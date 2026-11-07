@@ -543,6 +543,7 @@ export type Database = {
           rebook_of: string | null;
           first_refusal_cleaner_id: string | null;
           cut_short_cleans: number;
+          end_reason: string | null;
         };
         Insert: {
           id?: string;
@@ -570,6 +571,7 @@ export type Database = {
           rebook_of?: string | null;
           first_refusal_cleaner_id?: string | null;
           cut_short_cleans?: number;
+          end_reason?: string | null;
         };
         Update: {
           id?: string;
@@ -597,6 +599,7 @@ export type Database = {
           rebook_of?: string | null;
           first_refusal_cleaner_id?: string | null;
           cut_short_cleans?: number;
+          end_reason?: string | null;
         };
         Relationships: [];
       };
@@ -862,6 +865,10 @@ export type Database = {
           p_request_id: string;
         };
         Returns: string;
+      };
+      admin_end_block: {
+        Args: { p_series: string; p_reason: string };
+        Returns: undefined;
       };
       start_visit: {
         Args: { p_visit: string };

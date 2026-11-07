@@ -835,9 +835,136 @@ describe("final review: a held block's dates are real, and only an explicit cut 
       await q.rows(`reset role`);
       await q.rows(`select * from private.release_offers()`);
       await q.rows(`select * from private.release_offers()`);
-      return { board, claim, assign, alerts: await q.count(`public.engine_alerts where kind = 'block_overlap' and series_id = '${IDS.benSeries}'`) };
+      return {
+        board, claim, assign,
+        alerts: await q.count(`public.engine_alerts where kind = 'block_closed' and series_id = '${IDS.benSeries}'`),
+        status: (await q.rows<{ status: string }>(`select status from public.series where id = $1`, [IDS.benSeries]))[0]!.status,
+      };
     });
-    expect(r).toEqual({ board: [], claim: "PC004", assign: "PC004", alerts: 1 });
+    // Release closes it (final review): it would never be taken, so it mustn't sit on the board.
+    expect(r).toEqual({ board: [], claim: "PC004", assign: "PC004", alerts: 1, status: "ended" });
+  });
+
+  it("f1: a block reopened with no cleans left closes on the next release, and the customer can book that home again", async () => {
+    const r = await as("superuser", async (q) => {
+      // Anna's block of 2: last week's clean done, today's still booked; Tara drops out today.
+      await q.rows(`update public.series set block_size = 2 where id = $1`, [IDS.annaSeries]);
+      await q.rows(`delete from public.visits where id = $1`, [IDS.visitNextWeek]);
+      await q.rows(`select private.reopen_series($1)`, [IDS.annaSeries]);
+      // Nobody covers it; today's clean is missed (no-show tomorrow morning).
+      await q.rows(`update public.visits set status = 'no_show' where id = $1`, [IDS.visitToday]);
+      await q.rows(`update public.series set offering_since = now() - interval '3 hours' where id = $1`, [IDS.annaSeries]);
+      await q.rows(`select * from private.release_offers()`);
+      const [s] = await q.rows(`select status, end_reason is not null as has_reason from public.series where id = $1`, [IDS.annaSeries]);
+      const alerts = await q.rows<{ message: string }>(`select message from public.engine_alerts where kind = 'block_closed'`);
+      const offers = await q.count(`public.job_offers where series_id = '${IDS.annaSeries}' and status = 'open'`);
+      await q.actAs(U.anna);
+      const rebook = await q.attempt(BOOK, booking({ property: IDS.annaProperty, frequency: "weekly", day: 1, from: "09:00", to: "12:00", minutes: 150, startsIn: 3 }));
+      return { s, alerts, offers, rebook };
+    });
+    expect(r.s).toEqual({ status: "ended", has_reason: true });
+    expect(r.alerts).toHaveLength(1);
+    expect(r.alerts[0]!.message).toMatch(/no cleans left to give, so it has been closed\. 1 of its 2 cleans happened\./);
+    expect(r.offers).toBe(0);
+    expect(r.rebook).toBe("ok");
+  });
+
+  it("f4: the job board shows the block's real end if taken now, which is what claiming produces", async () => {
+    const r = await as("superuser", async (q) => {
+      // Ben's 4 fortnightly cleans were planned from next week; nobody took them for three weeks.
+      const planned = (await q.rows<{ e: string }>(`select ends_on::text as e from public.series where id = $1`, [IDS.benSeries]))[0]!.e;
+      await fakeToday(q, `(now() at time zone 'Europe/London')::date + 21`);
+      await q.actAs(U.tara);
+      const [board] = await q.rows<{ ends_on: string; block_size: number }>(`select ends_on::text, block_size from public.job_board() where series_id = $1`, [IDS.benSeries]);
+      await q.rows(`select public.claim_series($1)`, [(await q.rows<{ offer_id: string }>(`select offer_id from public.job_board()`))[0]!.offer_id]);
+      await q.rows(`reset role`);
+      const after = (await q.rows<{ e: string; last: string }>(
+        `select ends_on::text as e, (select max(scheduled_date)::text from public.visits where series_id = $1) as last from public.series where id = $1`, [IDS.benSeries]))[0]!;
+      return { planned, board, after };
+    });
+    expect(r.board!.block_size).toBe(4);
+    expect(r.board!.ends_on > r.planned).toBe(true); // slipped, not the stale planned date
+    expect(r.board!.ends_on).toBe(r.after.e);
+    expect(r.after.e).toBe(r.after.last);
+  });
+
+  it("note 3: when the block in the way goes, the shortfall alert closes and the cleans are booked again", async () => {
+    const r = await as("superuser", async (q) => {
+      await q.actAs(U.admin);
+      await q.rows(`select public.admin_assign_series($1, $2)`, [IDS.benSeries, U.tara]);
+      await q.rows(`select public.admin_reopen_series($1)`, [IDS.benSeries]);
+      await q.rows(`reset role`);
+      // Block B at Ben's home starts the day after A's 2nd clean would be: A loses its last two.
+      const bId = (await q.rows<{ id: string }>(`insert into public.series (property_id, customer_id, cleaner_id, frequency, preferred_day, window_start, window_end,
+                      duration_minutes, price_per_hour_pence, commission_type, commission_value, status, starts_on, claimed_at, offering_since, block_size)
+                    select $1, $2, $3, 'weekly', extract(isodow from d)::smallint, '10:00', '14:00', 120, 2000, 'percent', 2500, 'claimed', d, now(), null, 1
+                    from (select private.block_first_date(starts_on, preferred_day) + 15 as d from public.series where id = $4) x
+                    returning id`, [IDS.benProperty, U.ben, U.alex, IDS.benSeries]))[0]!.id;
+      await q.actAs(U.admin);
+      await q.rows(`select public.admin_assign_series($1, $2)`, [IDS.benSeries, U.tara]);
+      await q.rows(`reset role`);
+      const cut = (await q.rows<{ c: number }>(`select cut_short_cleans as c from public.series where id = $1`, [IDS.benSeries]))[0]!.c;
+      await q.rows(`update public.series set status = 'ended' where id = $1`, [bId]);
+      await q.rows(`select private.generate_visits_for_series($1, null)`, [IDS.benSeries]);
+      const after = (await q.rows(`select cut_short_cleans as c, (select count(*)::int from public.visits where series_id = $1) as n from public.series where id = $1`, [IDS.benSeries]))[0];
+      const alert = (await q.rows(`select resolved_at is not null as resolved, message from public.engine_alerts where kind = 'block_overlap'`))[0];
+      return { cut, after, alert };
+    });
+    expect(r.cut).toBe(2);
+    expect(r.after).toEqual({ c: 0, n: 4 });
+    expect(r.alert).toMatchObject({ resolved: true, message: expect.stringMatching(/No longer short/) });
+  });
+
+  it("note 4: a stalled block doesn't quietly restart when its cleaner comes back", async () => {
+    const r = await as("superuser", async (q) => {
+      await q.rows(`update public.cleaners set status = 'suspended' where id = $1`, [U.tara]);
+      await fakeToday(q, `(select ends_on + 1 from public.series where id = '${IDS.annaSeries}')`);
+      await q.rows(`select private.generate_visits()`);
+      await q.rows(`update public.cleaners set status = 'active' where id = $1`, [U.tara]);
+      await q.rows(`select private.generate_visits()`);
+      return {
+        visits: await q.count(`public.visits where series_id = '${IDS.annaSeries}'`),
+        status: (await q.rows<{ status: string }>(`select status from public.series where id = $1`, [IDS.annaSeries]))[0]!.status,
+        message: (await q.rows<{ message: string }>(`select message from public.engine_alerts where kind = 'block_stalled'`))[0]!.message,
+      };
+    });
+    expect(r).toMatchObject({ visits: 3, status: "claimed" });
+    expect(r.message).toMatch(/won't restart on its own.*end it in the admin console/);
+  });
+});
+
+describe("final review: admin_end_block", () => {
+  const END = `select public.admin_end_block($1, $2)`;
+
+  it("is admin-only and needs a real reason", async () => {
+    for (const who of ["anna", "tara", "alex", "sam", "anon"] as const) {
+      expect({ who, code: await as(who, (q) => q.attempt(END, [IDS.annaSeries, "Customer moving house"])) }).toEqual({ who, code: DENIED });
+    }
+    for (const reason of [null, "", "   ", " ", "..", "x".repeat(301)]) {
+      expect({ reason, code: await as("admin", (q) => q.attempt(END, [IDS.annaSeries, reason])) }).toEqual({ reason, code: "22023" });
+    }
+  });
+
+  it("ends the block with the reason, removes cleans still to come, settles its alerts, audits it, and locks the address", async () => {
+    const r = await setupThen(async (su) => {
+      await su.rows(`insert into public.engine_alerts (kind, series_id, message) values ('block_stalled', $1, 'x')`, [IDS.annaSeries]);
+    }, U.admin, async (q) => {
+      await q.rows(END, [IDS.annaSeries, "Customer moving house"]);
+      const [s] = await q.rows(`select status, end_reason from public.series where id = $1`, [IDS.annaSeries]);
+      const visits = await q.rows<{ id: string }>(`select id from public.visits where series_id = $1 order by scheduled_date`, [IDS.annaSeries]);
+      const [alert] = await q.rows(`select resolved_by from public.engine_alerts where series_id = $1`, [IDS.annaSeries]);
+      const [audit] = await q.rows<{ actor_id: string; detail: { status: unknown } }>(
+        `select actor_id, detail from public.audit_log where entity = 'series' and entity_id = $1 order by id desc limit 1`, [IDS.annaSeries]);
+      const again = await q.attempt(END, [IDS.annaSeries, "Customer moving house"]);
+      await q.actAs(U.tara);
+      return { s, visits: visits.map((v) => v.id), alert, audit, again, taraSees: await q.count("public.properties") };
+    });
+    expect(r.s).toEqual({ status: "ended", end_reason: "Customer moving house" });
+    expect(r.visits).toEqual([IDS.visitDone]); // today's and next week's booked cleans removed; history kept
+    expect(r.alert).toEqual({ resolved_by: U.admin });
+    expect(r.audit).toMatchObject({ actor_id: U.admin, detail: { status: { from: "claimed", to: "ended" } } });
+    expect(r.again).toBe("PC005");
+    expect(r.taraSees).toBe(0);
   });
 });
 

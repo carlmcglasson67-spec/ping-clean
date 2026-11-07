@@ -127,6 +127,10 @@ out += `${ind(2)}};
         };
         Returns: string;
       };
+      admin_end_block: {
+        Args: { p_series: string; p_reason: string };
+        Returns: undefined;
+      };
       start_visit: {
         Args: { p_visit: string };
         Returns: undefined;
