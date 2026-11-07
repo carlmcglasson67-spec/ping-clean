@@ -51,6 +51,7 @@ const PAIRS: Array<[string, string, number]> = [
   ["ok", "ok-soft", BODY],
   ["warn", "warn-soft", BODY],
   ["bad", "bad-soft", BODY],
+  ...["ok-on-navy", "warn-on-navy", "bad-on-navy"].flatMap((t) => ["navy-950", "navy-900", "navy-800"].map((bg): [string, string, number] => [t, bg, BODY])),
   // Old names, as the tracks' pages use them (bg-ink text-paper, bg-signal text-ink, text-signal-ink on paper)
   ["paper", "ink", BODY],
   ["ink", "signal", BODY],

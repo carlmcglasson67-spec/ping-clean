@@ -52,6 +52,9 @@
   --color-warn-soft: #fbeccb;
   --color-bad: #b3261e;
   --color-bad-soft: #f8dcd8;
+  --color-ok-on-navy: #5bd69a;  /* status text on navy surfaces */
+  --color-warn-on-navy: #f5b950;
+  --color-bad-on-navy: #ff8a80;
 
   /*
     ---- Earlier token names, kept as aliases so pages written before the brand still work.
