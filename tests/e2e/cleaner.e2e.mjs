@@ -12,6 +12,21 @@ const TARA_DBS = "00000000-0000-4000-d000-000000000001";
 // The smallest valid JPEG header is enough: the bucket, not the app, would judge content.
 const JPEG = Buffer.from("ffd8ffe000104a46494600010100000100010000ffd9", "hex");
 
+const TARA = "00000000-0000-4000-a000-000000000004";
+const ALEX = "00000000-0000-4000-a000-000000000005";
+const BEN_SERIES = "00000000-0000-4000-c000-000000000002";
+
+/** Test set-up and checks straight against the database, as its owner. */
+async function sql(text, params = []) {
+  const db = new pg.Client({ connectionString: process.env.PING_TEST_DATABASE_URL });
+  await db.connect();
+  try {
+    return (await db.query(text, params)).rows;
+  } finally {
+    await db.end();
+  }
+}
+
 async function createCasey() {
   const db = new pg.Client({ connectionString: process.env.PING_TEST_DATABASE_URL });
   await db.connect();
@@ -169,6 +184,76 @@ export async function cleanerFlows({ browser, BASE, check, signIn, SHOTS }) {
     await page.goto(`${BASE}/work/areas`);
     await page.screenshot({ path: `${SHOTS}/work-areas-1440.png`, fullPage: true });
     await ctx.close();
+  }
+
+  console.log("e2e: job board and claiming (Track B)");
+  {
+    // Ben's fortnightly Wednesday clean in Whitehaven CA28 is on offer to Tara (Top).
+    // Give Alex an offer too, so two cleaners race for it.
+    await sql(
+      `insert into public.job_offers (series_id, cleaner_id, tier, round, opens_at, status)
+       values ($1, $2, 'approved', 1, now() - interval '1 minute', 'open') on conflict do nothing`,
+      [BEN_SERIES, ALEX],
+    );
+    const tara = await (await browser.newContext(PHONE)).newPage();
+    const alex = await (await browser.newContext(PHONE)).newPage();
+    await signIn(tara, "tara.cleaner");
+    await signIn(alex, "alex.cleaner");
+    await tara.waitForURL(`${BASE}/work`);
+    await alex.waitForURL(`${BASE}/work`);
+
+    await check("home counts the open jobs and leads to the board", async () => {
+      await tara.getByRole("link", { name: "See the jobs" }).click();
+      await tara.waitForURL(`${BASE}/work/jobs`);
+    });
+
+    await check("the board shows town, district, size, pets, day, time, hours and earnings only", async () => {
+      const card = tara.getByRole("article").filter({ hasText: "Whitehaven" });
+      await card.waitFor();
+      const text = await card.innerText();
+      for (const s of ["Whitehaven", "CA28", "2 bed", "1 bath", "No pets", "Every other Wednesday", "10am–2pm", "2 hours", "£30.00"]) {
+        assert.ok(text.includes(s), `expected "${s}" on the card`);
+      }
+      const page = await tara.content(); // the whole document, RSC payload included
+      for (const secret of ["8 Sample Road", "CA28 9ZZ", "Ring the bell", "Sample"]) {
+        assert.ok(!page.includes(secret), `must not reach the browser before claim: "${secret}"`);
+      }
+      await tara.screenshot({ path: `${SHOTS}/work-jobs-390.png`, fullPage: true });
+    });
+
+    await check("first tap claims the whole regular clean", async () => {
+      await alex.goto(`${BASE}/work/jobs`);
+      await alex.getByRole("button", { name: "Claim this regular clean" }).waitFor();
+      await tara.getByRole("button", { name: "Claim this regular clean" }).click();
+      await tara.getByText(/It.s yours\. Every other Wednesday/).waitFor({ timeout: 15_000 });
+      await tara.screenshot({ path: `${SHOTS}/work-jobs-claimed-390.png`, fullPage: true });
+      const [s] = await sql(`select status, cleaner_id from public.series where id = $1`, [BEN_SERIES]);
+      assert.deepEqual({ ...s }, { status: "claimed", cleaner_id: TARA });
+    });
+
+    await check("the second cleaner is told kindly that someone got there first", async () => {
+      await alex.getByRole("button", { name: "Claim this regular clean" }).click();
+      await alex.getByText("Another cleaner claimed this one first").waitFor({ timeout: 15_000 });
+      assert.ok(!/went wrong|PC00\d|error/i.test(await alex.locator("main").innerText()), "no raw error");
+      await alex.screenshot({ path: `${SHOTS}/work-jobs-taken-390.png`, fullPage: true });
+      await alex.getByRole("button", { name: "Clear it from my list" }).click();
+      await alex.getByText("No new jobs right now").waitFor();
+      await alex.screenshot({ path: `${SHOTS}/work-jobs-empty-390.png`, fullPage: true });
+    });
+
+    await check("an applicant gets a designed state, not the board", async () => {
+      const sam = await (await browser.newContext(PHONE)).newPage();
+      await signIn(sam, "sam.applicant");
+      await sam.waitForURL(`${BASE}/work`);
+      await sam.goto(`${BASE}/work/jobs`);
+      await sam.getByText("Jobs appear once you're approved").waitFor();
+      await sam.context().close();
+    });
+
+    await tara.setViewportSize({ width: 1440, height: 900 });
+    await tara.screenshot({ path: `${SHOTS}/work-jobs-claimed-1440.png`, fullPage: true });
+    await tara.context().close();
+    await alex.context().close();
   }
 
   {
