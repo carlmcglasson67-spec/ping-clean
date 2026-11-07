@@ -11,6 +11,8 @@ const VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 type Env = Record<string, string | undefined>;
 
 let warned = false;
+let warnedHosts = false;
+let warnedOff = false;
 
 export function turnstileEnabled(env: Env = process.env, warn: (msg: string) => void = console.warn): boolean {
   const site = Boolean(env.NEXT_PUBLIC_TURNSTILE_SITE_KEY);
@@ -22,10 +24,14 @@ export function turnstileEnabled(env: Env = process.env, warn: (msg: string) => 
   return site && secret;
 }
 
-/** For tests: let the one-key warning fire again. */
+/** For tests: let the warnings fire again. */
 export function resetTurnstileWarning() {
   warned = false;
+  warnedHosts = false;
+  warnedOff = false;
 }
+
+const isProduction = (env: Env) => env.NODE_ENV === "production" && env.VERCEL_ENV !== "preview";
 
 /** The site key for the widget, or null when Turnstile is off (then render no widget). */
 export function turnstileSiteKey(env: Env = process.env): string | null {
@@ -63,8 +69,25 @@ export async function verifyTurnstile(
   token: string | null | undefined,
   { env = process.env, fetchImpl = fetch, timeoutMs = 5000 }: { env?: Env; fetchImpl?: typeof fetch; timeoutMs?: number } = {},
 ): Promise<TurnstileResult> {
-  if (!turnstileEnabled(env)) return "off";
+  if (!turnstileEnabled(env)) {
+    if (isProduction(env) && !warnedOff) {
+      warnedOff = true;
+      console.warn("Turnstile is OFF in production: register interest is protected only by the honeypot and the firewall rule.");
+    }
+    return "off";
+  }
+  // Switched on, so a token is required: a bot posting the Server Action straight to any
+  // route (Next forwards it) without solving the widget is refused here.
   if (!token || token.length > 2048) return "failed";
+  const allowed = turnstileHostnames(env);
+  if (allowed.size === 0 && isProduction(env)) {
+    // Fail closed: in production we must know which site a token may come from.
+    if (!warnedHosts) {
+      warnedHosts = true;
+      console.warn("Turnstile check refused: NEXT_PUBLIC_SITE_URL isn't set, so the allowed hostname is unknown.");
+    }
+    return "failed";
+  }
   try {
     const res = await fetchImpl(VERIFY_URL, {
       method: "POST",
@@ -76,7 +99,6 @@ export async function verifyTurnstile(
     if (!res.ok) return "unavailable";
     const data = (await res.json()) as { success?: unknown; hostname?: unknown };
     if (data.success !== true) return "failed";
-    const allowed = turnstileHostnames(env);
     if (allowed.size > 0 && !(typeof data.hostname === "string" && allowed.has(data.hostname))) return "failed";
     return "passed";
   } catch {

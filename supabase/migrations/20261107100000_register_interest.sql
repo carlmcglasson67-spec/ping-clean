@@ -14,6 +14,7 @@
 --   public.admin_mark_interest_notified(…) admin: "told" / "not told"              (audited)
 --   public.admin_delete_interest(…)        admin: delete on request                (audited)
 --   private.purge_interest()               cron, nightly: deletes rows past their date
+--   private.interest_suppressions          opted-out contacts, as hashes only (see below)
 --
 -- Nobody reads or writes the table directly, admins included: every way in is a function
 -- above, and every admin one leaves an audit line without contact details. Built for
@@ -115,6 +116,34 @@ create trigger interest_signups_audit after delete on public.interest_signups
   for each row when (coalesce(current_setting('app.actor', true), '') <> 'cron:purge-interest')
   execute function private.audit_row('email', 'phone', 'postcode');
 
+-- ---------------------------------------------------------------- suppression list
+-- Someone who unsubscribed must never be put back on the list, from any district, even
+-- after their row is purged. Before the purge deletes an unsubscribed row it adds a
+-- SHA-256 hash of the normalised contact here, and register_interest checks it.
+-- Deliberately minimal: one hash per contact, no postcode, no date, no kind, nothing
+-- readable. Entries never expire (they are what honours the opt-out). Nobody can read
+-- or write it except the functions in this migration.
+create table private.interest_suppressions (
+  contact_hash bytea primary key check (octet_length(contact_hash) = 32)
+);
+alter table private.interest_suppressions enable row level security;
+revoke all on private.interest_suppressions from public, anon, authenticated;
+
+-- "e:" or "p:" plus the normalised contact, hashed. The same person always hashes the same.
+create function private.contact_hash(p_email text, p_phone text) returns bytea
+language sql immutable set search_path = '' as $$
+  select sha256(convert_to(case when p_email is not null then 'e:' || p_email else 'p:' || p_phone end, 'UTF8'))
+$$;
+
+-- True when this contact opted out: an unsubscribed row in any district, or on the list.
+create function private.interest_opted_out(p_email text, p_phone text) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from private.interest_suppressions s where s.contact_hash = private.contact_hash(p_email, p_phone))
+      or exists (select 1 from public.interest_signups i
+                 where i.unsubscribed_at is not null
+                   and ((p_email is not null and i.email = p_email) or (p_phone is not null and i.phone = p_phone)))
+$$;
+
 -- One audit line for an admin read or export: who, what, how many. Never the contacts.
 create function private.audit_interest(p_action text, p_detail jsonb) returns void
 language sql volatile security definer set search_path = '' as $$
@@ -126,9 +155,9 @@ $$;
 -- The only way to add to the list, and only the server can call it (service role): the
 -- Server Action runs the honeypot and Turnstile first, and supplies the source and
 -- consent version itself. Kind is always 'customer' for now.
--- Always returns 'thanks', whether the person is new, already on the list, unsubscribed,
--- or didn't tick the box (then nothing is stored), so it can't be used to find out who
--- has registered. Error codes, for input the person can fix:
+-- Always returns 'thanks', whether the person is new, already on the list, opted out
+-- (from any district, ever), or didn't tick the box (then nothing is stored), so it can't
+-- be used to find out who has registered. Error codes, for input the person can fix:
 --   PC030 postcode not valid · PC031 email or mobile not valid (or both / neither given)
 --   PC032 registering interest isn't open (retention not set) · PC033 bad source/version
 create function public.register_interest(
@@ -173,8 +202,13 @@ begin
     return 'thanks';
   end if;
 
-  -- Registering again renews consent and the retention clock. It never re-subscribes
-  -- someone who opted out (anyone could type their address), and never clears "told",
+  -- Someone who opted out stays out, whatever district is typed in: anyone could type
+  -- their address. Nothing is stored or changed.
+  if private.interest_opted_out(v_email, v_phone) then
+    return 'thanks';
+  end if;
+
+  -- Registering again renews consent and the retention clock. It never clears "told",
   -- so nobody can make Ping message a person twice.
   if v_email is not null then
     insert into public.interest_signups as i (postcode, email, consent_text_version, source, delete_after)
@@ -277,10 +311,13 @@ declare
   v_rows integer;
 begin
   perform private.require_admin();
+  if p_notified is null then
+    raise exception 'Say told (true) or not told (false)' using errcode = '22004';
+  end if;
   update public.interest_signups
      set notified_at = case when p_notified then now() end
    where id = any (p_ids)
-     and (notified_at is null) = coalesce(p_notified, true);
+     and (notified_at is null) = p_notified;
   get diagnostics v_rows = row_count;
   return v_rows;
 end $$;
@@ -310,11 +347,20 @@ declare
 begin
   select interest_retention_months into v_months from public.settings where id;
   perform set_config('app.actor', 'cron:purge-interest', true);
-  delete from public.interest_signups
-  where delete_after <= now()
-     or (v_months is not null and registered_at + make_interval(months => v_months) <= now())
-     or unsubscribed_at <= now() - interval '30 days';
-  get diagnostics v_rows = row_count;
+  -- Opted-out contacts go on the suppression list before their rows go, so they can never
+  -- be re-enrolled.
+  with gone as (
+    delete from public.interest_signups
+    where delete_after <= now()
+       or (v_months is not null and registered_at + make_interval(months => v_months) <= now())
+       or unsubscribed_at <= now() - interval '30 days'
+    returning email, phone, unsubscribed_at
+  ), suppressed as (
+    insert into private.interest_suppressions (contact_hash)
+    select distinct private.contact_hash(email, phone) from gone where unsubscribed_at is not null
+    on conflict do nothing
+  )
+  select count(*) into v_rows from gone;
   perform set_config('app.actor', coalesce(v_actor, ''), true);
   if v_rows > 0 then
     insert into public.audit_log (actor_label, action, entity, detail)
@@ -326,7 +372,8 @@ end $$;
 -- ---------------------------------------------------------------- grants
 revoke all on function private.uk_postcode_areas(), private.normalise_postcode(text),
   private.normalise_uk_mobile(text), private.normalise_email(text), private.mask_contact(text, text),
-  private.audit_interest(text, jsonb), private.require_admin(), private.purge_interest()
+  private.audit_interest(text, jsonb), private.require_admin(), private.purge_interest(),
+  private.contact_hash(text, text), private.interest_opted_out(text, text)
   from public, anon, authenticated;
 revoke all on function public.register_interest(text, text, text, boolean, text, text),
   public.interest_retention_months(), public.admin_interest_counts(), public.admin_list_interest(text),

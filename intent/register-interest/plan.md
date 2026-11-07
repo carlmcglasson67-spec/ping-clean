@@ -40,8 +40,15 @@ No account, no password, no price. Regular domestic cleans only, as everywhere o
 Exactly one of email or phone (check). Postcodes must use a real UK postcode area; emails
 must be plain printable ASCII. Unique per `(kind, email, district)` and
 `(kind, phone, district)`: registering again for the same area updates the row (fresh
-consent and a fresh retention date) instead of adding one. It never clears "told", and an
-unsubscribed contact stays unsubscribed: the reply is still "thanks" and nothing changes.
+consent and a fresh retention date) instead of adding one. It never clears "told".
+
+**Opted out means out, everywhere, for good.** If the email or mobile has unsubscribed in
+any district, or is on the suppression list, the reply is "thanks" and nothing is stored.
+The suppression list (`private.interest_suppressions`, part of this signed-off feature) holds
+only a SHA-256 hash of each opted-out contact: no postcode, no date, nothing readable, no
+direct access. The purge adds the hash before deleting an unsubscribed row. Entries never
+expire. (For Kate: an unsalted hash of an email is still pseudonymous personal data, kept
+only to honour the opt-out.)
 
 ## Access
 - RLS on, in the same migration, with **no table grants at all**: nobody (admins included)
@@ -92,8 +99,12 @@ Plus a link to the privacy notice. The tick box, unticked by default and require
   `TURNSTILE_SECRET_KEY` are both set (a warning is logged if only one is). Checked in the
   Server Action before the database, including that the token was solved on Ping's own
   hostname. No IP address is sent to Cloudflare or stored.
-- **Rate limit: a Vercel firewall rule**, not stored IPs. Recommended: at most 5 POSTs per
-  IP per 10 minutes to the pages with the form.
+- **Rate limit: a Vercel firewall rule**, not stored IPs, on **every POST with a
+  `Next-Action` header, site-wide** (Next.js runs a Server Action posted to any route, so a
+  rule on the form's pages alone can be sidestepped). Recommended: 10 per IP per 10 minutes.
+- With Turnstile on, a POST without a token is refused before the database; in production
+  Turnstile fails closed if the site's hostname isn't configured, and logs a warning if
+  it's switched off.
 - Same reply every time; no free text or links accepted; only Ping's own message is ever sent.
 
 ## Tests

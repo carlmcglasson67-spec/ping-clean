@@ -98,6 +98,41 @@ describe("CSV export (review 6)", () => {
     expect(csv).toBe(`postcode,postcode_district,email,phone,registered_at,notified_at\r\n` +
       `"CA25 5AB","CA25","'=cmd|' /C calc'!A0@x.com","","2026-11-07T10:00:00Z",""\r\n`);
   });
+
+  it("writes mobiles as 447… (no plus, no apostrophe), ready for bulk-SMS import (final check note 2)", () => {
+    const csv = interestCsv([{ postcode: "CA26 1AA", postcode_district: "CA26", email: null, phone: "+447700900321",
+      registered_at: "2026-11-07T10:00:00Z", notified_at: null }]);
+    expect(csv.split("\r\n")[1]).toBe(`"CA26 1AA","CA26","","447700900321","2026-11-07T10:00:00Z",""`);
+  });
+});
+
+describe("Turnstile in production (final check B and note 3)", () => {
+  const prod = { NODE_ENV: "production", NEXT_PUBLIC_TURNSTILE_SITE_KEY: "s", TURNSTILE_SECRET_KEY: "k" };
+  const ok = vi.fn(async () => ({ ok: true, json: async () => ({ success: true, hostname: "pingclean.co.uk" }) }) as Response);
+
+  it("fails closed, with a warning and no personal data, when the allowed hostname is unknown", async () => {
+    resetTurnstileWarning();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await verifyTurnstile("tok", { env: prod, fetchImpl: ok })).toBe("failed");
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/NEXT_PUBLIC_SITE_URL isn't set/));
+    expect(await verifyTurnstile("tok", { env: { ...prod, NEXT_PUBLIC_SITE_URL: "https://pingclean.co.uk" }, fetchImpl: ok })).toBe("passed");
+    warn.mockRestore();
+  });
+
+  it("refuses a post without a token whenever Turnstile is on (a bot posting the action to another route)", async () => {
+    const f = vi.fn();
+    expect(await verifyTurnstile(undefined, { env: { ...prod, NEXT_PUBLIC_SITE_URL: "https://pingclean.co.uk" }, fetchImpl: f as unknown as typeof fetch })).toBe("failed");
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("warns once when Turnstile is off in production", async () => {
+    resetTurnstileWarning();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await verifyTurnstile("tok", { env: { NODE_ENV: "production" } });
+    await verifyTurnstile("tok", { env: { NODE_ENV: "production" } });
+    expect(warn.mock.calls.filter((c) => /Turnstile is OFF in production/.test(String(c[0])))).toHaveLength(1);
+    warn.mockRestore();
+  });
 });
 
 describe("Turnstile, optional", () => {

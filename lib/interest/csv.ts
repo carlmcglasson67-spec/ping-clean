@@ -1,7 +1,8 @@
 // The admin "Export CSV" (Track C's console calls this with admin_export_interest's rows).
 // Anyone can type into the form, so every cell is treated as hostile: a value starting
 // with = + - @ (or a tab or carriage return) would run as a formula in Excel or Sheets.
-// Those get a leading apostrophe, and every cell is quoted.
+// Those get a leading apostrophe, and every cell is quoted. Mobiles are written as
+// 447700900321 (no plus), the shape bulk-SMS tools import, so they need no apostrophe.
 
 export type InterestExportRow = {
   postcode: string;
@@ -21,8 +22,14 @@ export function csvCell(value: string | null | undefined): string {
   return `"${v.replace(/"/g, '""')}"`;
 }
 
+/** "+447700900321" → "447700900321". */
+export function exportPhone(phone: string | null): string | null {
+  return phone?.replace(/^\+/, "") ?? null;
+}
+
 /** The whole file, with a header row. CRLF line endings, as spreadsheets expect. */
 export function interestCsv(rows: readonly InterestExportRow[]): string {
-  const lines = [COLUMNS.join(","), ...rows.map((r) => COLUMNS.map((c) => csvCell(r[c])).join(","))];
+  const cells = (r: InterestExportRow) => COLUMNS.map((c) => csvCell(c === "phone" ? exportPhone(r.phone) : r[c]));
+  const lines = [COLUMNS.join(","), ...rows.map((r) => cells(r).join(","))];
   return `${lines.join("\r\n")}\r\n`;
 }
