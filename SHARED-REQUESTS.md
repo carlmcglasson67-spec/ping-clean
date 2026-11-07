@@ -83,6 +83,8 @@ Rules inside, all from `public.settings` (never from the browser):
    service-role client. The webhook is the source of truth, never the browser's redirect.
 4. Env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
    (all `_test_`), added to `.env.example` and `lib/env.ts`.
+5. Where a customer's Stripe customer id lives across series is the main session's call: today
+   `series_billing` holds it per series, so a second booking would create a second Stripe customer.
 
 **Why.** ping-money-rules 4, 6, 7 and 8: card saved at booking with a SetupIntent, idempotent,
 webhook-verified, test mode only. All of it is shared code or outside Track A's folders.
