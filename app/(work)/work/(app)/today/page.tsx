@@ -10,6 +10,7 @@ import type { Enums, Tables } from "@/lib/db/types";
 import { VISIT_STATUS } from "@/lib/labels";
 import { formatDuration, formatPence } from "@/lib/money";
 import { directionsUrl } from "../../_lib/directions";
+import { StartButton } from "../visit/[id]/start-button";
 import { KeyCode } from "./key-code";
 
 export const metadata: Metadata = { title: "Today" };
@@ -147,6 +148,11 @@ function TodayJob({ n, job }: { n: number; job: Job }) {
         <div className="grid gap-1 px-6 py-6 sm:px-8 sm:py-8">
           <h2 id={`visit-${job.id}`} className="text-xl font-semibold">{p.address_line1}, {p.town}</h2>
           <p className="text-ink-2">{job.status === "completed" ? "All done. Thank you." : "Not going ahead today. Nothing to do."}</p>
+          {job.status === "completed" ? (
+            <Link href={`/work/visit/${job.id}`} className="mt-2 inline-flex min-h-12 items-center font-semibold text-ink underline decoration-line decoration-2 underline-offset-4">
+              See what you sent
+            </Link>
+          ) : null}
         </div>
       ) : (
         <>
@@ -169,6 +175,13 @@ function TodayJob({ n, job }: { n: number; job: Job }) {
               </svg>
               <span>Directions</span>
             </a>
+            {job.status === "scheduled" ? (
+              <StartButton visitId={job.id} goTo={`/work/visit/${job.id}`} />
+            ) : (
+              <Link href={`/work/visit/${job.id}`} className={buttonClass("ink", "xl", "w-full")}>
+                Carry on: checklist and photos
+              </Link>
+            )}
           </div>
 
           <dl className="grid gap-5 border-t border-line/70 bg-paper-2/40 px-6 py-6 sm:px-8">

@@ -16,6 +16,9 @@ const TARA = "00000000-0000-4000-a000-000000000004";
 const ALEX = "00000000-0000-4000-a000-000000000005";
 const BEN_SERIES = "00000000-0000-4000-c000-000000000002";
 const ANNA_SERIES = "00000000-0000-4000-c000-000000000001";
+const ANNA_TODAY = "00000000-0000-4000-e000-000000000002";
+// A real 1x1 PNG, so the phone-side shrink (createImageBitmap → JPEG) has something to decode.
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
 /** Test set-up and checks straight against the database, as its owner. */
 async function sql(text, params = []) {
@@ -316,6 +319,136 @@ export async function cleanerFlows({ browser, BASE, check, signIn, SHOTS }) {
       await alex.context().close();
     });
 
+    await tara.context().close();
+  }
+
+  console.log("e2e: the visit day (Track B)");
+  {
+    // Today's clean at Anna's: start it, tick and explain the checklist (with the signal
+    // dropping), add before and after photos, and complete it.
+    const ctx = await browser.newContext(PHONE);
+    const tara = await ctx.newPage();
+    await signIn(tara, "tara.cleaner");
+    await tara.waitForURL(`${BASE}/work`);
+    const rows = () => tara.locator("[data-item] button[aria-pressed]");
+
+    await check("one tap starts today's clean and opens its checklist", async () => {
+      await tara.goto(`${BASE}/work/today`);
+      await tara.getByRole("button", { name: "Start the clean" }).click();
+      await tara.waitForURL(`${BASE}/work/visit/${ANNA_TODAY}`, { timeout: 15_000 });
+      await tara.getByRole("heading", { name: "Checklist" }).waitFor();
+      const text = await tara.locator("main").innerText();
+      assert.match(text, /clean 2 of 8/i, "block progress");
+      assert.equal(await rows().count(), 11);
+      const [v] = await sql(`select status from public.visits where id = $1`, [ANNA_TODAY]);
+      assert.equal(v.status, "in_progress");
+    });
+
+    await check("a tick saves, and a couldn't-do needs a real reason", async () => {
+      await rows().nth(0).click();
+      await rows().nth(1).click();
+      const third = tara.locator("[data-item]").nth(2);
+      await third.getByRole("button", { name: "Couldn’t do" }).click();
+      await third.getByRole("textbox").fill("...");
+      assert.ok(await third.getByRole("button", { name: "Save reason" }).isDisabled(), "punctuation isn't a reason");
+      await third.getByRole("textbox").fill("No access to the back bedroom");
+      await third.getByRole("button", { name: "Save reason" }).click();
+      await tara.getByText("Everything’s saved.").waitFor({ timeout: 15_000 });
+      const got = await sql(`select done, skipped_reason from public.checklist_items where visit_id = $1 order by position limit 3`, [ANNA_TODAY]);
+      assert.deepEqual(got.map((r) => [r.done, r.skipped_reason]), [[true, null], [true, null], [false, "No access to the back bedroom"]]);
+    });
+
+    await check("ticks made with no signal are kept, even if the page closes, and sent later", async () => {
+      await ctx.setOffline(true);
+      await rows().nth(3).click();
+      await rows().nth(4).click();
+      await tara.getByText(/Sending 2 ticks/).waitFor();
+      await tara.screenshot({ path: `${SHOTS}/work-visit-offline-390.png`, fullPage: true });
+      await tara.close(); // the phone kills the page while it's still offline
+      await ctx.setOffline(false);
+      const back = await ctx.newPage();
+      await back.goto(`${BASE}/work/visit/${ANNA_TODAY}`);
+      // The reopened page shows the kept ticks at once, then sends them.
+      await back.waitForFunction(() => document.querySelectorAll('[data-item] button[aria-pressed="true"]').length === 4);
+      let n = 0;
+      for (let i = 0; i < 30 && n !== 4; i++) {
+        n = (await sql(`select count(*)::int as n from public.checklist_items where visit_id = $1 and done`, [ANNA_TODAY]))[0].n;
+        if (n !== 4) await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.equal(n, 4, "the kept ticks reached the database");
+      await back.getByText("Everything’s saved.").waitFor({ timeout: 15_000 });
+      await back.close();
+    });
+
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/work/visit/${ANNA_TODAY}`);
+    await page.getByRole("heading", { name: "Checklist" }).waitFor();
+
+    await check("complete is refused, in plain words, until the checklist is done", async () => {
+      await page.getByRole("button", { name: "Complete this clean" }).click();
+      await page.getByText("6 items are still to tick").waitFor({ timeout: 15_000 });
+    });
+
+    await check("then until there's a before and an after photo", async () => {
+      const left = page.locator('[data-item][data-state="open"] button[aria-pressed]');
+      while (await left.count()) {
+        const before = await left.count();
+        await left.first().click();
+        await page.waitForFunction((n) => document.querySelectorAll('[data-item][data-state="open"]').length < n, before);
+      }
+      await page.getByText("Everything’s saved.").waitFor({ timeout: 15_000 });
+      await page.getByRole("button", { name: "Complete this clean" }).click();
+      await page.getByText("Add a before and an after photo.").waitFor({ timeout: 15_000 });
+    });
+
+    await check("photos are shrunk on the phone, sent to the private bucket and counted", async () => {
+      await page.getByLabel("Take a before photo").setInputFiles({ name: "before.png", mimeType: "image/png", buffer: PNG });
+      await page.getByLabel("Take an after photo").setInputFiles({ name: "after.png", mimeType: "image/png", buffer: PNG });
+      await page.getByText("1 added").nth(1).waitFor();
+      await page.getByText("Everything’s saved.").waitFor({ timeout: 20_000 });
+      const got = await sql(
+        `select ph.kind, o.owner = $2 as mine, (o.metadata ->> 'size')::int > 0 as has_bytes, ph.storage_path like '%.jpg' as jpeg
+         from public.visit_photos ph join storage.objects o on o.name = ph.storage_path and o.bucket_id = 'visit-photos'
+         where ph.visit_id = $1 order by ph.kind`,
+        [ANNA_TODAY, TARA],
+      );
+      assert.deepEqual(got.map((r) => [r.kind, r.mine, r.has_bytes, r.jpeg]), [["before", true, true, true], ["after", true, true, true]]);
+      await page.screenshot({ path: `${SHOTS}/work-visit-390.png`, fullPage: true });
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.screenshot({ path: `${SHOTS}/work-visit-1440.png`, fullPage: true });
+      await page.setViewportSize(PHONE.viewport);
+    });
+
+    await check("complete goes through once everything's in, and counts the couldn't-do", async () => {
+      await page.getByRole("button", { name: "Complete this clean" }).click();
+      await page.getByText("Done. Thank you.").waitFor({ timeout: 15_000 });
+      const [v] = await sql(`select status, couldnt_do_count from public.visits where id = $1`, [ANNA_TODAY]);
+      assert.deepEqual({ ...v }, { status: "completed", couldnt_do_count: 1 });
+      assert.ok((await page.locator("main").innerText()).includes("1 item marked"));
+      await page.screenshot({ path: `${SHOTS}/work-visit-done-390.png`, fullPage: true });
+      // Nothing is left on the phone once everything's sent.
+      assert.equal(await page.evaluate((id) => localStorage.getItem(`ping-ticks-${id}`), ANNA_TODAY), null);
+    });
+
+    await check("another cleaner can't open this clean", async () => {
+      const alex = await (await browser.newContext(PHONE)).newPage();
+      await signIn(alex, "alex.cleaner");
+      await alex.waitForURL(`${BASE}/work`);
+      await alex.goto(`${BASE}/work/visit/${ANNA_TODAY}`);
+      await alex.getByRole("heading", { name: "Nothing to clean here." }).waitFor();
+      const html = await alex.content();
+      for (const s of ["12 Test Street", "Side gate", "4721"]) assert.ok(!html.includes(s), `must not see "${s}"`);
+      await alex.context().close();
+    });
+    await ctx.close();
+  }
+
+  {
+    const ctx = await browser.newContext(PHONE);
+    const tara = await ctx.newPage();
+    await signIn(tara, "tara.cleaner");
+    await tara.waitForURL(`${BASE}/work`);
+    await tara.goto(`${BASE}/work/today`);
     await check("the address goes the moment the job stops being theirs", async () => {
       await sql(`select private.reopen_series($1)`, [ANNA_SERIES]);
       await tara.reload();
