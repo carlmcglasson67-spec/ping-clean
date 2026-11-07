@@ -15,7 +15,7 @@ export type ApplyState = { error?: string; ok?: boolean };
 export async function applyAsCleaner(): Promise<ApplyState> {
   const session = await getSession();
   if (!session) redirect("/login?next=/work/apply");
-  if (session.role === "cleaner") redirect("/work");
+  if (session.role === "cleaner") return { ok: true }; // a second tap: already applied
   if (session.role !== "customer") return { error: "Ping team accounts can't apply to clean. Use a separate login." };
 
   const supabase = await createClient();
