@@ -274,6 +274,9 @@ describe("engine review fixes", () => {
   it("never books a visit for today, when the slot may already have passed", async () => {
     const dates = await setupThen(async (su) => {
       await su.rows(`update public.series set starts_on = private.london_today(), preferred_day = extract(isodow from private.london_today())::smallint, frequency = 'weekly' where id = $1`, [IDS.benSeries]);
+      // Tara's seeded working days don't cover every weekday; an empty list means "any day",
+      // so this test doesn't depend on which day of the week it runs.
+      await su.rows(`update public.cleaners set availability = '[]'::jsonb where id = $1`, [U.tara]);
     }, U.tara, async (q) => {
       await q.rows(`select public.claim_series((select id from public.job_offers where series_id = '${IDS.benSeries}' and cleaner_id = '${U.tara}'))`);
       await q.rows(`reset role`);
