@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { ButtonLink, PingMark } from "@/components/ui";
 import { BeforeAfter } from "./_components/before-after";
+import { ChecklistGrid, StepList } from "./_components/blocks";
 import { FaqList } from "./_components/faq-list";
 import { Photo } from "./_components/photo";
-import { STANDARD_CLEAN, STANDARD_CLEAN_COUNT } from "./_content/checklist";
+import { STANDARD_CLEAN_COUNT } from "./_content/checklist";
 import { FEATURED_FAQ } from "./_content/faq";
-import { AREA_LINKS } from "./_content/nav";
+import { STEPS } from "./_content/how";
+import { AREA_LINKS, CLEANERS_LINK, FAQ_LINK } from "./_content/nav";
 
 const STATS = [
   { value: "1", label: "cleaner for your home", note: "The same person every visit, not whoever is free." },
@@ -14,13 +16,6 @@ const STATS = [
   { value: "0", label: "charges before the clean", note: "Your card is saved at booking and charged only once it’s done." },
 ];
 
-const STEPS = [
-  { title: "Get your price", body: "Your postcode and how many hours. One fixed hourly rate, the same in every town, shown before you commit to anything." },
-  { title: "Pick your day", body: "Every week, every two weeks or every four weeks, on the day and time window that suits you. Your card is saved, not charged." },
-  { title: "Meet your cleaner", body: "Your clean goes first to our highest-rated cleaners near you. One of them takes it on as theirs, and you see who’s coming." },
-  { title: "The clean, with proof", body: "They work through the same checklist every visit and take before and after photos, so you can see it’s done even if you’re out." },
-  { title: "Pay after, rate it", body: "Your card is charged once the clean is finished. Rate it in a tap. The Ping team checks the photos too." },
-];
 
 const PROMISES = [
   { title: "The same cleaner, every visit", body: "Your regular clean is held by one cleaner, so they learn your home and you never explain it twice." },
@@ -145,22 +140,9 @@ export default function Home() {
               <p className="mt-4 text-base text-ink-3">Every clean comes with photos like these, in your account.</p>
             </div>
 
-            <ol className="grid content-start lg:col-span-5 lg:col-start-8">
-              {STEPS.map((s, i) => (
-                <li key={s.title} className="grid grid-cols-[4.5rem_1fr] gap-x-4 border-t border-line py-9 first:border-t-0 first:pt-0 sm:grid-cols-[6rem_1fr]">
-                  <span className="font-display text-[3.25rem] font-semibold leading-none text-signal tabular sm:text-[4rem]" aria-hidden>
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-                  <div className="pt-1">
-                    <h3 className="text-xl font-semibold">
-                      <span className="sr-only">Step {i + 1}: </span>
-                      {s.title}
-                    </h3>
-                    <p className="mt-3 text-lg text-ink-2">{s.body}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
+            <div className="lg:col-span-5 lg:col-start-8">
+              <StepList steps={STEPS} />
+            </div>
           </div>
         </div>
       </section>
@@ -179,30 +161,7 @@ export default function Home() {
             <Photo slot="home-included-bathroom" tone="linen" caption="A bathroom, after" className="mt-10 hidden aspect-[4/3] lg:block" />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:col-span-8 lg:gap-5">
-            {STANDARD_CLEAN.map((r, i) => (
-              <article key={r.room} className={"rounded-lg bg-card p-8 shadow-card ring-1 ring-line/70 lg:p-10 " + (i === 0 ? "sm:row-span-1" : "")}>
-                <div className="flex items-baseline justify-between gap-4">
-                  <h3 className="text-xl font-semibold">{r.room}</h3>
-                  <span className="whitespace-nowrap text-sm font-semibold text-ink-3 tabular">
-                    {r.items.length} {r.items.length === 1 ? "tick" : "ticks"}
-                  </span>
-                </div>
-                <ul className="mt-6 grid gap-4">
-                  {r.items.map((item) => (
-                    <li key={item} className="grid grid-cols-[1.75rem_1fr] gap-3 text-lg text-ink-2">
-                      <span aria-hidden className="mt-1 grid size-6 place-items-center rounded-full bg-ok-soft text-ok">
-                        <svg viewBox="0 0 20 20" className="size-3.5">
-                          <path d="m5 10.5 3.2 3L15 6.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </span>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </article>
-            ))}
-          </div>
+          <ChecklistGrid className="lg:col-span-8" />
         </div>
       </section>
 
@@ -286,10 +245,9 @@ export default function Home() {
                 ))}
               </ul>
               <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
-                <ButtonLink href="/login?next=/work" size="lg" variant="ink">
-                  Sign in to apply
+                <ButtonLink href={CLEANERS_LINK.href} size="lg" variant="ink">
+                  What cleaning for Ping is like
                 </ButtonLink>
-                <p className="max-w-sm text-base font-semibold">New to Ping? Cleaner applications open alongside booking.</p>
               </div>
             </div>
             <Photo slot="home-cleaner-portrait" tone="ink" caption="A Ping cleaner, on the way to a regular" className="min-h-[22rem] rounded-none lg:col-span-5 lg:min-h-full" />
@@ -306,6 +264,9 @@ export default function Home() {
               Before you book.
             </h2>
             <p className="mt-6 max-w-sm text-lg text-ink-2">The things people ask most before they let someone new into their home.</p>
+            <ButtonLink href={FAQ_LINK.href} variant="secondary" size="lg" className="mt-8">
+              Every question, answered
+            </ButtonLink>
           </div>
           <div className="lg:col-span-7 lg:col-start-6">
             <FaqList items={FEATURED_FAQ} />
