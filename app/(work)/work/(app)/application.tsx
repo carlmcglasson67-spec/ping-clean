@@ -17,9 +17,10 @@ type StepState = "done" | "todo" | "waiting";
  */
 export async function Application({ name, cleanerId }: { name: string; cleanerId: string }) {
   const supabase = await createClient();
-  const [profile, docs] = await Promise.all([
+  const [profile, docs, me] = await Promise.all([
     supabase.from("profiles").select("full_name, phone").eq("id", cleanerId).maybeSingle(),
     supabase.from("cleaner_documents").select("kind, status, created_at").eq("cleaner_id", cleanerId),
+    supabase.from("cleaners").select("areas").eq("id", cleanerId).maybeSingle(),
   ]);
 
   const header = (
@@ -29,7 +30,7 @@ export async function Application({ name, cleanerId }: { name: string; cleanerId
       lede="We check every cleaner before they see a single job. Here's where yours is up to."
     />
   );
-  if (profile.error || docs.error) {
+  if (profile.error || docs.error || me.error) {
     return (
       <>
         {header}
@@ -45,13 +46,16 @@ export async function Application({ name, cleanerId }: { name: string; cleanerId
   }).length;
   const verified = REQUIRED_DOCS.filter((k) => latest.get(k)?.status === "verified").length;
   const detailsDone = Boolean(profile.data?.full_name && profile.data?.phone);
+  const areas = me.data?.areas ?? [];
   const docsState: StepState = sent === REQUIRED_DOCS.length ? (verified === REQUIRED_DOCS.length ? "done" : "waiting") : "todo";
 
   const next: { href: Route; label: string } | null = !detailsDone
     ? { href: "/work/details", label: "Add your details" }
     : docsState === "todo"
       ? { href: "/work/documents", label: sent === 0 ? "Send your documents" : "Send the rest" }
-      : null;
+      : areas.length === 0
+        ? { href: "/work/areas", label: "Choose your areas" }
+        : null;
 
   return (
     <>
@@ -95,7 +99,10 @@ export async function Application({ name, cleanerId }: { name: string; cleanerId
               })}
             </ul>
           </Step>
-          <Step n={3} title="Approval by the Ping team" state={verified === REQUIRED_DOCS.length ? "waiting" : "todo"}>
+          <Step n={3} title="Where and when you work" state={areas.length ? "done" : "todo"} href="/work/areas">
+            {areas.length ? `You cover ${areas.join(", ")}.` : "The postcode areas you'll travel to, and your working days."}
+          </Step>
+          <Step n={4} title="Approval by the Ping team" state={verified === REQUIRED_DOCS.length ? "waiting" : "todo"}>
             Once your checks are verified, the Ping team looks everything over and switches on your job board.
           </Step>
         </ol>

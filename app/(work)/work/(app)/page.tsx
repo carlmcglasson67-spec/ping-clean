@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Badge, Card, EmptyState, ErrorState, PageHeader, PingMark, Stat } from "@/components/ui";
 import { firstName, requireRole } from "@/lib/auth/session";
 import { formatWindow, monthStartInLondon, relativeDay, todayInLondon } from "@/lib/dates";
@@ -60,7 +61,14 @@ export default async function WorkHome() {
       <PageHeader
         eyebrow={`${TIER[me.tier]} cleaner`}
         title={`Hi ${firstName(session)}. ${jobs.length === 0 ? "Nothing booked today." : jobs.length === 1 ? "One clean today." : `${jobs.length} cleans today.`}`}
-        lede={`You cover ${me.areas.length ? me.areas.join(", ") : "no areas yet"}.`}
+        lede={
+          <>
+            You cover {me.areas.length ? me.areas.join(", ") : "no areas yet"}.{" "}
+            <Link href="/work/areas" className="inline-flex min-h-12 items-center font-semibold text-ink underline decoration-line decoration-2 underline-offset-4 hover:decoration-ink">
+              {me.areas.length ? "Change" : "Choose your areas"}
+            </Link>
+          </>
+        }
       />
 
       {failed ? (
