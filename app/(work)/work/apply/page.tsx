@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { PageHeader } from "@/components/ui";
+import { ButtonLink, PageHeader } from "@/components/ui";
 import { AppShell } from "@/components/ui/app-shell";
 import { firstName, getSession } from "@/lib/auth/session";
 import { homeFor } from "@/lib/auth/roles";
@@ -23,7 +23,17 @@ const POINTS = [
 export default async function ApplyPage() {
   const session = await getSession();
   if (!session) redirect("/login?next=/work/apply");
-  if (session.role !== "customer") redirect(homeFor(session.role));
+  if (session.role === "admin") redirect(homeFor("admin"));
+  if (session.role === "cleaner") {
+    // Not a redirect: straight after applying, this page re-renders as a cleaner while
+    // the button is moving them on, and a redirect here would race it.
+    return (
+      <AppShell area="/work" who={firstName(session)}>
+        <PageHeader eyebrow="Clean with Ping" title="You've already applied." />
+        <ButtonLink href="/work" size="lg">Go to your application</ButtonLink>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell area="/work" who={firstName(session)}>
