@@ -4,16 +4,24 @@ import { Badge, ErrorState, PageHeader } from "@/components/ui";
 import { requireRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/db/server";
 import { TIER } from "@/lib/labels";
+import { weekdayName } from "@/lib/dates";
+import { slotsByDay } from "../../_lib/availability";
 import { REQUIRED_DOCS } from "../../_lib/documents";
 import { latestByKind } from "../../_lib/latest";
 
 export const metadata: Metadata = { title: "You" };
 
+function areasNote(areas: string[], availability: unknown): string {
+  if (areas.length === 0) return "Choose the postcodes you'll travel to";
+  const days = [...slotsByDay(availability).keys()].sort().map((d) => weekdayName(d).slice(0, 3));
+  return `${areas.join(", ")} · ${days.length ? days.join(", ") : "any day"}`;
+}
+
 export default async function YouPage() {
   const session = await requireRole("cleaner", "/work/you");
   const supabase = await createClient();
   const [cleaner, profile, docs] = await Promise.all([
-    supabase.from("cleaners").select("status, tier").eq("id", session.userId).maybeSingle(),
+    supabase.from("cleaners").select("status, tier, areas, availability").eq("id", session.userId).maybeSingle(),
     supabase.from("profiles").select("full_name, phone").eq("id", session.userId).maybeSingle(),
     supabase.from("cleaner_documents").select("kind, status, created_at").eq("cleaner_id", session.userId),
   ]);
@@ -38,6 +46,12 @@ export default async function YouPage() {
       title: "Documents",
       note: `${verified} of ${REQUIRED_DOCS.length} verified`,
       badge: needsAction ? { tone: "bad", label: "Action needed" } : verified === REQUIRED_DOCS.length ? { tone: "ok", label: "All verified" } : undefined,
+    },
+    {
+      href: "/work/areas",
+      title: "Areas and working days",
+      note: areasNote(cleaner.data?.areas ?? [], cleaner.data?.availability),
+      badge: cleaner.data?.areas.length ? undefined : { tone: "warn", label: "To do" },
     },
   ];
 
