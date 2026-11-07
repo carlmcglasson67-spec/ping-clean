@@ -117,9 +117,10 @@ create trigger interest_signups_audit after delete on public.interest_signups
   execute function private.audit_row('email', 'phone', 'postcode');
 
 -- ---------------------------------------------------------------- suppression list
--- Someone who unsubscribed must never be put back on the list, from any district, even
--- after their row is purged. Before the purge deletes an unsubscribed row it adds a
--- SHA-256 hash of the normalised contact here, and register_interest checks it.
+-- Someone who unsubscribed, or asked for their details to be deleted, must never be put
+-- back on the list, from any district, even after their row is gone. Before the purge
+-- deletes an unsubscribed row, and whenever an admin deletes an entry on request, a
+-- SHA-256 hash of the canonical contact goes here, and register_interest checks it.
 -- Deliberately minimal: one hash per contact, no postcode, no date, no kind, nothing
 -- readable. Entries never expire (they are what honours the opt-out). Nobody can read
 -- or write it except the functions in this migration.
@@ -129,10 +130,25 @@ create table private.interest_suppressions (
 alter table private.interest_suppressions enable row level security;
 revoke all on private.interest_suppressions from public, anon, authenticated;
 
--- "e:" or "p:" plus the normalised contact, hashed. The same person always hashes the same.
+-- The form used ONLY for matching opt-outs (the address is stored as typed). So that
+-- "jo.bloggs+ping@googlemail.com" can't slip past an opt-out of "jobloggs@gmail.com":
+--   gmail.com / googlemail.com: dots and anything after "+" removed, domain gmail.com
+--   every other domain: anything after "+" removed
+--   mobiles: already normalised (+447…)
+create function private.contact_canonical(p_email text, p_phone text) returns text
+language sql immutable set search_path = '' as $$
+  select case
+    when p_email is null then 'p:' || p_phone
+    when split_part(p_email, '@', 2) in ('gmail.com', 'googlemail.com')
+      then 'e:' || replace(split_part(split_part(p_email, '@', 1), '+', 1), '.', '') || '@gmail.com'
+    else 'e:' || split_part(split_part(p_email, '@', 1), '+', 1) || '@' || split_part(p_email, '@', 2)
+  end
+$$;
+
+-- The canonical contact, hashed. The same person always hashes the same.
 create function private.contact_hash(p_email text, p_phone text) returns bytea
 language sql immutable set search_path = '' as $$
-  select sha256(convert_to(case when p_email is not null then 'e:' || p_email else 'p:' || p_phone end, 'UTF8'))
+  select sha256(convert_to(private.contact_canonical(p_email, p_phone), 'UTF8'))
 $$;
 
 -- True when this contact opted out: an unsubscribed row in any district, or on the list.
@@ -141,7 +157,7 @@ language sql stable security definer set search_path = '' as $$
   select exists (select 1 from private.interest_suppressions s where s.contact_hash = private.contact_hash(p_email, p_phone))
       or exists (select 1 from public.interest_signups i
                  where i.unsubscribed_at is not null
-                   and ((p_email is not null and i.email = p_email) or (p_phone is not null and i.phone = p_phone)))
+                   and private.contact_canonical(i.email, i.phone) = private.contact_canonical(p_email, p_phone))
 $$;
 
 -- One audit line for an admin read or export: who, what, how many. Never the contacts.
@@ -322,15 +338,24 @@ begin
   return v_rows;
 end $$;
 
--- Delete on request. Returns how many went. Each deletion writes an audit line.
+-- Delete on request (erasure). Returns how many went. Each deletion writes an audit line.
+-- Every deleted contact's hash goes on the suppression list, opted out or not, so someone
+-- who asked to be removed is never added back (by themselves or anyone typing their address).
 create function public.admin_delete_interest(p_ids uuid[]) returns integer
 language plpgsql volatile security definer set search_path = '' as $$
 declare
   v_rows integer;
 begin
   perform private.require_admin();
-  delete from public.interest_signups where id = any (p_ids);
-  get diagnostics v_rows = row_count;
+  with gone as (
+    delete from public.interest_signups where id = any (p_ids)
+    returning email, phone, unsubscribed_at
+  ), suppressed as (
+    insert into private.interest_suppressions (contact_hash)
+    select distinct private.contact_hash(email, phone) from gone
+    on conflict do nothing
+  )
+  select count(*) into v_rows from gone;
   return v_rows;
 end $$;
 
@@ -373,7 +398,7 @@ end $$;
 revoke all on function private.uk_postcode_areas(), private.normalise_postcode(text),
   private.normalise_uk_mobile(text), private.normalise_email(text), private.mask_contact(text, text),
   private.audit_interest(text, jsonb), private.require_admin(), private.purge_interest(),
-  private.contact_hash(text, text), private.interest_opted_out(text, text)
+  private.contact_hash(text, text), private.contact_canonical(text, text), private.interest_opted_out(text, text)
   from public, anon, authenticated;
 revoke all on function public.register_interest(text, text, text, boolean, text, text),
   public.interest_retention_months(), public.admin_interest_counts(), public.admin_list_interest(text),

@@ -3,8 +3,9 @@ import "server-only";
 // Cloudflare Turnstile, optional. Switched on only when BOTH keys are set:
 //   NEXT_PUBLIC_TURNSTILE_SITE_KEY   the widget on the form (public)
 //   TURNSTILE_SECRET_KEY             checked here, on the server (never NEXT_PUBLIC_)
-// With both missing, the check is skipped and the form works without a widget. With only
-// one set, it's also off, and a warning is logged so a half-done setup gets noticed.
+// It's required before launch, so in PRODUCTION missing keys mean every submission is
+// refused (fail closed, with a warning). On previews and in local development, missing
+// keys just skip the check. With only one key set it's off, and a warning is logged.
 
 const VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
@@ -70,9 +71,14 @@ export async function verifyTurnstile(
   { env = process.env, fetchImpl = fetch, timeoutMs = 5000 }: { env?: Env; fetchImpl?: typeof fetch; timeoutMs?: number } = {},
 ): Promise<TurnstileResult> {
   if (!turnstileEnabled(env)) {
-    if (isProduction(env) && !warnedOff) {
-      warnedOff = true;
-      console.warn("Turnstile is OFF in production: register interest is protected only by the honeypot and the firewall rule.");
+    // Turnstile is required before launch: in production, no keys means refuse (fail
+    // closed) rather than run unprotected. Previews and local development carry on without.
+    if (isProduction(env)) {
+      if (!warnedOff) {
+        warnedOff = true;
+        console.warn("Turnstile keys are not set in production: register-interest submissions are refused until both are set.");
+      }
+      return "unavailable";
     }
     return "off";
   }

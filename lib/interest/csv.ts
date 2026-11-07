@@ -1,7 +1,11 @@
 // The admin "Export CSV" (Track C's console calls this with admin_export_interest's rows).
 // Anyone can type into the form, so every cell is treated as hostile: a value starting
 // with = + - @ (or a tab or carriage return) would run as a formula in Excel or Sheets.
-// Those get a leading apostrophe, and every cell is quoted. Mobiles are written as
+// Those get a leading apostrophe, and every cell is quoted.
+//
+// Track C: show this line next to the Export button, word for word:
+//   "Import directly into your SMS tool; don't re-save in Excel."
+// (Re-saving in Excel can strip the quoting and turn 447… numbers into 4.47E+11.) Mobiles are written as
 // 447700900321 (no plus), the shape bulk-SMS tools import, so they need no apostrophe.
 
 export type InterestExportRow = {

@@ -45,9 +45,11 @@ consent and a fresh retention date) instead of adding one. It never clears "told
 **Opted out means out, everywhere, for good.** If the email or mobile has unsubscribed in
 any district, or is on the suppression list, the reply is "thanks" and nothing is stored.
 The suppression list (`private.interest_suppressions`, part of this signed-off feature) holds
-only a SHA-256 hash of each opted-out contact: no postcode, no date, nothing readable, no
-direct access. The purge adds the hash before deleting an unsubscribed row. Entries never
-expire. (For Kate: an unsalted hash of an email is still pseudonymous personal data, kept
+only a SHA-256 hash of each opted-out or erased contact: no postcode, no date, nothing
+readable, no direct access. The purge adds the hash before deleting an unsubscribed row, and
+an admin deletion on request adds it for every contact deleted. Entries never expire.
+Matching uses a canonical form (gmail/googlemail: dots and "+…" removed, googlemail treated
+as gmail; other domains: "+…" removed); the address itself is stored as typed. (For Kate: an unsalted hash of an email is still pseudonymous personal data, kept
 only to honour the opt-out.)
 
 ## Access
@@ -99,12 +101,14 @@ Plus a link to the privacy notice. The tick box, unticked by default and require
   `TURNSTILE_SECRET_KEY` are both set (a warning is logged if only one is). Checked in the
   Server Action before the database, including that the token was solved on Ping's own
   hostname. No IP address is sent to Cloudflare or stored.
-- **Rate limit: a Vercel firewall rule**, not stored IPs, on **every POST with a
-  `Next-Action` header, site-wide** (Next.js runs a Server Action posted to any route, so a
-  rule on the form's pages alone can be sidestepped). Recommended: 10 per IP per 10 minutes.
-- With Turnstile on, a POST without a token is refused before the database; in production
-  Turnstile fails closed if the site's hostname isn't configured, and logs a warning if
-  it's switched off.
+- **Rate limit: a Vercel firewall rule on ALL POSTs, site-wide**, not stored IPs.
+  Recommended: 10 per IP per 10 minutes. Next.js runs a Server Action posted to any route,
+  and also from a plain no-JavaScript form post with no `Next-Action` header, so a rule
+  keyed on pages or on that header alone can be sidestepped. Optional narrower rule: POSTs
+  where the `Next-Action` header is present OR the content type is `multipart/form-data`
+  or `application/x-www-form-urlencoded`.
+- With Turnstile on, a POST without a token is refused before the database. In
+  production, Turnstile fails closed if its keys or the site's hostname aren't set.
 - Same reply every time; no free text or links accepted; only Ping's own message is ever sent.
 
 ## Tests

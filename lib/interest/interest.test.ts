@@ -125,12 +125,15 @@ describe("Turnstile in production (final check B and note 3)", () => {
     expect(f).not.toHaveBeenCalled();
   });
 
-  it("warns once when Turnstile is off in production", async () => {
+  it("refuses submissions in production when no keys are set, warning once (last check)", async () => {
     resetTurnstileWarning();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    await verifyTurnstile("tok", { env: { NODE_ENV: "production" } });
-    await verifyTurnstile("tok", { env: { NODE_ENV: "production" } });
-    expect(warn.mock.calls.filter((c) => /Turnstile is OFF in production/.test(String(c[0])))).toHaveLength(1);
+    expect(await verifyTurnstile("tok", { env: { NODE_ENV: "production" } })).toBe("unavailable");
+    expect(await verifyTurnstile(null, { env: { NODE_ENV: "production" } })).toBe("unavailable");
+    expect(warn.mock.calls.filter((c) => /Turnstile keys are not set in production/.test(String(c[0])))).toHaveLength(1);
+    // Previews and local development carry on without it.
+    expect(await verifyTurnstile("tok", { env: { NODE_ENV: "production", VERCEL_ENV: "preview" } })).toBe("off");
+    expect(await verifyTurnstile("tok", { env: { NODE_ENV: "development" } })).toBe("off");
     warn.mockRestore();
   });
 });

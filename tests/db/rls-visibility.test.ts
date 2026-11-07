@@ -22,6 +22,17 @@ describe("every table is locked down", () => {
     expect(rows.filter((r) => !r.rowsecurity)).toEqual([]);
   });
 
+  it("has row level security on every table in public and private, checked in the database itself", async () => {
+    // Doesn't rely on matching migration text (scripts/check-rls.sh does that too).
+    const rows = await as("superuser", (q) =>
+      q.rows<{ name: string }>(
+        `select n.nspname || '.' || c.relname as name from pg_class c join pg_namespace n on n.oid = c.relnamespace
+          where n.nspname in ('public', 'private') and c.relkind in ('r', 'p') and not c.relrowsecurity order by 1`,
+      ),
+    );
+    expect(rows).toEqual([]);
+  });
+
   it("gives anonymous visitors nothing from any table", async () => {
     for (const t of TABLES) {
       const result = await as("anon", (q) => q.attempt(`select * from public.${t}`));
