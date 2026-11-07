@@ -7,6 +7,8 @@ import { Photo } from "./_components/photo";
 import { STANDARD_CLEAN_COUNT } from "./_content/checklist";
 import { FEATURED_FAQ } from "./_content/faq";
 import { STEPS } from "./_content/how";
+import { InstantPrice } from "./_components/instant-price";
+import { getPricing } from "./_lib/pricing";
 import { AREA_LINKS, CLEANERS_LINK, FAQ_LINK } from "./_content/nav";
 
 const STATS = [
@@ -24,7 +26,11 @@ const PROMISES = [
   { title: "Pay after, not before", body: "A fixed price agreed up front. Your card is charged only once the clean is finished." },
 ];
 
-export default function Home() {
+// The instant price reads the settings table on every request.
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const pricing = await getPricing();
   return (
     <>
       {/* ------------------------------------------------------------ Hero */}
@@ -50,11 +56,11 @@ export default function Home() {
               </p>
             </div>
             <div className="mt-10 flex flex-wrap gap-3">
-              <ButtonLink href="/#how" size="lg">
-                See how it works
+              <ButtonLink href="/#price" size="lg">
+                Get your price
               </ButtonLink>
-              <ButtonLink href="/#cleaners" size="lg" variant="secondary">
-                I&rsquo;m a cleaner
+              <ButtonLink href="/#how" size="lg" variant="secondary">
+                See how it works
               </ButtonLink>
             </div>
           </div>
@@ -92,6 +98,24 @@ export default function Home() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------ Instant price */}
+      <section id="price" aria-labelledby="price-title" className="scroll-mt-24 px-5 pb-16 sm:px-10 lg:px-16 lg:pb-24">
+        <div className="mx-auto max-w-[96rem]">
+          {/* While prices are unset the panel speaks for itself; the heading would promise a number. */}
+          <div className={pricing.status === "open" ? "mb-8 flex flex-wrap items-end justify-between gap-4 lg:mb-10" : "sr-only"}>
+            <h2 id="price-title" className="text-2xl font-semibold">
+              {pricing.status === "open" ? "Your price, before anything else." : "Instant price"}
+            </h2>
+            {pricing.status === "open" ? (
+              <Link href="/price" className="inline-flex min-h-12 items-center gap-2 text-lg font-semibold text-ink-2 hover:text-ink">
+                How pricing works <span aria-hidden>&rarr;</span>
+              </Link>
+            ) : null}
+          </div>
+          <InstantPrice pricing={pricing} />
         </div>
       </section>
 
@@ -289,8 +313,8 @@ export default function Home() {
           <div className="relative grid gap-6 lg:col-span-4">
             <p className="text-lg text-paper/80">One cleaner who knows your home, a checklist on every visit, and nothing to pay until it&rsquo;s done.</p>
             <div className="flex flex-wrap gap-3">
-              <ButtonLink href="/#how" size="lg">
-                See how it works
+              <ButtonLink href="/price" size="lg">
+                Get your price
               </ButtonLink>
             </div>
           </div>

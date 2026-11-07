@@ -110,7 +110,7 @@ export function SiteHeader() {
           </Link>
           {/* Wrapped: ButtonLink’s own inline-flex would beat a "hidden" on the link itself. */}
           <span className="hidden sm:contents">
-            <ButtonLink href="/#how">How it works</ButtonLink>
+            <ButtonLink href="/price">Get your price</ButtonLink>
           </span>
           <button
             type="button"
@@ -211,6 +211,9 @@ export function SiteHeader() {
             </div>
           </SheetGroup>
           <SheetGroup title="Ping">
+            <SheetLink href="/price" onClick={() => setSheet(false)}>
+              Get your price
+            </SheetLink>
             <SheetLink href={CLEANERS_LINK.href} onClick={() => setSheet(false)}>
               {CLEANERS_LINK.label}
             </SheetLink>
