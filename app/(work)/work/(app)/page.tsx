@@ -2,11 +2,10 @@ import { Badge, Card, EmptyState, ErrorState, PageHeader, PingMark, Stat } from 
 import { firstName, requireRole } from "@/lib/auth/session";
 import { formatWindow, monthStartInLondon, relativeDay, todayInLondon } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
-import { DOCUMENT_KIND, DOCUMENT_STATUS, TIER, VISIT_STATUS } from "@/lib/labels";
+import { TIER, VISIT_STATUS } from "@/lib/labels";
 import { formatDuration, formatPence, formatPenceShort } from "@/lib/money";
 import type { Enums } from "@/lib/db/types";
-
-const REQUIRED_DOCS: Enums<"document_kind">[] = ["dbs", "insurance", "photo_id", "right_to_work"];
+import { Application } from "./application";
 
 export default async function WorkHome() {
   const session = await requireRole("cleaner", "/work");
@@ -21,7 +20,7 @@ export default async function WorkHome() {
     return <ErrorState>We couldn&rsquo;t load your account just now. Check your signal and refresh.</ErrorState>;
   }
   if (!me || me.status === "applicant") {
-    return <Applicant name={firstName(session)} cleanerId={session.userId} />;
+    return <Application name={firstName(session)} cleanerId={session.userId} />;
   }
   if (me.status !== "active") {
     return (
@@ -152,50 +151,3 @@ function VisitRow({ v, showDay = false }: { v: VisitLite; showDay?: boolean }) {
   );
 }
 
-async function Applicant({ name, cleanerId }: { name: string; cleanerId: string }) {
-  const supabase = await createClient();
-  const { data: docs, error } = await supabase
-    .from("cleaner_documents")
-    .select("kind, status, expires_on")
-    .eq("cleaner_id", cleanerId);
-  const byKind = new Map((docs ?? []).map((d) => [d.kind, d]));
-  const done = REQUIRED_DOCS.filter((k) => byKind.get(k)?.status === "verified").length;
-
-  return (
-    <>
-      <PageHeader
-        eyebrow="Your application"
-        title={`Thanks for applying, ${name}.`}
-        lede="We check every cleaner before they see a single job. Here's where yours is up to."
-      />
-      {error ? (
-        <ErrorState>Your documents didn&rsquo;t load. Check your signal and refresh.</ErrorState>
-      ) : (
-        <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
-          <Card className="grain relative overflow-hidden bg-ink text-paper ring-0">
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">Checks complete</p>
-            <p className="mt-5 font-display text-4xl font-semibold tabular">
-              {done}<span className="text-paper/40">/{REQUIRED_DOCS.length}</span>
-            </p>
-            <p className="mt-4 max-w-xs text-paper/70">When all four are verified, the Ping team approves you and jobs start appearing.</p>
-          </Card>
-          <ol className="grid gap-3">
-            {REQUIRED_DOCS.map((kind, i) => {
-              const doc = byKind.get(kind);
-              const st = doc ? DOCUMENT_STATUS[doc.status] : null;
-              return (
-                <li key={kind}>
-                  <Card className="flex items-center gap-5 p-5 sm:p-6">
-                    <span className="font-display text-xl font-semibold text-ink-3 tabular">{String(i + 1).padStart(2, "0")}</span>
-                    <p className="flex-1 text-lg font-semibold">{DOCUMENT_KIND[kind]}</p>
-                    {st ? <Badge tone={st.tone}>{st.label}</Badge> : <Badge>Not sent yet</Badge>}
-                  </Card>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
-      )}
-    </>
-  );
-}
