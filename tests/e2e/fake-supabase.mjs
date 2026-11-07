@@ -6,7 +6,7 @@
 //   select=cols | col=eq./neq./gt./gte./lt./lte./in.(…) | order=col.asc|desc | limit=n
 //   HEAD + Prefer: count=exact | POST /rpc/<fn> with named args
 //   PATCH (update) and POST (insert), with Prefer: return=representation|minimal
-//   Storage: upload, sign (createSignedUrl) and fetch-by-signed-URL, gated by the real
+//   Storage: upload (owner + size metadata), sign one or many, and fetch-by-signed-URL, gated by the real
 //   storage.objects policies. File bytes live in memory only. CORS like Supabase.
 // Never deploy this. Real environments use a real Supabase project.
 import { createHmac, randomUUID } from "node:crypto";
@@ -233,6 +233,20 @@ export function startFakeSupabase(port = 54321) {
       }
 
       // ---------------- storage (private buckets; storage.objects RLS decides, as on Supabase)
+      const signMany = url.pathname.match(/^\/storage\/v1\/object\/sign\/([a-z-]+)$/);
+      if (signMany && req.method === "POST") {
+        const [, bucket] = signMany;
+        const { expiresIn, paths } = await readBody(req);
+        const exp = Math.floor(Date.now() / 1000) + Number(expiresIn);
+        const out = [];
+        for (const path of paths ?? []) {
+          const found = await asUser(claims, (c) => c.query(`select 1 from storage.objects where bucket_id = $1 and name = $2`, [bucket, path]));
+          out.push(found.rows[0]
+            ? { path, error: null, signedURL: `/object/sign/${bucket}/${encodeURI(path)}?token=${exp}.${signPath(bucket, path, exp)}` }
+            : { path, error: "Either the object does not exist or you do not have access to it", signedURL: null });
+        }
+        return send(res, 200, out);
+      }
       const signed = url.pathname.match(/^\/storage\/v1\/object\/sign\/([a-z-]+)\/(.+)$/);
       if (signed && req.method === "POST") {
         const [, bucket, path] = signed;
@@ -259,7 +273,11 @@ export function startFakeSupabase(port = 54321) {
         const name = decodeURIComponent(path);
         const bytes = await readRaw(req);
         try {
-          await asUser(claims, (c) => c.query(`insert into storage.objects (bucket_id, name, owner) values ($1, $2, $3)`, [bucket, name, claims?.sub ?? null]));
+          // Like Supabase: the uploader owns it, and metadata records its size (complete_visit checks both).
+          await asUser(claims, (c) => c.query(
+            `insert into storage.objects (bucket_id, name, owner, metadata) values ($1, $2, $3, $4)`,
+            [bucket, name, claims?.sub ?? null, JSON.stringify({ size: bytes.length, mimetype: String(req.headers["content-type"] ?? "") })],
+          ));
         } catch (e) {
           return send(res, 400, { statusCode: "403", error: "Unauthorized", message: e.message });
         }
@@ -305,7 +323,7 @@ export function startFakeSupabase(port = 54321) {
       }
       return send(res, 404, { message: `fake-supabase: ${req.method} ${url.pathname} not supported` });
     } catch (e) {
-      return send(res, e.status ?? 400, { code: e.code ?? "PGRST000", message: e.message });
+      return send(res, e.status ?? 400, { code: e.code ?? "PGRST000", message: e.message, details: e.detail ?? null });
     }
   });
   return new Promise((resolve) => server.listen(port, "127.0.0.1", () => resolve({ server, close: async () => { server.close(); await pool.end(); } })));
