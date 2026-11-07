@@ -99,7 +99,6 @@ function CheckEmail({ email, next }: { email: string; next?: string }) {
           Send it again
         </Button>
         {state.done ? <p role="status" className="text-sm text-teal-ink">If that address can have an account, a fresh link is on its way.</p> : null}
-        {state.error ? <p role="alert" className="text-sm font-medium text-bad">{state.error}</p> : null}
       </form>
       <p className="text-sm text-navy-3">
         Wrong address?{" "}

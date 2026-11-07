@@ -2,7 +2,12 @@
 // Supabase Auth checks again on its side (set its minimum length to match: see the PR).
 
 export const PASSWORD_MIN = 10;
-export const PASSWORD_MAX = 72; // bcrypt reads only the first 72 bytes
+export const PASSWORD_MAX = 72; // bytes: bcrypt reads only the first 72 bytes, and "é" or an emoji is 2-4
+
+/** Length as bcrypt sees it (UTF-8 bytes), not characters. */
+export function passwordBytes(password: string): number {
+  return new TextEncoder().encode(password).length;
+}
 
 // The handful of passwords people try first. Not a full breach list (Supabase's
 // "leaked password protection" on a paid plan covers that), just the obvious ones.
@@ -20,7 +25,7 @@ export function passwordChecks(password: string, email = ""): PasswordCheck[] {
   const lower = password.toLowerCase();
   const local = email.toLowerCase().split("@")[0] ?? "";
   return [
-    { id: "length", label: `At least ${PASSWORD_MIN} characters`, ok: password.length >= PASSWORD_MIN && password.length <= PASSWORD_MAX },
+    { id: "length", label: `At least ${PASSWORD_MIN} characters`, ok: password.length >= PASSWORD_MIN && passwordBytes(password) <= PASSWORD_MAX },
     { id: "mix", label: "Letters and at least one number", ok: /[a-z]/i.test(password) && /[0-9]/.test(password) },
     {
       id: "common",
@@ -36,7 +41,7 @@ export function passwordChecks(password: string, email = ""): PasswordCheck[] {
 
 /** Null if the password is acceptable, else the first rule it misses, in plain words. */
 export function passwordProblem(password: string, email = ""): string | null {
-  if (password.length > PASSWORD_MAX) return `Use ${PASSWORD_MAX} characters or fewer.`;
+  if (passwordBytes(password) > PASSWORD_MAX) return "That's too long. Use a shorter password (accented letters and emoji count extra).";
   const miss = passwordChecks(password, email).find((c) => !c.ok);
   if (!miss) return null;
   return {

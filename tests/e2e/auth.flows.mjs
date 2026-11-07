@@ -14,6 +14,11 @@ async function mailFor(email, type) {
   }
   throw new Error(`no ${type} email for ${email}`);
 }
+/** Opening an email link only shows a button; pressing it uses the link (review fix 3). */
+async function openLink(page, link, button = /Confirm my email|Continue to reset your password/) {
+  await page.goto(link);
+  await page.getByRole("button", { name: button }).click();
+}
 const setConfirm = (confirm) => fetch(`${FAKE}/__test/config`, { method: "POST", body: JSON.stringify({ confirm }) });
 
 async function fillSignup(page, { name, email, password, phone = "", terms = true, privacy = true }) {
@@ -63,12 +68,17 @@ export async function authFlows({ browser, BASE, check, shots }) {
     const link = await mailFor(nia.email, "signup");
     assert.match(link, /\/auth\/confirm\?flow=signup&token_hash=[0-9a-f]+&type=email$/);
     await page.goto(link);
+    await page.getByRole("button", { name: "Confirm my email" }).waitFor();
+    if (shots) await page.screenshot({ path: `${shots}/confirm-email-1440.png`, fullPage: true });
+    await page.getByRole("button", { name: "Confirm my email" }).click();
     await page.waitForURL(`${BASE}/account`);
-    await page.getByText("Hello, Nia.").waitFor();
+    await page.getByRole("heading", { name: "Hello, Nia." }).waitFor();
     const c = db(); await c.connect();
-    const { rows } = await c.query(`select p.role, p.phone, u.raw_user_meta_data ->> 'terms_version' as terms from public.profiles p join auth.users u on u.id = p.id where u.email = $1`, [nia.email]);
+    const { rows } = await c.query(`select p.role, p.phone, u.raw_user_meta_data ->> 'terms_version' as terms,
+      u.raw_user_meta_data ->> 'phone' as meta_phone from public.profiles p join auth.users u on u.id = p.id where u.email = $1`, [nia.email]);
     await c.end();
-    assert.deepEqual(rows[0], { role: "customer", phone: "07700 900321", terms: "draft-2026-11" });
+    // The phone now lives on the profile only (review fix 7).
+    assert.deepEqual(rows[0], { role: "customer", phone: "07700 900321", terms: "draft-2026-11", meta_phone: null });
     await ctx.close();
   });
 
@@ -83,20 +93,41 @@ export async function authFlows({ browser, BASE, check, shots }) {
   await check("a confirmation link works once", async () => {
     const page = await browser.newPage();
     const link = await mailFor(nia.email, "signup");
-    await page.goto(link);
+    await openLink(page, link);
     await page.waitForURL((u) => u.pathname === "/login" && u.searchParams.get("link") === "expired");
     await page.getByText("That link has expired or has already been used").waitFor();
     await page.close();
+  });
+
+  await check("just opening an email link (as a mail scanner does) uses nothing and signs nobody in (review fix 3)", async () => {
+    const scan = await browser.newContext();
+    const sp = await scan.newPage();
+    const zoe = { name: "Zoe Test", email: `zoe.${Date.now()}@ping.test`, password };
+    await sp.goto(`${BASE}/signup`);
+    await fillSignup(sp, zoe);
+    await sp.getByTestId("check-email").waitFor();
+    const link = await mailFor(zoe.email, "signup");
+    const scanner = await browser.newContext();
+    const s2 = await scanner.newPage();
+    const res = await s2.goto(link); // a plain GET, no button press
+    assert.equal(res.status(), 200);
+    assert.equal(new URL(s2.url()).pathname, "/auth/confirm");
+    const cookies = await scanner.cookies();
+    assert.ok(!cookies.some((k) => k.name.includes("auth-token")), "a GET must not create a session");
+    await scanner.close();
+    await openLink(sp, link); // the real person, later: still works
+    await sp.waitForURL(`${BASE}/account`);
+    await scan.close();
   });
 
   await check("the cleaner application sends new people to sign up and brings them back to /work/apply (B1)", async () => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     await page.goto(`${BASE}/work/apply`);
-    assert.equal(new URL(page.url()).pathname, "/login");
+    // Straight to sign-up (Track B's request): most applicants are new to Ping.
+    assert.equal(new URL(page.url()).pathname, "/signup");
     assert.equal(new URL(page.url()).searchParams.get("next"), "/work/apply");
-    await page.getByRole("link", { name: "Create an account" }).click();
-    await page.waitForURL((u) => u.pathname === "/signup" && u.searchParams.get("next") === "/work/apply");
+    assert.equal(await page.getByRole("link", { name: "Sign in" }).getAttribute("href"), "/login?next=%2Fwork%2Fapply");
     await page.getByText("Your regulars.").waitFor(); // the cleaner version of the page
     const owen = { name: "Owen Test", email: `owen.${Date.now()}@ping.test`, password };
     await fillSignup(page, owen);
@@ -104,13 +135,23 @@ export async function authFlows({ browser, BASE, check, shots }) {
     const link = await mailFor(owen.email, "signup");
     assert.match(link, /next=%2Fwork%2Fapply/);
     const seen = await pathsVisited(page, async () => {
-      await page.goto(link);
+      await openLink(page, link);
       await page.waitForLoadState("networkidle");
     });
     // Sent on to the application. (Until Track B's /work/apply page is merged, main's
     // cleaner-only /work layout then bounces a customer to /account.)
     assert.ok(seen.includes("/work/apply"), `expected a visit to /work/apply, saw ${seen.join(", ")}`);
     await ctx.close();
+  });
+
+  await check("a signed-out visitor to checkout is sent to sign-up, every other app page to sign-in", async () => {
+    const page = await browser.newPage();
+    await page.goto(`${BASE}/account/book`);
+    assert.equal(new URL(page.url()).pathname, "/signup");
+    assert.equal(new URL(page.url()).searchParams.get("next"), "/account/book");
+    await page.goto(`${BASE}/account`);
+    assert.equal(new URL(page.url()).pathname, "/login");
+    await page.close();
   });
 
   await check("an existing customer signing in from /work/apply is sent back there too (B1)", async () => {
@@ -165,6 +206,9 @@ export async function authFlows({ browser, BASE, check, shots }) {
     const link = await mailFor(nia.email, "recovery");
     assert.match(link, /\/auth\/confirm\?flow=reset&token_hash=[0-9a-f]+&type=recovery$/);
     await page.goto(link);
+    await page.getByRole("button", { name: "Continue to reset your password" }).waitFor();
+    if (shots) await page.screenshot({ path: `${shots}/confirm-reset-1440.png`, fullPage: true });
+    await page.getByRole("button", { name: "Continue to reset your password" }).click();
     await page.waitForURL(`${BASE}/reset-password`);
     await page.getByLabel("New password").waitFor();
     if (shots) await page.screenshot({ path: `${shots}/reset-password-1440.png`, fullPage: true });
@@ -181,11 +225,11 @@ export async function authFlows({ browser, BASE, check, shots }) {
 
     // The reset link has been used: opening it again changes nothing. (Signed in, so the
     // expired-link notice on /login gives way to their own app.)
-    await page.goto(link);
+    await openLink(page, link);
     await page.waitForURL(`${BASE}/account`);
     await page.getByRole("button", { name: "Sign out" }).click();
     await page.waitForURL(`${BASE}/login`);
-    await page.goto(link);
+    await openLink(page, link);
     await page.waitForURL((u) => u.pathname === "/login" && u.searchParams.get("link") === "expired");
     await page.getByText("That link has expired or has already been used").waitFor();
     await ctx.close();
@@ -222,7 +266,7 @@ export async function authFlows({ browser, BASE, check, shots }) {
     await page.getByLabel("Email").fill(nia.email);
     await page.getByRole("button", { name: "Send me a reset link" }).click();
     await page.getByTestId("reset-sent").waitFor();
-    await page.goto(await mailFor(nia.email, "recovery"));
+    await openLink(page, await mailFor(nia.email, "recovery"));
     await page.getByLabel("New password").waitFor();
     await page.screenshot({ path: `${shots}/reset-password-390.png`, fullPage: true });
     await ctx.close();

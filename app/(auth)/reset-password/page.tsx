@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { ButtonLink } from "@/components/ui";
-import { RESET_COOKIE } from "@/lib/auth/links";
+import { RESET_COOKIE, resetPassValid } from "@/lib/auth/reset-pass";
 import { getSession } from "@/lib/auth/session";
 import { AuthFrame, FormIntro, Notice } from "../_components/auth-frame";
 import { ResetForm } from "./reset-form";
@@ -11,10 +11,10 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-/** Reached only from a reset email (app/auth/confirm sets the session and a 15-minute pass). */
+/** Reached only from a reset email (/auth/confirm sets the session and a 15-minute pass for that user). */
 export default async function ResetPasswordPage() {
   const [session, jar] = await Promise.all([getSession(), cookies()]);
-  const ready = Boolean(session) && jar.get(RESET_COOKIE)?.value === "1";
+  const ready = Boolean(session) && resetPassValid(jar.get(RESET_COOKIE)?.value, session?.userId);
 
   return (
     <AuthFrame

@@ -82,7 +82,11 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
   });
 
   if (error) {
-    if (error.status === 429) return { values, error: "Too many sign-ups from here just now. Wait a few minutes, then try again." };
+    // Email-sending limits apply per address, so only to addresses that already exist:
+    // answer exactly as for a new address. (The per-IP request limit says nothing about
+    // any address, so that one can be shown.)
+    if (error.code === "over_email_send_rate_limit") return { sent: { email: parsed.data.email } };
+    if (error.code === "over_request_rate_limit") return { values, error: "Too many sign-ups from here just now. Wait a few minutes, then try again." };
     if (error.code === "weak_password") return { values, fieldErrors: { password: "That password is too easy to guess. Try a longer one." } };
     if (error.code === "user_already_exists" || error.code === "email_exists") {
       // Same answer as a new address, so the form can't be used to find out who has an account.
@@ -99,18 +103,19 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
   return { sent: { email: parsed.data.email } };
 }
 
-export type ResendState = { done?: boolean; error?: string };
+export type ResendState = { done?: boolean };
 
 /** "Send it again" on the check-your-email screen. Same reply whatever the address. */
 export async function resendConfirmation(_prev: ResendState, formData: FormData): Promise<ResendState> {
   const email = z.email().max(254).safeParse(String(formData.get("email") ?? "").trim().toLowerCase());
   if (!email.success || !hasSupabaseEnv()) return { done: true };
   const supabase = await createClient();
-  const { error } = await supabase.auth.resend({
+  // Same answer whatever happens, rate limits included: Supabase only limits resends for
+  // addresses that have an account, so "slow down" would reveal the address is registered.
+  await supabase.auth.resend({
     type: "signup",
     email: email.data,
     options: { emailRedirectTo: emailReturnUrl(safeNext(String(formData.get("next") ?? ""))) },
   });
-  if (error?.status === 429) return { error: "We've just sent one. Give it a few minutes and check your junk folder." };
   return { done: true };
 }

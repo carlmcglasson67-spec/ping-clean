@@ -28,6 +28,17 @@ export function safeNext(raw: string | null | undefined): string | null {
   return allowed ? path + url.search : null;
 }
 
+/**
+ * Where a signed-out visitor to an app page is sent. The two places people arrive at
+ * before they have an account (booking a clean, applying to clean) go to sign-up; the
+ * sign-up page links to sign-in, keeping ?next=, for anyone who has one. Everything else
+ * goes to sign-in.
+ */
+export function signedOutEntry(pathname: string): "/signup" | "/login" {
+  if (pathname === "/work/apply" || pathname === "/account/book" || pathname.startsWith("/account/book/")) return "/signup";
+  return "/login";
+}
+
 /** Path part only, for matching against areas. */
 export function pathOf(next: string): string {
   const q = next.indexOf("?");

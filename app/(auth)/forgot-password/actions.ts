@@ -14,9 +14,10 @@ export async function requestReset(_prev: ForgotState, formData: FormData): Prom
   if (!hasSupabaseEnv()) return { email, error: "Password reset isn't switched on yet. The Ping team is setting it up." };
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, { redirectTo: resetReturnUrl() });
-  if (error?.status === 429) return { email, error: "Too many requests just now. Wait a few minutes, then try again." };
-  // Same answer whether or not there's an account for this address (and on any other
-  // error), so the page can't be used to find out who uses Ping.
+  // Same answer whatever happens: account or not, rate-limited or not. Supabase only
+  // rate-limits emails to addresses that have an account, so a "too many requests" reply
+  // here would tell an attacker the address is registered. (Vercel's firewall limits
+  // requests per IP instead: see the PR.)
+  await supabase.auth.resetPasswordForEmail(parsed.data, { redirectTo: resetReturnUrl() });
   return { sent: parsed.data };
 }
