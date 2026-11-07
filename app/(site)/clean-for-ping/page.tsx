@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+import type { Metadata, Route } from "next";
+import Link from "next/link";
 import { ButtonLink, LogoMark } from "@/components/ui";
 import { Crumbs, Eyebrow, Rings, StepList, Tick } from "../_components/blocks";
 import { FaqList } from "../_components/faq-list";
@@ -72,10 +73,16 @@ export default function CleanForPingPage() {
                 Self-employed cleaning in West Cumbria, with regular homes that stay with you and pay that lands in your bank after every clean.
               </p>
               <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-4">
-                <ButtonLink href="/login?next=/work" size="lg" variant="ink">
-                  Sign in to apply
+                {/* /signup arrives with #19. */}
+                <ButtonLink href={"/signup?next=/work/apply" as Route} size="lg" variant="ink">
+                  Apply now
                 </ButtonLink>
-                <p className="max-w-xs text-base font-semibold">New to Ping? Cleaner applications open alongside booking.</p>
+                <p className="text-base font-semibold">
+                  Already have an account?{" "}
+                  <Link href={"/login?next=/work/apply" as Route} className="underline decoration-navy/40 underline-offset-4 hover:decoration-navy">
+                    Sign in
+                  </Link>
+                </p>
               </div>
             </div>
           </div>
@@ -219,11 +226,17 @@ export default function CleanForPingPage() {
             Your round, your rules.
           </h2>
           <div className="relative grid gap-6 lg:col-span-4">
-            <p className="text-lg text-on-navy-2">Already have a Ping login? Sign in and start your application. New cleaner accounts open alongside booking.</p>
-            <div>
-              <ButtonLink href="/login?next=/work" size="lg" variant="signal">
-                Sign in to apply
+            <p className="text-lg text-on-navy-2">Create your account, upload your documents and we&rsquo;ll check everything before your first job.</p>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
+              <ButtonLink href={"/signup?next=/work/apply" as Route} size="lg" variant="signal">
+                Apply now
               </ButtonLink>
+              <p className="text-base text-on-navy-2">
+                Already have an account?{" "}
+                <Link href={"/login?next=/work/apply" as Route} className="font-semibold text-teal underline decoration-teal/40 underline-offset-4 hover:text-on-navy">
+                  Sign in
+                </Link>
+              </p>
             </div>
           </div>
         </div>

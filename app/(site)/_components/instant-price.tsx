@@ -115,7 +115,7 @@ function OpenPrice({ pricing, tone }: { pricing: Open; tone: "card" | "ink" }) {
         <div className="flex flex-wrap items-center gap-x-6 gap-y-4 border-t border-line-navy pt-6">
           {(parsed.kind !== "full" && parsed.kind !== "district") || covered ? (
           <ButtonLink
-            href={`/account/book?${new URLSearchParams({ ...(parsed.kind === "full" ? { postcode: parsed.postcode } : {}), minutes: String(minutes) })}` as Route}
+            href={`/book?${new URLSearchParams({ ...(parsed.kind === "full" ? { postcode: parsed.postcode } : {}), minutes: String(minutes) })}` as Route}
             size="lg"
             variant={covered ? "signal" : "onNavy"}
           >
