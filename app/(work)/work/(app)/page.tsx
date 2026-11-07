@@ -112,7 +112,12 @@ export default async function WorkHome() {
           </Card>
 
           <section aria-labelledby="coming" className="grid content-start gap-4 lg:col-start-1 lg:row-start-2">
-            <h2 id="coming" className="text-xl font-semibold">Coming up</h2>
+            <div className="flex items-baseline justify-between gap-4">
+              <h2 id="coming" className="text-xl font-semibold">Coming up</h2>
+              <Link href="/work/calendar" className="inline-flex min-h-12 items-center font-semibold text-ink underline decoration-line decoration-2 underline-offset-4 hover:decoration-ink">
+                Your calendar
+              </Link>
+            </div>
             {(upcoming.data ?? []).length === 0 ? (
               <EmptyState title="Nothing else booked yet" />
             ) : (
