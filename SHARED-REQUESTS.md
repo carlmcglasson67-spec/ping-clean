@@ -66,6 +66,16 @@ Track A will likely need the same for checkout; worth merging this first.
   "couldn't do" with a reason (for example, no access to a room)? The latter needs a
   `skipped_reason` column on `checklist_items`.
 
+### B7. Town for past cleans of a finished block (optional, small)
+- **What:** after a block ends, RLS (correctly) stops the cleaner reading its property, so
+  their calendar shows those past cleans as "Finished block" with no town.
+- **Why:** cleaners look back ("did I do Whitehaven on the 12th?"), and earnings (item 6)
+  will want the same label.
+- **Proposed:** `public.my_cleans(p_from date, p_to date)`, security definer, returning for
+  the caller's own visits: `visit_id, scheduled_date, window_start, window_end,
+  duration_minutes, status, town, postcode_district, clean_number, block_size`. It returns
+  **town and district only**, never the street, notes or code, for any block, held or not.
+
 ### B6. PWA: manifest icons, a service worker, and web push (item 6)
 - **What:**
   - icons in `public/icons/` and `start_url` per app (the cleaner app wants `/work`) in

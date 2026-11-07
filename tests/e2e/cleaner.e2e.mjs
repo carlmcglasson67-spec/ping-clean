@@ -443,6 +443,64 @@ export async function cleanerFlows({ browser, BASE, check, signIn, SHOTS }) {
     await ctx.close();
   }
 
+  console.log("e2e: calendar (Track B)");
+  {
+    // Tara now holds two blocks: Anna's weekly 8 (clean 2 done today) and Ben's fortnightly 4.
+    const ctx = await browser.newContext(PHONE);
+    const tara = await ctx.newPage();
+    await signIn(tara, "tara.cleaner");
+    await tara.waitForURL(`${BASE}/work`);
+    const [ben] = await sql(`select min(scheduled_date)::text as first, count(*)::int as n from public.visits where series_id = $1`, [BEN_SERIES]);
+
+    await check("this week's agenda shows time, town and place in the block", async () => {
+      await tara.getByRole("link", { name: "Your calendar" }).click();
+      await tara.waitForURL((u) => u.pathname === "/work/calendar");
+      await tara.getByRole("link", { name: "Week" }).click();
+      await tara.waitForURL((u) => u.searchParams.get("view") === "week");
+      await tara.getByText("Workington").first().waitFor();
+      const text = await tara.locator("main").innerText();
+      assert.match(text, /9am\s+Workington\s+Clean 2 of 8 · Done/);
+      await tara.screenshot({ path: `${SHOTS}/work-calendar-week-390.png`, fullPage: true });
+    });
+
+    await check("the month shows every clean of the claimed block, numbered", async () => {
+      await tara.goto(`${BASE}/work/calendar?view=month&date=${ben.first}`);
+      await tara.getByText("Clean 1 of 4").waitFor();
+      assert.equal(ben.n, 4, "claiming booked the whole block");
+      await tara.screenshot({ path: `${SHOTS}/work-calendar-month-390.png`, fullPage: true });
+    });
+
+    await check("no street address, access notes or key code anywhere in the calendar", async () => {
+      for (const view of ["week", "month"]) {
+        await tara.goto(`${BASE}/work/calendar?view=${view}`);
+        const html = await tara.content();
+        for (const secret of ["12 Test Street", "8 Sample Road", "CA14 9ZZ", "Side gate", "Ring the bell", "4721"]) {
+          assert.ok(!html.includes(secret), `${view}: must not include "${secret}"`);
+        }
+      }
+    });
+
+    await check("on a desktop: a month grid and a week with real times, each clean opening the clean", async () => {
+      await tara.setViewportSize({ width: 1440, height: 900 });
+      await tara.goto(`${BASE}/work/calendar?view=month&date=${ben.first}`);
+      await tara.getByRole("link", { name: /Whitehaven, clean 1 of 4/ }).last().waitFor();
+      await tara.screenshot({ path: `${SHOTS}/work-calendar-month-1440.png`, fullPage: true });
+      await tara.goto(`${BASE}/work/calendar?view=week`);
+      await tara.getByRole("link", { name: /^9am, Workington, clean 2 of 8/ }).last().waitFor();
+      await tara.screenshot({ path: `${SHOTS}/work-calendar-week-1440.png`, fullPage: true });
+      await tara.getByRole("link", { name: /^9am, Workington, clean 2 of 8/ }).last().click();
+      await tara.waitForURL(`${BASE}/work/visit/${ANNA_TODAY}`);
+      await tara.getByText("Done. Thank you.").waitFor();
+    });
+
+    await check("a made-up date in the address bar just shows today", async () => {
+      await tara.goto(`${BASE}/work/calendar?view=week&date=2026-02-31`);
+      await tara.locator("main h1").waitFor();
+      assert.ok(!/went wrong|didn.t load/i.test(await tara.locator("main").innerText()));
+    });
+    await ctx.close();
+  }
+
   {
     const ctx = await browser.newContext(PHONE);
     const tara = await ctx.newPage();
