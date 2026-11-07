@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { ButtonLink, PingMark, Wordmark, cn } from "@/components/ui";
-import { AREA_LINKS, CLEANERS_LINK, CLEANING_LINKS } from "../_content/nav";
+import { AREAS_LINK, AREA_LINKS, CLEANERS_LINK, CLEANING_LINKS, FAQ_LINK } from "../_content/nav";
 
 type Menu = "cleaning" | "areas" | null;
 
@@ -97,10 +97,10 @@ export function SiteHeader() {
             {CLEANERS_LINK.label}
           </Link>
           <Link
-            href="/#faq"
+            href={FAQ_LINK.href}
             className="inline-flex min-h-12 items-center rounded-full px-4 text-[1.0625rem] font-semibold text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
           >
-            Help
+            {FAQ_LINK.label}
           </Link>
         </nav>
 
@@ -168,7 +168,10 @@ export function SiteHeader() {
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-ink-2">Where Ping cleans</p>
             <div>
               <p className="font-display text-2xl font-semibold leading-tight">West Cumbria, from the Solway to Seascale.</p>
-              <p className="mt-4 text-ink-2">Ten towns and the villages around them, with local cleaners who choose the areas they cover.</p>
+              <p className="mt-4 text-ink-2">Ten towns and the villages around them. Pick yours to see what a regular clean looks like there.</p>
+              <Link href={AREAS_LINK.href} onClick={close} className="mt-6 inline-flex min-h-12 items-center gap-2 rounded-full bg-ink px-5 text-base font-semibold text-paper hover:bg-[#1d2732]">
+                {AREAS_LINK.label} <span aria-hidden>&rarr;</span>
+              </Link>
             </div>
           </div>
           <ul className="col-span-8 grid grid-cols-3 content-center gap-x-6 gap-y-1">
@@ -210,6 +213,9 @@ export function SiteHeader() {
           <SheetGroup title="Ping">
             <SheetLink href={CLEANERS_LINK.href} onClick={() => setSheet(false)}>
               {CLEANERS_LINK.label}
+            </SheetLink>
+            <SheetLink href={FAQ_LINK.href} onClick={() => setSheet(false)}>
+              Questions
             </SheetLink>
             <SheetLink href="/login" onClick={() => setSheet(false)}>
               Sign in

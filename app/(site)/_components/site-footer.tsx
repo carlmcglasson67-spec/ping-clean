@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
 import { PingMark, Wordmark } from "@/components/ui";
-import { AREA_LINKS, CLEANERS_LINK, CLEANING_LINKS } from "../_content/nav";
+import { AREAS_LINK, AREA_LINKS, CLEANERS_LINK, CLEANING_LINKS } from "../_content/nav";
 
 export function SiteFooter() {
   return (
@@ -23,7 +23,7 @@ export function SiteFooter() {
             ))}
           </FooterCol>
 
-          <FooterCol title="Areas" className="lg:col-span-3">
+          <FooterCol title="Areas" className="lg:col-span-3" more={<FooterLink href={AREAS_LINK.href}>{AREAS_LINK.label} &rarr;</FooterLink>}>
             <div className="grid grid-cols-2 gap-x-6">
               {AREA_LINKS.map((l) => (
                 <FooterLink key={l.label} href={l.href}>
@@ -54,11 +54,12 @@ export function SiteFooter() {
   );
 }
 
-function FooterCol({ title, className, children }: { title: string; className?: string; children: ReactNode }) {
+function FooterCol({ title, className, children, more }: { title: string; className?: string; children: ReactNode; more?: ReactNode }) {
   return (
     <nav aria-label={title} className={className}>
       <h2 className="mb-4 whitespace-nowrap text-sm font-semibold uppercase tracking-[0.16em] text-signal">{title}</h2>
       <div className="grid">{children}</div>
+      {more}
     </nav>
   );
 }
