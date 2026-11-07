@@ -1,63 +1,45 @@
 "use server";
 
 import type { EmailOtpType } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { parseConfirmForm } from "@/lib/auth/confirm-fields";
 import { tidyPhone } from "@/lib/auth/links";
-import { makeResetPass, RESET_COOKIE, RESET_COOKIE_OPTIONS, RESET_PASS_MINUTES } from "@/lib/auth/reset-pass";
 import { safeNext } from "@/lib/auth/next";
 import { postLoginPath } from "@/lib/auth/roles";
 import { createClient } from "@/lib/db/server";
-import { hasSupabaseEnv, resolveSiteUrl } from "@/lib/env";
-
-const TYPES = new Set<EmailOtpType>(["signup", "email", "recovery"]);
+import { hasSupabaseEnv } from "@/lib/env";
 
 /**
  * Spends an email link, only when the person presses the button on /auth/confirm. A plain
  * GET never does: mail scanners that open links can't burn them, and a page on another
  * site can't sign someone into an account that isn't theirs (login CSRF). Server Actions
  * check the request's Origin against Ping's own host, so this can't be posted cross-site.
- *
- *   token_hash + type   the recommended email templates (work on any device)
- *   code                the default PKCE link (only in the browser that asked for it)
+ * Afterwards /auth/confirmed shows which account is now signed in (re-review N6).
  */
 export async function confirmLink(formData: FormData): Promise<void> {
-  const field = (k: string) => {
-    const v = formData.get(k);
-    return typeof v === "string" && v.length <= 512 ? v : null;
-  };
   if (!hasSupabaseEnv()) redirect("/login?link=expired");
+  const parsed = parseConfirmForm(formData);
+  if (!parsed.success) redirect("/login?link=expired");
+  const f = parsed.data;
 
   const supabase = await createClient();
-  const tokenHash = field("token_hash");
-  const type = field("type") as EmailOtpType | null;
-  const code = field("code");
-  let recovery = type === "recovery";
-
-  if (tokenHash && type && TYPES.has(type)) {
-    const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
+  let recovery = f.type === "recovery";
+  if (f.token_hash && f.type) {
+    const { error } = await supabase.auth.verifyOtp({ token_hash: f.token_hash, type: f.type as EmailOtpType });
     if (error) redirect("/login?link=expired");
-  } else if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) redirect("/login?link=expired");
-    recovery = field("flow") === "reset";
   } else {
-    redirect("/login?link=expired");
+    const { error } = await supabase.auth.exchangeCodeForSession(f.code!);
+    if (error) redirect("/login?link=expired");
+    recovery = f.flow === "reset";
   }
 
   const { data } = await supabase.auth.getUser();
   const user = data.user;
   if (!user) redirect("/login?link=expired");
 
-  if (recovery) {
-    const jar = await cookies();
-    jar.set(RESET_COOKIE, makeResetPass(user.id), {
-      ...RESET_COOKIE_OPTIONS,
-      secure: (resolveSiteUrl() ?? "").startsWith("https:"),
-      maxAge: RESET_PASS_MINUTES * 60,
-    });
-    redirect("/reset-password");
-  }
+  // The new-password page checks the session itself (a reset link used in the last
+  // 15 minutes, from the signed token), so nothing needs to be carried over.
+  if (recovery) redirect("/reset-password");
 
   const { data: profile } = await supabase.from("profiles").select("role, phone").eq("id", user.id).maybeSingle();
   if (!profile) redirect("/login?link=expired");
@@ -74,5 +56,6 @@ export async function confirmLink(formData: FormData): Promise<void> {
     await supabase.auth.updateUser({ data: { phone: null } });
   }
 
-  redirect(postLoginPath(profile.role, safeNext(field("next"))));
+  const to = postLoginPath(profile.role, safeNext(f.next));
+  redirect(`/auth/confirmed?next=${encodeURIComponent(to)}` as "/auth/confirmed");
 }

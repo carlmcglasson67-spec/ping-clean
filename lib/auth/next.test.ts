@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { resolveSiteUrl } from "@/lib/env";
 import { safeNext, signedOutEntry } from "./next";
 import { passwordBytes, passwordChecks, passwordProblem } from "./password";
-import { makeResetPass, resetPassValid } from "./reset-pass";
+import { parseConfirmForm } from "./confirm-fields";
+import { maskEmail } from "./mask";
+import { freshRecovery } from "./recovery";
 import { postLoginPath } from "./roles";
 
 describe("safeNext: only paths inside the apps", () => {
@@ -109,19 +111,52 @@ describe("site address (review fix 8)", () => {
   });
 });
 
-describe("reset pass (review fix 5)", () => {
+describe("who may choose a new password (re-review N1)", () => {
   const now = 1_800_000_000_000;
-  it("works for the user it was made for, until it expires", () => {
-    const pass = makeResetPass("user-1", now);
-    expect(resetPassValid(pass, "user-1", now + 60_000)).toBe(true);
-    expect(resetPassValid(pass, "user-2", now + 60_000)).toBe(false); // someone else's session
-    expect(resetPassValid(pass, "user-1", now + 16 * 60_000)).toBe(false); // expired
+  const at = (minsAgo: number) => Math.floor((now - minsAgo * 60_000) / 1000);
+  it("needs a reset link (or one-time code) used in the last 15 minutes, from the signed token", () => {
+    expect(freshRecovery([{ method: "recovery", timestamp: at(1) }], now)).toBe(true);
+    expect(freshRecovery([{ method: "otp", timestamp: at(14) }], now)).toBe(true);
+    expect(freshRecovery([{ method: "password", timestamp: at(30) }, { method: "recovery", timestamp: at(2) }], now)).toBe(true);
   });
-  it("refuses anything else", () => {
-    expect(resetPassValid("1", "user-1", now)).toBe(false); // the old "1" flag
-    expect(resetPassValid(undefined, "user-1", now)).toBe(false);
-    expect(resetPassValid(`user-1.${now + 365 * 86_400_000}`, "user-1", now)).toBe(false); // a forged far-future expiry
-    expect(resetPassValid(makeResetPass("user-1", now), undefined, now)).toBe(false);
+  it("refuses a normal sign-in, an email confirmation, an old reset, and anything malformed", () => {
+    expect(freshRecovery([{ method: "password", timestamp: at(1) }], now)).toBe(false); // a phone left signed in
+    expect(freshRecovery([{ method: "email/signup", timestamp: at(1) }], now)).toBe(false);
+    expect(freshRecovery([{ method: "recovery", timestamp: at(16) }], now)).toBe(false); // too old
+    expect(freshRecovery([{ method: "recovery", timestamp: at(-60) }], now)).toBe(false); // from the future
+    expect(freshRecovery(["recovery"], now)).toBe(false);
+    expect(freshRecovery(undefined, now)).toBe(false);
+    expect(freshRecovery([{ method: "recovery" }], now)).toBe(false);
+  });
+  it("has nothing a hand-built cookie could satisfy: the old cookie scheme is gone", async () => {
+    const mod = await import("./recovery");
+    expect(Object.keys(mod).sort()).toEqual(["RECOVERY_FRESH_MINUTES", "amrEntries", "freshRecovery"]);
+  });
+});
+
+describe("confirm page fields (re-review N7)", () => {
+  const fd = (o: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(o)) f.set(k, v); return f; };
+  it("takes a token hash with a known type, or a PKCE code", () => {
+    expect(parseConfirmForm(fd({ token_hash: "a1b2c3d4e5f6", type: "email", next: "/work/apply", flow: "signup" })).success).toBe(true);
+    expect(parseConfirmForm(fd({ code: "0f8a6c2e-1b3d-4e5f-9a7b-112233445566", flow: "reset" })).success).toBe(true);
+  });
+  it.each([
+    ["no token at all", {}],
+    ["a hash without a type", { token_hash: "a1b2c3d4e5f6" }],
+    ["an unknown type", { token_hash: "a1b2c3d4e5f6", type: "magiclink" }],
+    ["odd characters in the hash", { token_hash: "a1b2c3d4'; drop", type: "email" }],
+    ["an unknown flow", { code: "abcdefgh1234", flow: "admin" }],
+    ["an over-long next", { code: "abcdefgh1234", next: "/" + "a".repeat(600) }],
+  ])("refuses %s", (_why, o) => {
+    expect(parseConfirmForm(fd(o as Record<string, string>)).success).toBe(false);
+  });
+});
+
+describe("signed-in-as (re-review N6)", () => {
+  it("shows enough of the address to recognise it", () => {
+    expect(maskEmail("anna.smith@example.com")).toBe("a•••@example.com");
+    expect(maskEmail(null)).toBe("your account");
+    expect(maskEmail("@x.com")).toBe("your account");
   });
 });
 

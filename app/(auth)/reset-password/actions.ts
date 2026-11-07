@@ -1,8 +1,7 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { RESET_COOKIE, RESET_COOKIE_OPTIONS, resetPassValid } from "@/lib/auth/reset-pass";
+import { freshRecovery } from "@/lib/auth/recovery";
 import { passwordProblem } from "@/lib/auth/password";
 import { homeFor } from "@/lib/auth/roles";
 import { getSession } from "@/lib/auth/session";
@@ -11,9 +10,10 @@ import { createClient } from "@/lib/db/server";
 export type ResetState = { error?: string; fieldError?: string };
 
 export async function setNewPassword(_prev: ResetState, formData: FormData): Promise<ResetState> {
-  const jar = await cookies();
   const session = await getSession();
-  if (!session || !resetPassValid(jar.get(RESET_COOKIE)?.value, session.userId)) {
+  // Checked again here, not just on the page: the signed token must show a reset link used
+  // in the last 15 minutes. Nothing the browser holds can fake that.
+  if (!session || !freshRecovery(session.amr)) {
     return { error: "That reset link has run out. Ask for a new one and use it within 15 minutes." };
   }
   const password = String(formData.get("password") ?? "");
@@ -28,6 +28,5 @@ export async function setNewPassword(_prev: ResetState, formData: FormData): Pro
     if (error.status === 429) return { error: "Too many attempts. Wait a minute, then try again." };
     return { error: "We couldn't change your password just now. Try again in a minute." };
   }
-  jar.delete({ name: RESET_COOKIE, path: RESET_COOKIE_OPTIONS.path });
   redirect(homeFor(session.role));
 }

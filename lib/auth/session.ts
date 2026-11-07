@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { cache } from "react";
 import { createClient } from "@/lib/db/server";
 import { hasSupabaseEnv } from "@/lib/env";
+import { amrEntries, type AmrEntry } from "./recovery";
 import { canEnter, homeFor, type Role } from "./roles";
 
 export type Session = {
@@ -11,6 +12,8 @@ export type Session = {
   email: string | null;
   role: Role;
   fullName: string | null;
+  /** How this session was signed in (password, recovery, …), from the signed token. */
+  amr: AmrEntry[];
 };
 
 /**
@@ -33,7 +36,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
     .maybeSingle();
   if (!profile) return null;
 
-  return { userId: sub, email: profile.email, role: profile.role, fullName: profile.full_name };
+  return { userId: sub, email: profile.email, role: profile.role, fullName: profile.full_name, amr: amrEntries(data.claims.amr) };
 });
 
 /**

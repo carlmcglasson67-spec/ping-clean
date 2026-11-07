@@ -19,6 +19,13 @@ async function openLink(page, link, button = /Confirm my email|Continue to reset
   await page.goto(link);
   await page.getByRole("button", { name: button }).click();
 }
+/** After confirming: the page names the signed-in account (re-review N6), then Continue. */
+async function continueAfterConfirm(page, email) {
+  await page.waitForURL((u) => u.pathname === "/auth/confirmed");
+  const masked = `${email[0]}•••${email.slice(email.lastIndexOf("@"))}`;
+  await page.getByText(masked).waitFor();
+  await page.getByRole("link", { name: "Continue" }).click();
+}
 const setConfirm = (confirm) => fetch(`${FAKE}/__test/config`, { method: "POST", body: JSON.stringify({ confirm }) });
 
 async function fillSignup(page, { name, email, password, phone = "", terms = true, privacy = true }) {
@@ -71,6 +78,10 @@ export async function authFlows({ browser, BASE, check, shots }) {
     await page.getByRole("button", { name: "Confirm my email" }).waitFor();
     if (shots) await page.screenshot({ path: `${shots}/confirm-email-1440.png`, fullPage: true });
     await page.getByRole("button", { name: "Confirm my email" }).click();
+    await page.waitForURL((u) => u.pathname === "/auth/confirmed");
+    await page.getByText("Not you?").waitFor();
+    if (shots) await page.screenshot({ path: `${shots}/confirmed-1440.png`, fullPage: true });
+    await continueAfterConfirm(page, nia.email);
     await page.waitForURL(`${BASE}/account`);
     await page.getByRole("heading", { name: "Hello, Nia." }).waitFor();
     const c = db(); await c.connect();
@@ -116,6 +127,7 @@ export async function authFlows({ browser, BASE, check, shots }) {
     assert.ok(!cookies.some((k) => k.name.includes("auth-token")), "a GET must not create a session");
     await scanner.close();
     await openLink(sp, link); // the real person, later: still works
+    await continueAfterConfirm(sp, zoe.email);
     await sp.waitForURL(`${BASE}/account`);
     await scan.close();
   });
@@ -136,6 +148,7 @@ export async function authFlows({ browser, BASE, check, shots }) {
     assert.match(link, /next=%2Fwork%2Fapply/);
     const seen = await pathsVisited(page, async () => {
       await openLink(page, link);
+      await continueAfterConfirm(page, owen.email);
       await page.waitForLoadState("networkidle");
     });
     // Sent on to the application. (Until Track B's /work/apply page is merged, main's
@@ -169,15 +182,21 @@ export async function authFlows({ browser, BASE, check, shots }) {
     await ctx.close();
   });
 
-  await check("a ?next= pointing off Ping is ignored", async () => {
+  await check("a ?next= pointing off Ping is ignored; with confirmation off the phone still leaves the metadata (N3)", async () => {
     await setConfirm(false);
     try {
       const ctx = await browser.newContext();
       const page = await ctx.newPage();
       await page.goto(`${BASE}/signup?next=${encodeURIComponent("https://evil.example/account")}`);
-      await fillSignup(page, { name: "Ruth Test", email: `ruth.${Date.now()}@ping.test`, password });
+      const ruth = { name: "Ruth Test", email: `ruth.${Date.now()}@ping.test`, password, phone: "07700 900456" };
+      await fillSignup(page, ruth);
       // Confirmation is off in this check, so sign-up signs straight in.
       await page.waitForURL(`${BASE}/account`);
+      const c = db(); await c.connect();
+      const { rows } = await c.query(`select p.phone, u.raw_user_meta_data ->> 'phone' as meta_phone
+        from public.profiles p join auth.users u on u.id = p.id where u.email = $1`, [ruth.email]);
+      await c.end();
+      assert.deepEqual(rows[0], { phone: "07700 900456", meta_phone: null });
       await ctx.close();
     } finally {
       await setConfirm(true);
@@ -249,6 +268,15 @@ export async function authFlows({ browser, BASE, check, shots }) {
     await page.waitForURL(`${BASE}/account`);
     await page.goto(`${BASE}/reset-password`);
     await page.getByTestId("reset-expired").waitFor();
+    // A hand-built reset cookie (the old scheme, forged in the console) opens nothing:
+    // only the signed session token counts now (re-review N1).
+    const anna = "00000000-0000-4000-a000-000000000002";
+    for (const value of [`${anna}.${Date.now() + 14 * 60_000}`, "1"]) {
+      await ctx.addCookies([{ name: "ping-reset", value, url: `${BASE}/reset-password` }]);
+      await page.goto(`${BASE}/reset-password`);
+      await page.getByTestId("reset-expired").waitFor();
+      assert.equal(await page.getByLabel("New password").count(), 0);
+    }
     await ctx.close();
   });
 

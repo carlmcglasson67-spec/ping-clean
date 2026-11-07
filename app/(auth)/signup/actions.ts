@@ -97,7 +97,11 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
 
   if (data.session && data.user) {
     // Email confirmation is off for this project: they're signed in already.
-    if (phone) await supabase.from("profiles").update({ phone }).eq("id", data.user.id);
+    // Same as after confirming: the phone moves to the profile and leaves the metadata (N3).
+    if (phone) {
+      await supabase.from("profiles").update({ phone }).eq("id", data.user.id);
+      await supabase.auth.updateUser({ data: { phone: null } });
+    }
     redirect(postLoginPath("customer", next));
   }
   return { sent: { email: parsed.data.email } };
