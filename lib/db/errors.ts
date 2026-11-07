@@ -7,6 +7,7 @@ export const PING_ERRORS = {
   PC001: "That job isn't available to you.",
   PC002: "Another cleaner claimed this one first.",
   PC003: "That job is no longer open to you.",
+  PC004: "That job can't go ahead on its dates any more.",
   // The visit day
   PC010: "That clean isn't yours.",
   PC011: "That clean is booked for another day.",

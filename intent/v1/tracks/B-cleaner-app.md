@@ -10,8 +10,10 @@ lib/, components/ui/, supabase/, package.json, other route groups.
 Need a shared change? Write it in SHARED-REQUESTS.md and stop that piece.
 
 ## Blocks, rebooking, "couldn't do" (Carl, 7 Nov 2026)
-- Every job is a **block of 1 to 8 cleans**. Claiming takes the whole block. `job_board()`
-  returns `block_size` and `ends_on` (last clean): show "4 cleans, fortnightly, last one 18 Dec".
+- Every job is a **block of 1 to 8 cleans**. Claiming takes the whole block and books all its
+  cleans at once. `job_board()` returns `block_size` (the cleans they'd really do if they took
+  it now) and `ends_on` (last clean): show "4 cleans, fortnightly, last one 18 Dec". PC004 = the
+  job can't go ahead on its dates any more.
 - **Rebooks**: when a customer books again, the cleaner who did their last block gets first
   refusal for a while (`job_board().first_refusal = true`): show it as "Your customer has
   booked again". Still town and district only until claimed.

@@ -115,6 +115,20 @@ Lock order everywhere: series → cleaner → visit/offers.
   once that passes); a same-id race across two homes answers as a replay (series or PC028);
   a failed missed-cleans sweep raises a `generate_failed` alert; the sweep skips paused blocks
   (TODO: pause must handle ending and address access).
+- **Final review: model change.** Three rounds found edge cases in "ends_on is a moving
+  estimate", so a held block's dates are now authoritative:
+  - `claim_series` / `admin_assign_series` book **every** remaining clean of the block at once
+    (≤ 8, so ≤ 32 weeks ahead); `ends_on` is the real last clean. The nightly 28-day horizon
+    only matters for blocks booked gradually before this change.
+  - A block is short only by an explicit, exact `series.cut_short_cleans` (cleans that would
+    fall on or after the start of a later live block at the same home), with a
+    `block_overlap` alert stating the number.
+  - A block ends only when booked + cut short = `block_size` and the last clean has
+    happened or passed. A held block whose dates passed with cleans missing for any other
+    reason (e.g. suspended cleaner) is not ended: one `block_stalled` alert.
+  - A block that would get no cleans can't be claimed or assigned (PC004), is hidden from the
+    board (which shows the true number of cleans), and raises an alert on release.
+  - Run-wide alerts (no series) are de-duplicated too.
 - Reasons need a word of 3+ letters/digits (`[[:alnum:]]{3,}`); photos must be owned by the
   cleaner and non-empty; `job_board()` shows only offers the cleaner can claim now;
   `private.stamp_checklist_tick()` revoked from public.

@@ -542,6 +542,7 @@ export type Database = {
           client_request_id: string | null;
           rebook_of: string | null;
           first_refusal_cleaner_id: string | null;
+          cut_short_cleans: number;
         };
         Insert: {
           id?: string;
@@ -568,6 +569,7 @@ export type Database = {
           client_request_id?: string | null;
           rebook_of?: string | null;
           first_refusal_cleaner_id?: string | null;
+          cut_short_cleans?: number;
         };
         Update: {
           id?: string;
@@ -594,6 +596,7 @@ export type Database = {
           client_request_id?: string | null;
           rebook_of?: string | null;
           first_refusal_cleaner_id?: string | null;
+          cut_short_cleans?: number;
         };
         Relationships: [];
       };

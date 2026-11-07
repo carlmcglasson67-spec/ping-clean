@@ -165,6 +165,12 @@ begin
   on conflict on constraint job_offers_one_per_round do nothing;
   get diagnostics offers_created = row_count;
 
+  if private.block_capacity(s.id) = 0 then
+    insert into public.engine_alerts (kind, series_id, message)
+    select 'block_overlap', s.id, 'This block can''t go ahead: the next block booked at the same home starts before its first clean. Agree with the customer what happens.'
+    where not exists (select 1 from public.engine_alerts a where a.series_id = s.id and a.kind = 'block_overlap' and a.resolved_at is null);
+  end if;
+
   now_unclaimed := false;
   if s.status = 'offering'
      and now() - s.offering_since >= make_interval(mins => st.top_window_minutes + st.approved_window_minutes + st.unclaimed_alert_minutes) then
@@ -174,23 +180,71 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- visits
--- Count-based: a block never has more visits than block_size, however far ahead the
--- horizon reaches. Dates follow the cadence from the block's first clean, after today
--- (London) and inside the horizon. A block claimed late, or put back on the board, slips
--- forward instead of losing cleans; ends_on follows it. Idempotent.
+-- The model (after three review rounds, kept deliberately simple):
+--   * A block's dates are authoritative once it is held. Claiming or assigning books EVERY
+--     remaining clean of the block at once (at most 8, so at most 32 weeks ahead), on the
+--     cadence from the first date after today. ends_on is then the real last clean.
+--   * Count-based: a block never has more visits than block_size.
+--   * A block never books a clean on or after the start of another live block at the same
+--     home. If that means some of its cleans can't happen, the exact number is recorded in
+--     series.cut_short_cleans and the admin is told. That is the ONLY way a block is short.
+--   * A block ends when every clean is accounted for (booked + cut short = block_size) and
+--     the last one has happened or passed. A held block whose dates have passed with cleans
+--     still missing for any other reason (e.g. the cleaner was suspended) is never ended
+--     silently: the admin gets an alert instead.
+
+-- How many of a block's cleans were lost because the next block at the same home starts first.
+alter table public.series
+  add column cut_short_cleans smallint not null default 0 check (cut_short_cleans between 0 and 8);
+alter table public.series add constraint series_cut_short_within_block check (cut_short_cleans <= block_size);
+
+-- Where a block stands: visits it has, its last one, the first date of a later live block at
+-- the same home (the cutoff), the next cadence date it could use, and how many more cleans
+-- still fit before the cutoff (never more than the block has left).
+create function private.block_room(
+  p_series uuid,
+  out have integer, out last_date date, out cutoff date, out next_date date, out room integer
+)
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  s public.series;
+  first_date date;
+  step integer;
+begin
+  select * into s from public.series where id = p_series;
+  first_date := private.block_first_date(s.starts_on, s.preferred_day);
+  step := private.cadence_days(s.frequency);
+  select count(*), max(v.scheduled_date) into have, last_date from public.visits v where v.series_id = s.id;
+  select min(private.block_first_date(o.starts_on, o.preferred_day)) into cutoff
+  from public.series o
+  where o.property_id = s.property_id and o.id <> s.id
+    and o.status in ('offering', 'unclaimed', 'claimed', 'paused')
+    and private.block_first_date(o.starts_on, o.preferred_day) > first_date;
+  next_date := private.next_cadence_after(first_date, step, greatest(private.london_today(), coalesce(last_date, private.london_today())));
+  room := greatest(s.block_size - have, 0);
+  if cutoff is not null then
+    room := least(room, case when cutoff <= next_date then 0 else (cutoff - next_date - 1) / step + 1 end);
+  end if;
+end $$;
+
+-- How many cleans a cleaner would really get by taking this block now.
+create function private.block_capacity(p_series uuid) returns integer
+language sql stable security definer set search_path = '' as $$
+  select r.room + (select count(*)::int from public.visits v
+                   where v.series_id = p_series and v.status = 'scheduled' and v.scheduled_date >= private.london_today())
+  from private.block_room(p_series) r
+$$;
+
 create or replace function private.generate_visits_for_series(p_series uuid, p_until date)
 returns integer
 language plpgsql security definer set search_path = '' as $$
 declare
   s public.series;
-  first_date date;
+  r record;
   step integer;
-  have integer;
-  last_date date;
   inserted integer := 0;
+  lost integer;
   new_end date;
-  cutoff date;
-  today date := private.london_today();
 begin
   -- A pause or end committing at the same moment waits for us, or we see it.
   select * into s from public.series where id = p_series for no key update;
@@ -203,68 +257,80 @@ begin
   ) then
     return 0;  -- held by a suspended or departed cleaner: no visits they can't do
   end if;
-
-  first_date := private.block_first_date(s.starts_on, s.preferred_day);
   step := private.cadence_days(s.frequency);
-  select count(*) into have from public.visits where series_id = s.id;
 
-  -- Backstop: never book a clean on or after the start of another live block at this home
-  -- (a block that slipped, e.g. claimed late or put back on the board, could otherwise run
-  -- into the next one). Those cleans aren't made; the admin is told below.
-  select min(private.block_first_date(o.starts_on, o.preferred_day)) into cutoff
-  from public.series o
-  where o.property_id = s.property_id and o.id <> s.id
-    and o.status in ('offering', 'unclaimed', 'claimed', 'paused')
-    and private.block_first_date(o.starts_on, o.preferred_day) > first_date;
-
-  if have < s.block_size then
+  select * into r from private.block_room(s.id);
+  if r.room > 0 then
     insert into public.visits (series_id, customer_id, cleaner_id, scheduled_date, window_start, window_end,
                                duration_minutes, price_pence, cleaner_earnings_pence, ping_fee_pence)
     select s.id, s.customer_id, s.cleaner_id, d.d, s.window_start, s.window_end, s.duration_minutes,
            p.price_pence, p.cleaner_earnings_pence, p.ping_fee_pence
     from (
       select g::date as d
-      from generate_series(private.next_cadence_after(first_date, step, today), p_until, make_interval(days => step)) as g
-      where not exists (select 1 from public.visits v where v.series_id = s.id and v.scheduled_date = g::date)
-        and (cutoff is null or g::date < cutoff)
+      from generate_series(r.next_date, coalesce(p_until, r.next_date + step * r.room), make_interval(days => step)) as g
+      where (r.cutoff is null or g::date < r.cutoff)
+        and not exists (select 1 from public.visits v where v.series_id = s.id and v.scheduled_date = g::date)
       order by 1
-      limit s.block_size - have
+      limit r.room
     ) d
     cross join lateral private.split_visit_price(s.price_per_hour_pence, s.duration_minutes, s.commission_type, s.commission_value) as p
     on conflict (series_id, scheduled_date) do nothing;
     get diagnostics inserted = row_count;
   end if;
 
-  -- Keep ends_on on the block's real (or, if not all booked yet, projected) last clean.
-  select count(*), max(scheduled_date) into have, last_date from public.visits where series_id = s.id;
-  if have >= s.block_size then
-    new_end := last_date;
-  else
-    new_end := private.next_cadence_after(first_date, step, greatest(today, coalesce(last_date, today)))
-               + step * (s.block_size - have - 1);
-    if cutoff is not null and new_end >= cutoff then
-      -- Cut short by the next block: it ends with the last clean it has, and the admin
-      -- decides what to do about the cleans that didn't fit.
-      new_end := greatest(coalesce(last_date, s.starts_on), s.starts_on);
-      insert into public.engine_alerts (kind, series_id, message)
-      select 'block_overlap', s.id,
-             'A block slipped into the next block booked at the same home, so ' || (s.block_size - have)
-             || ' of its cleans were not booked. Agree with the customer what happens to them.'
-      where not exists (select 1 from public.engine_alerts a
-                        where a.series_id = s.id and a.kind = 'block_overlap' and a.resolved_at is null);
+  -- Where the block stands now: cleans that will never fit are recorded, exactly.
+  select * into r from private.block_room(s.id);
+  lost := greatest(s.block_size - r.have - r.room, 0);
+  if lost is distinct from s.cut_short_cleans then
+    update public.series set cut_short_cleans = lost where id = s.id;
+    if lost > 0 then
+      update public.engine_alerts set message = private.cut_short_message(lost)
+      where series_id = s.id and kind = 'block_overlap' and resolved_at is null;
+      if not found then
+        insert into public.engine_alerts (kind, series_id, message)
+        values ('block_overlap', s.id, private.cut_short_message(lost));
+      end if;
     end if;
   end if;
-  if new_end is not null and new_end >= s.starts_on and new_end is distinct from s.ends_on then
+
+  -- ends_on: the real last clean once everything that fits is booked; until then (only a
+  -- block booked gradually, e.g. one created before this change) the projected one.
+  new_end := case when r.room > 0 then r.next_date + step * (r.room - 1)
+                  else greatest(coalesce(r.last_date, s.starts_on), s.starts_on) end;
+  if new_end is distinct from s.ends_on then
     update public.series set ends_on = new_end where id = s.id;
   end if;
 
   return inserted;
 end $$;
 
--- Visits left behind after their day, for a person to look at.
+create function private.cut_short_message(p_lost integer) returns text
+language sql immutable set search_path = '' as $$
+  select 'This block ran into the next block booked at the same home, so ' || p_lost
+         || ' of its cleans could not be booked. Agree with the customer what happens to '
+         || case when p_lost = 1 then 'it.' else 'them.' end
+$$;
+
+-- What the engine needs a person to look at, now including blocks.
 alter table public.engine_alerts drop constraint engine_alerts_kind_check;
 alter table public.engine_alerts add constraint engine_alerts_kind_check
-  check (kind in ('release_failed', 'generate_failed', 'visit_needs_cover', 'visit_no_show', 'visit_unfinished', 'block_overlap'));
+  check (kind in ('release_failed', 'generate_failed', 'visit_needs_cover', 'visit_no_show', 'visit_unfinished',
+                  'block_overlap', 'block_stalled'));
+
+-- One open alert per kind and series, including the run-wide ones with no series (the
+-- engine's unique index can't see those: NULLs are never equal).
+create or replace function private.note_engine_failure(p_kind text, p_series uuid, p_error text)
+returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+  raise warning '%: series % skipped: %', p_kind, p_series, p_error;
+  insert into public.engine_alerts (kind, series_id, message)
+  select p_kind, p_series, left(case p_kind when 'release_failed' then 'Couldn''t release offers: '
+                                            else 'Couldn''t book visits: ' end || p_error, 500)
+  where not exists (select 1 from public.engine_alerts a
+                    where a.kind = p_kind and a.series_id is not distinct from p_series and a.resolved_at is null)
+  on conflict do nothing;
+end $$;
 
 -- Nightly: a clean still 'scheduled' after its day never happened, so it becomes a no-show
 -- and the admin is told. One still 'in_progress' after its day was started but never
@@ -299,26 +365,43 @@ begin
   return n;
 end $$;
 
--- A held block is over when all its cleans exist and either none is still to do, or its
--- last date has passed (whatever state the cleans were left in: those are alerts for the
--- admin, not a reason to keep the address open). It ends, and with it the cleaner's access
--- to the address, key code and messages.
+-- A held block is over when every clean is accounted for (booked, or recorded as cut short)
+-- and none is still to do, or the last one's date has passed (whatever state the cleans
+-- were left in: those are alerts for the admin, not a reason to keep the address open). It
+-- ends, and with it the cleaner's access to the address, key code and messages.
+-- A held block whose dates have passed with cleans unaccounted for (e.g. its cleaner was
+-- suspended, so nothing more was booked) is NOT ended: the admin is told, once.
 create function private.end_block_if_done(p_series uuid) returns boolean
 language plpgsql security definer set search_path = '' as $$
 declare
-  n integer;
+  s public.series;
+  have integer;
+  last_date date;
+  pending boolean;
 begin
-  update public.series s set status = 'ended'
-  where s.id = p_series
-    and s.status = 'claimed'
-    and ((select count(*) from public.visits v where v.series_id = s.id) >= s.block_size
-         or s.ends_on < private.london_today())  -- cut short (see generate_visits_for_series)
-    and (
-      not exists (select 1 from public.visits v where v.series_id = s.id and v.status in ('scheduled', 'in_progress'))
-      or (select max(v.scheduled_date) from public.visits v where v.series_id = s.id) < private.london_today()
-    );
-  get diagnostics n = row_count;
-  return n > 0;
+  select * into s from public.series where id = p_series;
+  if not found or s.status <> 'claimed' then
+    return false;
+  end if;
+  select count(*), max(scheduled_date), bool_or(status in ('scheduled', 'in_progress'))
+  into have, last_date, pending
+  from public.visits where series_id = s.id;
+
+  if have + s.cut_short_cleans >= s.block_size
+     and (not coalesce(pending, false) or last_date < private.london_today()) then
+    update public.series set status = 'ended' where id = s.id;
+    return true;
+  end if;
+
+  if s.ends_on < private.london_today() and have + s.cut_short_cleans < s.block_size then
+    insert into public.engine_alerts (kind, series_id, message)
+    select 'block_stalled', s.id,
+           'This block''s dates have passed but only ' || have || ' of its ' || s.block_size
+           || ' cleans were ever booked (was its cleaner suspended?). Sort it out with the customer, then end or reopen it.'
+    where not exists (select 1 from public.engine_alerts a
+                      where a.series_id = s.id and a.kind = 'block_stalled' and a.resolved_at is null);
+  end if;
+  return false;
 end $$;
 
 -- When a held job changes hands (claimed or assigned after going back on the board), any
@@ -378,7 +461,8 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- job board
--- Adds the block (how many cleans, last one) and whether it's a first-refusal rebook.
+-- Adds the block (block_size = the cleans the cleaner would really do if they took it now;
+-- ends_on = its planned last clean) and whether it's a first-refusal rebook.
 -- Address privacy unchanged: town and district only until claimed.
 drop function public.job_board();
 create function public.job_board()
@@ -413,7 +497,7 @@ begin
     select o.id, s.id, o.tier, o.opens_at, pr.town, pr.postcode_district, pr.bedrooms, pr.bathrooms,
            nullif(trim(pr.pets), '') is not null,
            s.frequency, s.preferred_day, s.window_start, s.window_end, s.duration_minutes, s.starts_on,
-           p.cleaner_earnings_pence, s.status, s.block_size, s.ends_on, o.first_refusal
+           p.cleaner_earnings_pence, s.status, private.block_capacity(s.id)::smallint, s.ends_on, o.first_refusal
     from public.job_offers o
     join public.series s on s.id = o.series_id and o.round = s.offer_round
     join public.properties pr on pr.id = s.property_id
@@ -425,6 +509,7 @@ begin
       -- Only what they could claim right now (same rule claim_series checks), so pressing
       -- Claim never fails because their tier's window isn't open (yet, or any more).
       and exists (select 1 from private.eligible_cleaners(s.id) e where e.cleaner_id = (select auth.uid()))
+      and private.block_capacity(s.id) > 0  -- never a job that can't go ahead on its dates
     order by o.opens_at;
 end $$;
 
@@ -459,6 +544,9 @@ begin
      or not exists (select 1 from private.eligible_cleaners(s.id) e where e.cleaner_id = me) then
     raise exception 'That job is no longer open to you' using errcode = 'PC003';
   end if;
+  if private.block_capacity(s.id) = 0 then
+    raise exception 'That job can''t go ahead on its dates any more' using errcode = 'PC004';
+  end if;
 
   update public.series set cleaner_id = me, status = 'claimed', claimed_at = now(), offering_since = null
   where id = s.id;
@@ -468,7 +556,7 @@ begin
     and job_offers.status in ('open', 'pending');
 
   perform private.hand_over_visits(s.id, me);
-  perform private.generate_visits_for_series(s.id, private.london_today() + 28);
+  perform private.generate_visits_for_series(s.id, null);  -- the whole block, now
   return s.id;
 end $$;
 
@@ -492,6 +580,9 @@ begin
   if not found then
     raise exception 'That cleaner isn''t active' using errcode = 'PC001';
   end if;
+  if private.block_capacity(s.id) = 0 then
+    raise exception 'That job can''t go ahead on its dates any more' using errcode = 'PC004';
+  end if;
 
   update public.series set cleaner_id = p_cleaner, status = 'claimed', claimed_at = now(), offering_since = null
   where id = s.id;
@@ -504,7 +595,7 @@ begin
     and job_offers.status in ('open', 'pending');
 
   perform private.hand_over_visits(s.id, p_cleaner);
-  perform private.generate_visits_for_series(s.id, private.london_today() + 28);
+  perform private.generate_visits_for_series(s.id, null);  -- the whole block, now
 end $$;
 
 -- ---------------------------------------------------------------- booking (A-3)
@@ -673,6 +764,9 @@ revoke all on function private.cleaner_fits(uuid, text, smallint) from public;
 revoke all on function private.eligible_cleaners(uuid) from public;
 revoke all on function private.end_block_if_done(uuid) from public;
 revoke all on function private.close_stale_visits() from public;
+revoke all on function private.block_room(uuid) from public;
+revoke all on function private.block_capacity(uuid) from public;
+revoke all on function private.cut_short_message(integer) from public;
 revoke all on function private.hand_over_visits(uuid, uuid) from public;
 revoke all on function private.replayed_booking(uuid, uuid, uuid, public.series_frequency, smallint, time, time, integer, date, smallint) from public;
 revoke all on function public.claim_series(uuid) from public, anon;

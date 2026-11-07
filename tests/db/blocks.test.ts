@@ -730,6 +730,117 @@ describe("re-review: a block that slips never runs into the next one at the same
   });
 });
 
+// ---------------------------------------------------------------- final review: authoritative block dates
+describe("final review: a held block's dates are real, and only an explicit cut makes it short", () => {
+  const fakeToday = (q: Query, sqlDate: string) =>
+    q.rows(`create or replace function private.london_today() returns date language sql stable set search_path = '' as $$ select ${sqlDate} $$`);
+  const one = async <T>(q: Query, sql: string, params: unknown[] = []) => (await q.rows<{ v: T }>(sql, params))[0]!.v;
+  // Days from the real London date (booking() builds its dates from the real date too).
+  const dayOffset = (q: Query, d: string) => one<number>(q, `select ($1::date - (now() at time zone 'Europe/London')::date) as v`, [d]);
+
+  it("claiming books the whole block at once, beyond the 28-day horizon, and ends_on is its real last clean", async () => {
+    const r = await setupThen(async () => {}, U.tara, async (q) => {
+      const [o] = await q.rows<{ offer_id: string }>(`select offer_id from public.job_board()`);
+      await q.rows(`select public.claim_series($1)`, [o!.offer_id]);
+      await q.rows(`reset role`);
+      return q.rows(`select (select count(*)::int from public.visits where series_id = s.id) as n,
+                            (select max(scheduled_date) from public.visits where series_id = s.id) = s.ends_on as real_end,
+                            (select max(scheduled_date) from public.visits where series_id = s.id) - private.london_today() > 28 as beyond
+                     from public.series s where s.id = $1`, [IDS.benSeries]);
+    });
+    expect(r[0]).toEqual({ n: 4, real_end: true, beyond: true });
+  });
+
+  it("r3: a customer can't book into a held block's dates, and a block in the gap after a cut one changes nothing", async () => {
+    const r = await as("superuser", async (q) => {
+      await q.rows(`update public.series set status = 'ended' where id = $1`, [IDS.benSeries]);
+      await q.rows(`update public.cleaners set availability = '[]'`);
+      // Block A: 8 weekly Wednesdays, held by Tara: all 8 booked now.
+      await q.actAs(U.ben);
+      const a = await book(q, booking({ frequency: "weekly", day: 3, startsIn: 3, block: 8 }));
+      await q.actAs(U.admin);
+      await q.rows(`select public.admin_assign_series($1, $2)`, [a, U.tara]);
+      const aEnd = await one<string>(q, `select ends_on::text as v from public.series where id = $1`, [a]);
+      // Truncation attempt 1: a 1-clean block inside A's dates.
+      await q.actAs(U.ben);
+      const inside = await q.attempt(BOOK, booking({ frequency: "weekly", day: 3, startsIn: 20, block: 1 }));
+      // Block B (1 clean) right after A, held by Tara too.
+      const b = await book(q, booking({ frequency: "weekly", day: 3, startsIn: (await dayOffset(q, aEnd)) + 1, block: 1 }));
+      await q.actAs(U.admin);
+      await q.rows(`select public.admin_assign_series($1, $2)`, [b, U.tara]);
+      // Tara drops A a few days in; Alex takes it two weeks later, so it slips into B.
+      await q.rows(`reset role`);
+      await fakeToday(q, `(now() at time zone 'Europe/London')::date + 3`);
+      await q.rows(`select private.reopen_series($1)`, [a]);
+      await fakeToday(q, `(now() at time zone 'Europe/London')::date + 17`);
+      await q.actAs(U.admin);
+      await q.rows(`select public.admin_assign_series($1, $2)`, [a, U.alex]);
+      await q.rows(`reset role`);
+      const cut = await q.rows<{ n: number; cut: number; last: string; ends: string; bFirst: string; msg: string }>(
+        `select (select count(*)::int from public.visits where series_id = $1) as n, s.cut_short_cleans as cut,
+                (select max(scheduled_date)::text from public.visits where series_id = $1) as last, s.ends_on::text as ends,
+                (select min(scheduled_date)::text from public.visits where series_id = $2) as "bFirst",
+                (select message from public.engine_alerts where series_id = $1 and kind = 'block_overlap') as msg
+         from public.series s where s.id = $1`, [a, b]);
+      // Truncation attempt 2: a 1-clean Friday block in the gap between A's last clean and B.
+      const gapDay = await one<number>(q, `select extract(isodow from $1::date + 2)::int as v`, [cut[0]!.last]);
+      await q.actAs(U.ben);
+      const gap = await q.attempt(BOOK, booking({ frequency: "weekly", day: gapDay, startsIn: (await dayOffset(q, cut[0]!.last)) + 1, block: 1 }));
+      await q.rows(`reset role`);
+      await fakeToday(q, `(now() at time zone 'Europe/London')::date + 24`);
+      await q.rows(`select private.generate_visits()`);
+      const after = await q.rows(`select (select count(*)::int from public.visits where series_id = $1) as n, cut_short_cleans as cut, ends_on::text as ends
+                                  from public.series where id = $1`, [a]);
+      return { inside, cut: cut[0]!, gap, after: after[0] };
+    });
+    expect(r.inside).toBe("PC027");
+    expect(r.cut.last < r.cut.bFirst).toBe(true);
+    expect(r.cut.ends).toBe(r.cut.last);
+    expect(r.cut.n + r.cut.cut).toBe(8);                         // every clean accounted for, exactly
+    expect(r.cut.msg).toContain(`so ${r.cut.cut} of its cleans`); // the alert says exactly how many
+    expect(r.gap).toBe("ok");                                     // allowed, and harmless:
+    expect(r.after).toEqual({ n: r.cut.n, cut: r.cut.cut, ends: r.cut.ends });
+  });
+
+  it("r4: a block whose cleaner was suspended is never ended short silently: the admin is told, once", async () => {
+    const r = await as("superuser", async (q) => {
+      await q.rows(`update public.cleaners set status = 'suspended' where id = $1`, [U.tara]);
+      await fakeToday(q, `(select ends_on + 1 from public.series where id = '${IDS.annaSeries}')`);
+      await q.rows(`select private.generate_visits()`);
+      await q.rows(`select private.generate_visits()`);
+      return {
+        status: await one<string>(q, `select status::text as v from public.series where id = $1`, [IDS.annaSeries]),
+        alerts: await q.rows<{ message: string }>(`select message from public.engine_alerts where kind = 'block_stalled' and series_id = $1`, [IDS.annaSeries]),
+      };
+    });
+    expect(r.status).toBe("claimed");
+    expect(r.alerts).toHaveLength(1);
+    expect(r.alerts[0]!.message).toContain("only 3 of its 8 cleans");
+  });
+
+  it("won't let anyone take a block that would get no cleans, hides it from the board and tells the admin", async () => {
+    const r = await as("superuser", async (q) => {
+      // Ben's block A went back on the board long ago; block B at the same home starts tomorrow.
+      await q.rows(`update public.series set starts_on = private.london_today() - 14 where id = $1`, [IDS.benSeries]);
+      await q.rows(`insert into public.series (property_id, customer_id, cleaner_id, frequency, preferred_day, window_start, window_end,
+                      duration_minutes, price_per_hour_pence, commission_type, commission_value, status, starts_on, claimed_at,
+                      offering_since, block_size)
+                    values ($1, $2, $3, 'weekly', extract(isodow from private.london_today() + 1)::smallint, '10:00', '14:00',
+                      120, 2000, 'percent', 2500, 'claimed', private.london_today() + 1, now(), null, 1)`, [IDS.benProperty, U.ben, U.alex]);
+      await q.actAs(U.tara);
+      const board = await q.rows(`select * from public.job_board() where series_id = $1`, [IDS.benSeries]);
+      const claim = await q.attempt(`select public.claim_series((select id from public.job_offers where series_id = $1 and cleaner_id = $2))`, [IDS.benSeries, U.tara]);
+      await q.actAs(U.admin);
+      const assign = await q.attempt(`select public.admin_assign_series($1, $2)`, [IDS.benSeries, U.tara]);
+      await q.rows(`reset role`);
+      await q.rows(`select * from private.release_offers()`);
+      await q.rows(`select * from private.release_offers()`);
+      return { board, claim, assign, alerts: await q.count(`public.engine_alerts where kind = 'block_overlap' and series_id = '${IDS.benSeries}'`) };
+    });
+    expect(r).toEqual({ board: [], claim: "PC004", assign: "PC004", alerts: 1 });
+  });
+});
+
 describe("re-review: paused blocks and a failing sweep", () => {
   it("leaves a paused block's cleans alone overnight (pause isn't built yet)", async () => {
     const r = await as("superuser", async (q) => {
@@ -752,6 +863,8 @@ describe("re-review: paused blocks and a failing sweep", () => {
         if new.status = 'no_show' then raise exception 'test failure'; end if; return new; end $$`);
       await c.query(`create trigger boom before update on public.visits for each row execute function public.boom()`);
       await c.query(`call private.run_generate_visits()`);
+      await c.query(`reset search_path`);
+      await c.query(`call private.run_generate_visits()`); // a second night: still one open alert, not two
       await c.query(`reset search_path`);
       const { rows } = await c.query(`select kind, series_id, message from public.engine_alerts where kind = 'generate_failed'`);
       expect(rows).toHaveLength(1);
