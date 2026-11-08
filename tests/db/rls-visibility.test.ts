@@ -8,7 +8,7 @@ afterAll(() => pool.end());
 const TABLES = [
   "profiles", "cleaners", "cleaner_documents", "settings", "properties", "series", "series_billing", "visits",
   "job_offers", "checklist_templates", "checklist_items", "visit_photos", "reviews", "visit_qc",
-  "payments", "payouts", "messages", "audit_log", "engine_alerts", "interest_signups",
+  "payments", "payouts", "refunds", "payout_batches", "messages", "audit_log", "engine_alerts", "interest_signups",
 ] as const;
 
 describe("every table is locked down", () => {
@@ -41,7 +41,7 @@ const EXPECTED: Record<string, Partial<Record<(typeof TABLES)[number], number>>>
   ben: { profiles: 1, properties: 1, series: 1 },
   tara: {
     profiles: 1, cleaners: 1, cleaner_documents: 2, properties: 1, series: 1, visits: 3, job_offers: 2,
-    checklist_templates: 1, checklist_items: 11, visit_photos: 2, reviews: 1, visit_qc: 1, payouts: 1, messages: 2,
+    checklist_templates: 1, checklist_items: 11, visit_photos: 2, reviews: 1, visit_qc: 1, payouts: 1, payout_batches: 1, messages: 2,
   },
   alex: { profiles: 1, cleaners: 1, checklist_templates: 1 },
   sam: { profiles: 1, cleaners: 1, cleaner_documents: 1 },

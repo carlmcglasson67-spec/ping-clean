@@ -7,7 +7,9 @@ import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
 import { authFlows } from "./auth.flows.mjs";
 import { cleanerFlows } from "./cleaner.e2e.mjs";
-import { startFakeSupabase } from "./fake-supabase.mjs";
+import { fakeServiceRoleKey, startFakeSupabase } from "./fake-supabase.mjs";
+import { stripeWebhookFlows } from "./stripe-webhooks.e2e.mjs";
+import { startFakeStripe, TEST_CONNECT_WEBHOOK_SECRET, TEST_PUBLISHABLE_KEY, TEST_SECRET_KEY, TEST_WEBHOOK_SECRET } from "../stripe/fake-stripe.mjs";
 
 const PORT = 3200;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -23,6 +25,14 @@ const env = {
   NEXT_PUBLIC_SITE_URL: BASE,
   RESET_PASS_SECRET: "e2e-reset-pass-secret-not-a-real-one-0000",
   PING_DIST_DIR: ".next-e2e",
+  // Register interest writes through the service-role client (lib/db/admin.ts).
+  SUPABASE_SERVICE_ROLE_KEY: fakeServiceRoleKey(),
+  // Stripe (payments PRs 3–4): TEST-shaped keys for the local fake Stripe only; Stripe is never reached.
+  STRIPE_WEBHOOK_SECRET: TEST_WEBHOOK_SECRET,
+  STRIPE_CONNECT_WEBHOOK_SECRET: TEST_CONNECT_WEBHOOK_SECRET,
+  STRIPE_SECRET_KEY: TEST_SECRET_KEY,
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: TEST_PUBLISHABLE_KEY,
+  STRIPE_API_BASE: "http://127.0.0.1:12111",
 };
 
 // Anna's regular clean falls on today's weekday (see seed.sql), in London time.
@@ -80,6 +90,7 @@ async function check(name, fn) {
 console.log("e2e: building app against the test database…");
 run("npx", ["next", "build"]);
 const fake = await startFakeSupabase(54321, { siteUrl: BASE }); // the project's fixed Site URL
+const fakeStripe = await startFakeStripe(12111);
 // detached: its own process group, so we can stop npx *and* the Next server under it.
 const app = spawn("npx", ["next", "start", "-p", String(PORT), "-H", "127.0.0.1"], { env, stdio: ["ignore", "pipe", "pipe"], detached: true });
 const stopApp = () => { try { process.kill(-app.pid, "SIGTERM"); } catch {} };
@@ -189,12 +200,14 @@ try {
   }
 
   await authFlows({ browser, BASE, check, shots: process.env.SIGNUP_SHOT_DIR ?? SHOTS });
+  await stripeWebhookFlows({ BASE, check, stripe: fakeStripe });
   // Track B's cleaner flows. Last, because they change the seeded jobs and visits.
   await cleanerFlows({ browser, BASE, check, signIn, SHOTS });
 } finally {
   await browser.close();
   stopApp();
   await fake.close();
+  await fakeStripe.stop();
 }
 
 console.log(failures ? `\ne2e: ${failures} check(s) failed` : "\ne2e: all checks passed");
