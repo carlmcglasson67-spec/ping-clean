@@ -1,16 +1,22 @@
 import "server-only";
 import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/db/admin";
+import { onSetupIntentSucceeded } from "./cards";
 import { webhookSecret } from "./keys";
 import { MAX_WEBHOOK_BYTES, verifyStripeEvent, type Endpoint } from "./webhooks";
 
 /**
- * What each event type does. Empty in this PR: the receivers verify, record and acknowledge
- * every event, and later payments PRs add handlers (setup_intent.succeeded in PR 4, …).
- * A handler must be idempotent: Stripe can deliver an event more than once.
+ * What each event type does. Events without a handler are still verified, recorded and
+ * acknowledged; later payments PRs add more. A handler must be idempotent: Stripe can
+ * deliver an event more than once.
  */
 export type Handler = (event: Stripe.Event) => Promise<void>;
-export const HANDLERS: Record<Endpoint, Partial<Record<string, Handler>>> = { platform: {}, connect: {} };
+export const HANDLERS: Record<Endpoint, Partial<Record<string, Handler>>> = {
+  platform: {
+    "setup_intent.succeeded": onSetupIntentSucceeded, // PR 4: a card saved at booking
+  },
+  connect: {},
+};
 
 const SECRET_NAME = { platform: "STRIPE_WEBHOOK_SECRET", connect: "STRIPE_CONNECT_WEBHOOK_SECRET" } as const;
 
