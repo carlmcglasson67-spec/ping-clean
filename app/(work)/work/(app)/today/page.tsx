@@ -60,6 +60,7 @@ export default async function TodayPage() {
     .select("id, series_id, window_start, window_end, duration_minutes, status, cleaner_earnings_pence")
     .eq("cleaner_id", session.userId)
     .eq("scheduled_date", today)
+    .neq("status", "cancelled") // same as the home screen: a cancelled clean isn't today's work
     .order("window_start");
   const seriesIds = [...new Set((visits.data ?? []).map((v) => v.series_id))];
   const series = seriesIds.length
