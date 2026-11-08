@@ -3,6 +3,7 @@ import { firstName, requireRole } from "@/lib/auth/session";
 import { formatStamp, todayInLondon } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
 import type { Tables } from "@/lib/db/types";
+import { cleansDoneToday } from "./_lib/overview";
 
 // The numbers the marketplace can't run without. Booking stays off until all are set.
 const REQUIRED_SETTINGS: { key: keyof Tables<"settings">; label: string }[] = [
@@ -59,7 +60,7 @@ export default async function AdminHome() {
   });
   const unclaimed = (open.data ?? []).filter((s) => s.status === "unclaimed").length;
   const offering = (open.data ?? []).filter((s) => s.status === "offering").length;
-  const doneToday = (todays.data ?? []).filter((v) => v.status === "completed").length;
+  const cleansToday = cleansDoneToday(todays.data ?? []);
 
   return (
     <>
@@ -98,7 +99,7 @@ export default async function AdminHome() {
           <Stat value={(applicants.count ?? 0) + (pendingDocs.count ?? 0)} label="Vetting queue" note={`${plural(applicants.count ?? 0, "applicant")} · ${plural(pendingDocs.count ?? 0, "document")}`} />
         </Card>
         <Card>
-          <Stat value={`${doneToday}/${todays.data?.length ?? 0}`} label="Cleans done today" note={`${plural(activeCleaners.count ?? 0, "active cleaner")}`} />
+          <Stat value={`${cleansToday.done}/${cleansToday.due}`} label="Cleans done today" note={`${plural(activeCleaners.count ?? 0, "active cleaner")}`} />
         </Card>
       </section>
 
