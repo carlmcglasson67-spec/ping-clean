@@ -282,6 +282,20 @@ Track A will likely need the same for checkout; worth merging this first.
   so signed photo links return bytes no browser can decode, and photos show as broken in e2e screenshots
   (QC queue, the cleaner's visit page). Parse the multipart part on upload. Real Supabase is unaffected.
 
+### C-10. The QC queue in one database call
+- **What:** `public.admin_qc_queue(p_limit integer, p_offset integer) returns table (visit_id uuid, completed_at
+  timestamptz, couldnt_do_count smallint, total bigint)`: completed visits with no `visit_qc` row, flagged
+  ("couldn't do") first, then newest, with the total waiting. Admin only, stable, `search_path = ''`.
+- **Why:** PostgREST can't anti-join without embedding, so the QC page (#28) reads every finished clean and
+  every score in keyset pages to be sure none drops out. Correct, but it reads more as the tables grow.
+  With this the page fetches only the 12 it shows.
+
+### C-11. Reopen only the block the admin was looking at (needs Carl's sign-off)
+- **What:** `admin_reopen_series(p_series uuid, p_expected_cleaner uuid)`, refusing (PC002) when the block's
+  `cleaner_id` isn't the one the admin saw.
+- **Why:** if a block changed hands after the jobs page loaded, "Put back on the board" would take it from
+  the new cleaner. #27 will pass the expected cleaner once it exists.
+
 ### Next for Track C (not built yet)
 - **Reports** (brief item 5): visits, revenue, Ping fees, cleaner league. Waits for Phase 5 money so the
   numbers are real.
