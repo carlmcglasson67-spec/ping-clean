@@ -4,6 +4,7 @@ import { Badge, EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { requireRole } from "@/lib/auth/session";
 import { formatStamp, todayInLondon } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
+import { readAll, readByIds, ROW_CAP } from "../_lib/read-all";
 import { DOCUMENT_KIND, TIER } from "@/lib/labels";
 import { readiness, type DocRow } from "./_lib/vetting";
 
@@ -16,12 +17,20 @@ export default async function ApprovalsPage() {
   const supabase = await createClient();
   const today = todayInLondon();
 
-  const [cleaners, docs] = await Promise.all([
-    supabase.from("cleaners").select("id, status, tier, areas, created_at").order("created_at", { ascending: true }),
-    supabase.from("cleaner_documents").select("id, cleaner_id, kind, status, expires_on, created_at"),
+  // Every cleaner and document, in keyset pages (no 1,000-row cap); oldest application first.
+  const [cleanersAll, docs] = await Promise.all([
+    readAll((after) => {
+      const q = supabase.from("cleaners").select("id, status, tier, areas, created_at").order("id").limit(ROW_CAP);
+      return after ? q.gt("id", after) : q;
+    }, "id"),
+    readAll((after) => {
+      const q = supabase.from("cleaner_documents").select("id, cleaner_id, kind, status, expires_on, created_at").order("id").limit(ROW_CAP);
+      return after ? q.gt("id", after) : q;
+    }, "id"),
   ]);
+  const cleaners = { ...cleanersAll, data: cleanersAll.data?.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)) ?? null };
   const ids = (cleaners.data ?? []).map((c) => c.id);
-  const profiles = ids.length ? await supabase.from("profiles").select("id, full_name, email").in("id", ids) : { data: [], error: null };
+  const profiles = await readByIds(ids, (slice) => supabase.from("profiles").select("id, full_name, email").in("id", slice));
 
   if (cleaners.error || docs.error || profiles.error) {
     return (

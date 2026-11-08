@@ -43,9 +43,10 @@ export async function deleteInterest(raw: unknown): Promise<ActionResult> {
   // admin read of the list is admin_list_interest (masked, audited as a list view); C-2's
   // admin_find_interest is the proper, exact lookup once it lands.
   const supabase = await createClient();
-  const { data: list, error: readError } = await supabase.rpc("admin_list_interest", { p_district: null });
+  // Filtered to this one id on the server, so it can't be lost past the row cap.
+  const { data: found, error: readError } = await supabase.rpc("admin_list_interest", { p_district: null }).eq("id", p.data.id).limit(1);
   if (readError) return { ok: false, message: adminErrorMessage(readError) };
-  const entry = (list ?? []).find((r) => r.id === p.data.id);
+  const entry = found?.[0];
   if (!entry) return { ok: false, message: "That entry has already gone (deleted, or past its retention date)." };
   if (p.data.arrivedBy !== entry.contact_type) {
     return {

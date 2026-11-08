@@ -1,25 +1,5 @@
-/** PostgREST returns at most this many rows per request (the project default). */
-export const ROW_CAP = 1000;
-
-type Page<T> = PromiseLike<{ data: T[] | null; error: { code?: string | null } | null }>;
-
-/**
- * Every row a query matches, read in keyset pages (`key > last seen`, ordered by key), so
- * nothing is lost to the row cap however large the table grows. The caller's query must
- * order by `key` ascending and filter `key > after` when `after` is given.
- */
-export async function readAll<T>(page: (after: string | null) => Page<T>, key: keyof T & string, cap = ROW_CAP) {
-  const out: T[] = [];
-  let after: string | null = null;
-  for (;;) {
-    const { data, error } = await page(after);
-    if (error) return { data: null, error };
-    const rows = data ?? [];
-    out.push(...rows);
-    if (rows.length < cap) return { data: out, error: null };
-    after = String(rows[rows.length - 1]![key]);
-  }
-}
+// readAll moved to the admin lib so every section pages the same way.
+export { readAll, ROW_CAP } from "../../_lib/read-all";
 
 export type Finished = { id: string; completed_at: string | null; couldnt_do_count: number };
 

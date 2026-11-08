@@ -5,6 +5,7 @@ import { cn } from "@/components/ui/cn";
 import { requireRole } from "@/lib/auth/session";
 import { formatStamp } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
+import { readAll, ROW_CAP } from "../_lib/read-all";
 import { InterestList } from "./interest-list";
 
 export const metadata: Metadata = { title: "Interest" };
@@ -20,7 +21,11 @@ export default async function InterestPage({ searchParams }: { searchParams: Pro
 
   const [counts, list, retention] = await Promise.all([
     supabase.rpc("admin_interest_counts"),
-    supabase.rpc("admin_list_interest", { p_district: district }),
+    // Every entry, in keyset pages (no 1,000-row cap), newest first again afterwards.
+    readAll((after) => {
+      const q = supabase.rpc("admin_list_interest", { p_district: district }).order("id").limit(ROW_CAP);
+      return after ? q.gt("id", after) : q;
+    }, "id").then((r) => ({ ...r, data: r.data?.sort((x, y) => y.registered_at.localeCompare(x.registered_at) || x.id.localeCompare(y.id)) ?? null })),
     supabase.rpc("interest_retention_months"),
   ]);
 

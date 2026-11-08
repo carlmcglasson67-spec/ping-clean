@@ -3,6 +3,7 @@ import { Badge, Card, EmptyState, ErrorState, PageHeader } from "@/components/ui
 import { requireRole } from "@/lib/auth/session";
 import { formatDay, formatStamp, formatWindow, todayInLondon, weekdayName } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
+import { readAll, ROW_CAP } from "../_lib/read-all";
 import { FREQUENCY, TIER, VISIT_STATUS } from "@/lib/labels";
 import { formatDuration } from "@/lib/money";
 import { ALERT_KIND, ALERT_ORDER, alertKind } from "../_lib/alerts";
@@ -24,7 +25,11 @@ export default async function JobsPage() {
     supabase.from("series").select(SERIES_COLS).in("status", ["offering", "unclaimed", "claimed", "paused"]).order("starts_on"),
     supabase.from("engine_alerts").select("id, kind, series_id, visit_id, message, created_at").is("resolved_at", null).order("created_at", { ascending: false }),
     supabase.from("visits").select("id, series_id, cleaner_id, status, window_start, window_end").eq("scheduled_date", today).order("window_start"),
-    supabase.from("visits").select("series_id, scheduled_date").eq("status", "scheduled").gte("scheduled_date", today).order("scheduled_date"),
+    // Every booked clean from today, in keyset pages (no 1,000-row cap), then by date.
+    readAll((after) => {
+      const q = supabase.from("visits").select("id, series_id, scheduled_date").eq("status", "scheduled").gte("scheduled_date", today).order("id").limit(ROW_CAP);
+      return after ? q.gt("id", after) : q;
+    }, "id").then((r) => ({ ...r, data: r.data?.sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date)) ?? null })),
     supabase.from("cleaners").select("id, tier, areas, availability").eq("status", "active"),
   ]);
   const failed = live.error || alerts.error || todays.error || upcoming.error || cleaners.error;
@@ -38,7 +43,7 @@ export default async function JobsPage() {
   const propIds = [...new Set(series.map((s) => s.property_id))];
   const peopleIds = [...new Set([...series.map((s) => s.customer_id), ...series.map((s) => s.cleaner_id), ...(cleaners.data ?? []).map((c) => c.id), ...(todays.data ?? []).map((v) => v.cleaner_id)].filter((id): id is string => !!id))];
   const [props, people] = await Promise.all([
-    propIds.length ? supabase.from("properties").select("id, town, postcode_district, address_line1").in("id", propIds) : Promise.resolve({ data: [], error: null }),
+    propIds.length ? supabase.from("properties").select("id, town, postcode_district").in("id", propIds) : Promise.resolve({ data: [], error: null }),
     peopleIds.length ? supabase.from("profiles").select("id, full_name").in("id", peopleIds) : Promise.resolve({ data: [], error: null }),
   ]);
 
