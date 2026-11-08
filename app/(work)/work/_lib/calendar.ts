@@ -101,3 +101,21 @@ export function blockPositions(visits: { id: string; series_id: string; schedule
   }
   return out;
 }
+
+/**
+ * "Clean n of m" with cancelled cleans left out. Ending a block cancels its future cleans
+ * rather than deleting them, so they're skipped when numbering, and taken off the block's
+ * size: a block of 8 ended after 3 reads "3 of 3", not "3 of 8".
+ */
+export function liveBlockPositions(
+  visits: { id: string; series_id: string; scheduled_date: string; status: string }[],
+  blockSize: (seriesId: string) => number,
+): { n: (visitId: string) => number; of: (seriesId: string) => number } {
+  const pos = blockPositions(visits.filter((v) => v.status !== "cancelled"));
+  const cancelled = new Map<string, number>();
+  for (const v of visits) if (v.status === "cancelled") cancelled.set(v.series_id, (cancelled.get(v.series_id) ?? 0) + 1);
+  return {
+    n: (id) => pos.get(id) ?? 1,
+    of: (seriesId) => Math.max(blockSize(seriesId) - (cancelled.get(seriesId) ?? 0), 0),
+  };
+}

@@ -7,7 +7,7 @@ import { formatDay, formatTime, relativeDay, todayInLondon } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
 import type { Enums } from "@/lib/db/types";
 import { VISIT_STATUS } from "@/lib/labels";
-import { blockPositions, dayOfMonth, isYmd, minutesOf, shortWeekday, step, viewDays, viewTitle, type View } from "../../_lib/calendar";
+import { liveBlockPositions, dayOfMonth, isYmd, minutesOf, shortWeekday, step, viewDays, viewTitle, type View } from "../../_lib/calendar";
 
 export const metadata: Metadata = { title: "Calendar" };
 export const dynamic = "force-dynamic";
@@ -66,13 +66,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     .eq("cleaner_id", session.userId)
     .gte("scheduled_date", from)
     .lte("scheduled_date", to)
+    .neq("status", "cancelled") // a block that ended cancels its cleans; they aren't work
     .order("scheduled_date")
     .order("window_start");
   const seriesIds = [...new Set((visits.data ?? []).map((v) => v.series_id))];
   const [series, siblings] = seriesIds.length
     ? await Promise.all([
         supabase.from("series").select("id, property_id, block_size").in("id", seriesIds).eq("cleaner_id", session.userId),
-        supabase.from("visits").select("id, series_id, scheduled_date").in("series_id", seriesIds).eq("cleaner_id", session.userId),
+        supabase.from("visits").select("id, series_id, scheduled_date, status").in("series_id", seriesIds).eq("cleaner_id", session.userId),
       ])
     : [{ data: [], error: null }, { data: [], error: null }];
   const propertyIds = [...new Set((series.data ?? []).map((s) => s.property_id))];
@@ -91,7 +92,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
 
   const seriesById = new Map((series.data ?? []).map((s) => [s.id, s]));
   const townById = new Map((homes.data ?? []).map((h) => [h.id, h.town]));
-  const pos = blockPositions(siblings.data ?? []);
+  const block = liveBlockPositions(siblings.data ?? [], (id) => seriesById.get(id)?.block_size ?? 0);
   const cleans: Clean[] = (visits.data ?? []).map((v) => {
     const s = seriesById.get(v.series_id);
     return {
@@ -102,8 +103,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       minutes: v.duration_minutes,
       status: v.status,
       town: s ? (townById.get(s.property_id) ?? null) : null,
-      n: pos.get(v.id) ?? 1,
-      of: s?.block_size ?? 0,
+      n: block.n(v.id),
+      of: block.of(v.series_id),
     };
   });
   const byDay = new Map<string, Clean[]>();
