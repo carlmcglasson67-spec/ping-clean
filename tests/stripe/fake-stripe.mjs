@@ -1,14 +1,20 @@
-// TEST-ONLY Stripe helpers. Ping's tests never talk to Stripe and never hold a real key.
+// TEST-ONLY Stripe stand-in. Ping's tests never talk to Stripe and never hold a real key.
 //
-// This PR (payments 3) needs only webhook events, signed exactly as Stripe signs them
-// (https://docs.stripe.com/webhooks/signature: "t=<unix>,v1=<HMAC-SHA256(secret, `${t}.${body}`)>").
-// The fake Stripe API server (customers, SetupIntents, PaymentIntents, Connect accounts,
-// payouts, refunds) is added here PR by PR, as each one starts calling Stripe.
+//  * Webhook events, signed exactly as Stripe signs them
+//    (https://docs.stripe.com/webhooks/signature: "t=<unix>,v1=<HMAC-SHA256(secret, `${t}.${body}`)>").
+//  * A small fake Stripe API for the calls Ping makes, grown PR by PR:
+//      PR 4: POST /v1/customers, POST /v1/setup_intents, GET /v1/payment_methods/:id
+//    It needs a test-shaped key (Bearer sk_test_…) and honours Idempotency-Key like Stripe:
+//    the same key returns the same response. Test controls under /__test/.
 import { createHmac, randomBytes } from "node:crypto";
+import http from "node:http";
 
-/** A test signing secret, shaped like Stripe's. */
+/** Test signing secrets, shaped like Stripe's. */
 export const TEST_WEBHOOK_SECRET = "whsec_" + "e2eTestSigningSecretNotReal000000";
 export const TEST_CONNECT_WEBHOOK_SECRET = "whsec_" + "e2eTestConnectSecretNotReal00000";
+/** A test-mode secret key for the fake (not a real Stripe key). */
+export const TEST_SECRET_KEY = "sk_test_" + "fakeStripeForPingTestsOnly0000";
+export const TEST_PUBLISHABLE_KEY = "pk_test_" + "fakeStripeForPingTestsOnly0000";
 
 /** The Stripe-Signature header for a raw body. */
 export function stripeSignature(body, secret, timestamp = Math.floor(Date.now() / 1000)) {
@@ -30,4 +36,91 @@ export function stripeEvent(type, object, { account, livemode = false, id } = {}
     data: { object },
     ...(account ? { account } : {}),
   };
+}
+
+const rid = (prefix) => `${prefix}_test${randomBytes(10).toString("hex")}`;
+
+/** Stripe's form encoding (a[b]=1&c[0]=x) back into objects. */
+function parseForm(raw) {
+  const out = {};
+  for (const [key, value] of new URLSearchParams(raw)) {
+    const parts = key.replace(/\]/g, "").split("[");
+    let at = out;
+    parts.forEach((p, i) => {
+      if (i === parts.length - 1) at[p] = value;
+      else at = at[p] ??= /^\d+$/.test(parts[i + 1]) ? [] : {};
+    });
+  }
+  return out;
+}
+
+/** Starts the fake Stripe API. Returns { url, stop, state }. */
+export function startFakeStripe(port = 12111) {
+  const state = {
+    customers: new Map(),
+    setupIntents: new Map(),
+    paymentMethods: new Map(),
+    idempotent: new Map(), // key → response body
+    requests: [],           // { method, path, idempotencyKey }
+  };
+  const send = (res, status, body) => {
+    res.writeHead(status, { "content-type": "application/json" });
+    res.end(JSON.stringify(body));
+  };
+  const error = (res, status, message, type = "invalid_request_error") => send(res, status, { error: { type, message } });
+
+  const server = http.createServer((req, res) => {
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => {
+      const url = new URL(req.url, `http://127.0.0.1:${port}`);
+      const path = url.pathname;
+      // ---------- test controls
+      if (path === "/__test/payment_methods" && req.method === "POST") {
+        const b = JSON.parse(raw || "{}");
+        const pm = { id: b.id ?? rid("pm"), object: "payment_method", type: "card", customer: b.customer ?? null,
+          card: { brand: b.brand ?? "visa", last4: b.last4 ?? "4242", exp_month: b.exp_month ?? 12, exp_year: b.exp_year ?? 2030 } };
+        state.paymentMethods.set(pm.id, pm);
+        return send(res, 200, pm);
+      }
+      if (path === "/__test/requests") return send(res, 200, state.requests);
+      if (path === "/__test/reset" && req.method === "POST") {
+        for (const m of [state.customers, state.setupIntents, state.paymentMethods, state.idempotent]) m.clear();
+        state.requests.length = 0;
+        return send(res, 200, {});
+      }
+
+      // ---------- the API
+      const auth = String(req.headers.authorization ?? "");
+      if (!/^Bearer (sk|rk)_test_/.test(auth)) return error(res, 401, "Invalid API Key provided", "authentication_error");
+      const idem = req.headers["idempotency-key"] ? String(req.headers["idempotency-key"]) : null;
+      state.requests.push({ method: req.method, path, idempotencyKey: idem });
+      if (req.method === "POST" && idem && state.idempotent.has(idem)) return send(res, 200, state.idempotent.get(idem));
+      const remember = (body) => { if (req.method === "POST" && idem) state.idempotent.set(idem, body); return send(res, 200, body); };
+      const b = req.method === "POST" ? parseForm(raw) : {};
+
+      if (path === "/v1/customers" && req.method === "POST") {
+        const c = { id: rid("cus"), object: "customer", email: b.email ?? null, name: b.name ?? null, metadata: b.metadata ?? {}, livemode: false };
+        state.customers.set(c.id, c);
+        return remember(c);
+      }
+      if (path === "/v1/setup_intents" && req.method === "POST") {
+        if (!b.customer || !state.customers.has(b.customer)) return error(res, 400, "No such customer");
+        const id = rid("seti");
+        const si = { id, object: "setup_intent", client_secret: `${id}_secret_${randomBytes(8).toString("hex")}`, customer: b.customer,
+          usage: b.usage ?? "off_session", allowed_payment_method_types: b.allowed_payment_method_types ?? null, payment_method_types: b.allowed_payment_method_types ?? ["card"], status: "requires_payment_method",
+          payment_method: null, metadata: b.metadata ?? {}, livemode: false };
+        state.setupIntents.set(id, si);
+        return remember(si);
+      }
+      const pm = path.match(/^\/v1\/payment_methods\/([A-Za-z0-9_]+)$/);
+      if (pm && req.method === "GET") {
+        const found = state.paymentMethods.get(pm[1]);
+        return found ? send(res, 200, found) : error(res, 404, `No such PaymentMethod: '${pm[1]}'`);
+      }
+      return error(res, 404, `Unrecognized request URL (${req.method}: ${path})`);
+    });
+  });
+  return new Promise((resolve) => server.listen(port, "127.0.0.1", () =>
+    resolve({ url: `http://127.0.0.1:${port}`, state, stop: () => new Promise((r) => server.close(() => r())) })));
 }

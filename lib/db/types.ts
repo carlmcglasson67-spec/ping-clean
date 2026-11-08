@@ -1104,6 +1104,30 @@ export type Database = {
         Args: { p_event_id: string; p_error: string | null };
         Returns: undefined;
       };
+      stripe_customer_for: {
+        Args: { p_profile: string };
+        Returns: string | null;
+      };
+      stripe_link_customer: {
+        Args: { p_profile: string; p_stripe_customer: string };
+        Returns: string;
+      };
+      stripe_card_saved: {
+        Args: {
+          p_series: string;
+          p_stripe_customer: string;
+          p_payment_method: string;
+          p_brand: string;
+          p_last4: string;
+          p_exp_month: number;
+          p_exp_year: number;
+        };
+        Returns: "saved" | "no_series" | "mismatch";
+      };
+      series_card_saved: {
+        Args: { p_series: string };
+        Returns: boolean;
+      };
       my_saved_card: {
         Args: Record<PropertyKey, never>;
         Returns: { brand: string | null; last4: string | null; exp_month: number | null; exp_year: number | null }[];
