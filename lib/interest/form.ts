@@ -89,7 +89,7 @@ export function normaliseUkMobile(raw: string): string | null {
 
 /** Lower-cased and trimmed. Plain printable ASCII only (no invisible or right-to-left characters). */
 export function normaliseEmail(raw: string): string | null {
-  const t = raw.trim().toLowerCase();
+  const t = raw.trim().toLowerCase().replace(/\.+$/, ""); // "jo@gmail.com." is "jo@gmail.com"
   return t.length <= 254 && /^[!-~]+$/.test(t) && /^[^@]+@[^@]+\.[^@]+$/.test(t) ? t : null;
 }
 
