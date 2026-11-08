@@ -147,6 +147,10 @@ out += `${ind(2)}};
         Args: { p_series: string };
         Returns: undefined;
       };
+      my_saved_card: {
+        Args: Record<PropertyKey, never>;
+        Returns: { brand: string | null; last4: string | null; exp_month: number | null; exp_year: number | null }[];
+      };
       register_interest: {
         Args: {
           p_postcode: string;

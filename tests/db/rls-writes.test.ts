@@ -231,7 +231,7 @@ describe("security review fixes", () => {
     expect(cols).toEqual([]);
     const seen = async (who: "tara" | "anna" | "admin") =>
       as("superuser", async (su) => {
-        await su.rows(`insert into public.series_billing (series_id, stripe_customer_id, stripe_payment_method_id) values ($1, 'cus_test', 'pm_test')`, [IDS.annaSeries]);
+        await su.rows(`insert into public.series_billing (series_id, stripe_payment_method_id) values ($1, 'pm_test')`, [IDS.annaSeries]);
         await su.rows(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: U[who], role: "authenticated" })]);
         await su.rows(`set local role authenticated`);
         return su.count("public.series_billing");
@@ -253,7 +253,7 @@ describe("security review fixes", () => {
 
   it("labels unattributed system changes rather than leaving them blank", async () => {
     const [row] = await as("superuser", async (q) => {
-      await q.rows(`update public.payouts set status = 'cancelled' where visit_id = $1`, [IDS.visitDone]);
+      await q.rows(`update public.payouts set available_after = available_after + interval '1 hour' where visit_id = $1`, [IDS.visitDone]);
       return q.rows<{ actor_label: string; detail: { visit_id: string } }>(`select actor_label, detail from public.audit_log where entity = 'payouts' order by id desc limit 1`);
     });
     expect(row).toMatchObject({ actor_label: "system", detail: { visit_id: IDS.visitDone } });
@@ -305,7 +305,7 @@ describe("functions added in future", () => {
 
   it("logs a changed saved card without storing its ids", async () => {
     const [row] = await as("superuser", async (q) => {
-      await q.rows(`insert into public.series_billing (series_id, stripe_customer_id, stripe_payment_method_id) values ($1, 'cus_x', 'pm_x')`, [IDS.annaSeries]);
+      await q.rows(`insert into public.series_billing (series_id, stripe_payment_method_id) values ($1, 'pm_x')`, [IDS.annaSeries]);
       await q.rows(`update public.series_billing set stripe_payment_method_id = 'pm_y' where series_id = $1`, [IDS.annaSeries]);
       return q.rows<{ action: string; detail: object }>(`select action, detail from public.audit_log where entity = 'series_billing' and action = 'update'`);
     });

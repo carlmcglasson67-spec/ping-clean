@@ -144,12 +144,19 @@ insert into public.reviews (visit_id, customer_id, rating, comment) values
 insert into public.visit_qc (visit_id, score, notes, reviewed_by) values
   ('00000000-0000-4000-e000-000000000001', 9, 'Photos clear, checklist complete. Skirting in hall missed.', '00000000-0000-4000-a000-000000000001');
 
-insert into public.payments (visit_id, customer_id, amount_pence, application_fee_pence, status, stripe_payment_intent_id, idempotency_key) values
-  ('00000000-0000-4000-e000-000000000001', '00000000-0000-4000-a000-000000000002', 5000, 1250, 'succeeded', 'pi_test_seed_0001', 'visit:00000000-0000-4000-e000-000000000001:charge');
+insert into public.payments (id, visit_id, customer_id, amount_pence, application_fee_pence, cleaner_amount_pence, status,
+                             stripe_payment_intent_id, idempotency_key) values
+  ('00000000-0000-4000-f000-000000000001', '00000000-0000-4000-e000-000000000001', '00000000-0000-4000-a000-000000000002',
+   5000, 1250, 3750, 'succeeded', 'pi_test_seed_0001', 'visit:00000000-0000-4000-e000-000000000001:charge');
 
-insert into public.payouts (visit_id, cleaner_id, amount_pence, status, available_after, stripe_transfer_id, idempotency_key, paid_at) values
-  ('00000000-0000-4000-e000-000000000001', '00000000-0000-4000-a000-000000000004', 3750, 'paid',
-     now() - interval '5 days', 'tr_test_seed_0001', 'visit:00000000-0000-4000-e000-000000000001:payout', now() - interval '5 days');
+insert into public.payout_batches (id, cleaner_id, amount_pence, status, stripe_payout_id, idempotency_key, arrival_date) values
+  ('00000000-0000-4000-f100-000000000001', '00000000-0000-4000-a000-000000000004', 3750, 'paid', 'po_test_seed_0001',
+   'payout-batch:00000000-0000-4000-f100-000000000001', current_date - 5);
+
+insert into public.payouts (visit_id, cleaner_id, payment_id, batch_id, amount_pence, status, available_after, stripe_payout_id, idempotency_key, paid_at) values
+  ('00000000-0000-4000-e000-000000000001', '00000000-0000-4000-a000-000000000004', '00000000-0000-4000-f000-000000000001',
+   '00000000-0000-4000-f100-000000000001', 3750, 'paid',
+     now() - interval '5 days', 'po_test_seed_0001', 'visit:00000000-0000-4000-e000-000000000001:payout', now() - interval '5 days');
 
 insert into public.messages (series_id, sender_id, body, created_at) values
   ('00000000-0000-4000-c000-000000000001', '00000000-0000-4000-a000-000000000002', 'Hi Tara, could you do the oven door this week? Thank you!', now() - interval '2 days'),
