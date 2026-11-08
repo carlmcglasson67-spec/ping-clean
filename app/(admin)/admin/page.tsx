@@ -3,7 +3,7 @@ import { Badge, Card, EmptyState, ErrorState, NavyPanel, PageHeader } from "@/co
 import { firstName, requireRole } from "@/lib/auth/session";
 import { formatDay, formatStamp, todayInLondon } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
-import { ALERT_KIND, ALERT_ORDER, alertKind, type AlertKind } from "./_lib/alerts";
+import { ALERT_KIND, ALERT_ORDER, type AlertKind } from "./_lib/alerts";
 import { auditEntity, auditSummary } from "./_lib/audit";
 import { REQUIRED_SETTINGS, missingSettings } from "./_lib/required-settings";
 import { SectionCard } from "./_components/section-card";
@@ -19,19 +19,30 @@ export default async function AdminHome() {
   const supabase = await createClient();
   const today = todayInLondon();
 
-  const [settings, applicants, pendingDocs, open, todays, alerts, done, scored, audit] = await Promise.all([
+  // Every number is a count query ({ count: "exact", head: true }): no rows come back, so
+  // nothing is cut off by PostgREST's row cap however large the tables grow.
+  const HEAD = { count: "exact", head: true } as const;
+  const [settings, applicants, pendingDocs, unclaimedQ, offeringQ, todayQ, doneTodayQ, nowQ, toStartQ, alertsQ, completedQ, scoredQ, audit, ...kindQ] = await Promise.all([
     supabase.from("settings").select("*").maybeSingle(),
-    supabase.from("cleaners").select("id", { count: "exact", head: true }).eq("status", "applicant"),
-    supabase.from("cleaner_documents").select("id", { count: "exact", head: true }).eq("status", "pending"),
-    supabase.from("series").select("id, status").in("status", ["offering", "unclaimed"]),
-    supabase.from("visits").select("id, status").eq("scheduled_date", today),
-    supabase.from("engine_alerts").select("id, kind").is("resolved_at", null),
-    supabase.from("visits").select("id").eq("status", "completed").order("completed_at", { ascending: false }).limit(500),
-    supabase.from("visit_qc").select("visit_id"),
+    supabase.from("cleaners").select("*", HEAD).eq("status", "applicant"),
+    supabase.from("cleaner_documents").select("*", HEAD).eq("status", "pending"),
+    supabase.from("series").select("*", HEAD).eq("status", "unclaimed"),
+    supabase.from("series").select("*", HEAD).eq("status", "offering"),
+    supabase.from("visits").select("*", HEAD).eq("scheduled_date", today),
+    supabase.from("visits").select("*", HEAD).eq("scheduled_date", today).eq("status", "completed"),
+    supabase.from("visits").select("*", HEAD).eq("scheduled_date", today).eq("status", "in_progress"),
+    supabase.from("visits").select("*", HEAD).eq("scheduled_date", today).eq("status", "scheduled"),
+    supabase.from("engine_alerts").select("*", HEAD).is("resolved_at", null),
+    supabase.from("visits").select("*", HEAD).eq("status", "completed"),
+    // A QC score only ever exists for a finished clean (the QC action checks), so
+    // finished minus scored is the number waiting.
+    supabase.from("visit_qc").select("*", HEAD),
     supabase.from("audit_log").select("id, action, entity, actor_id, actor_label, created_at, detail").order("id", { ascending: false }).limit(8),
+    ...ALERT_ORDER.map((k) => supabase.from("engine_alerts").select("*", HEAD).is("resolved_at", null).eq("kind", k)),
   ]);
+  const counted = [applicants, pendingDocs, unclaimedQ, offeringQ, todayQ, doneTodayQ, nowQ, toStartQ, alertsQ, completedQ, scoredQ, ...kindQ];
 
-  const failed = settings.error || applicants.error || pendingDocs.error || open.error || todays.error || alerts.error || done.error || scored.error || audit.error;
+  const failed = settings.error || audit.error || counted.some((q) => q.error);
   if (failed) {
     return (
       <>
@@ -47,26 +58,17 @@ export default async function AdminHome() {
   const actorName = new Map((actors.data ?? []).map((p) => [p.id, p.full_name?.trim().split(/\s+/)[0] || "Ping team"]));
 
   const missing = missingSettings(settings.data);
-  const series = open.data ?? [];
-  const unclaimed = series.filter((s) => s.status === "unclaimed").length;
-  const offering = series.filter((s) => s.status === "offering").length;
+  const unclaimed = unclaimedQ.count ?? 0;
+  const offering = offeringQ.count ?? 0;
+  const bookedToday = todayQ.count ?? 0;
+  const doneToday = doneTodayQ.count ?? 0;
+  const cleaningNow = nowQ.count ?? 0;
+  const toStart = toStartQ.count ?? 0;
 
-  const visits = todays.data ?? [];
-  const count = (st: string) => visits.filter((v) => v.status === st).length;
-  const doneToday = count("completed");
-  const cleaningNow = count("in_progress");
-  const toStart = count("scheduled");
-
-  const byKind = new Map<AlertKind, number>();
-  for (const a of alerts.data ?? []) {
-    const k = alertKind(a.kind);
-    if (k) byKind.set(k, (byKind.get(k) ?? 0) + 1);
-  }
-  const openAlerts = alerts.data?.length ?? 0;
+  const byKind = new Map<AlertKind, number>(ALERT_ORDER.map((k, i) => [k, kindQ[i]?.count ?? 0]));
+  const openAlerts = alertsQ.count ?? 0;
   const urgentAlerts = ALERT_ORDER.filter((k) => ALERT_KIND[k].urgent).reduce((n, k) => n + (byKind.get(k) ?? 0), 0);
-
-  const scoredIds = new Set((scored.data ?? []).map((q) => q.visit_id));
-  const toScore = (done.data ?? []).filter((v) => !scoredIds.has(v.id)).length;
+  const toScore = Math.max(0, (completedQ.count ?? 0) - (scoredQ.count ?? 0));
   const vetting = (applicants.count ?? 0) + (pendingDocs.count ?? 0);
 
   return (
@@ -77,8 +79,8 @@ export default async function AdminHome() {
         <section aria-labelledby="today-cleans" className="grid content-start gap-6">
           <h2 id="today-cleans" className="text-sm font-semibold uppercase tracking-[0.14em] text-teal">Cleans today</h2>
           <p className="flex items-baseline gap-4">
-            <span className="font-display text-4xl font-semibold tabular">{visits.length}</span>
-            <span className="text-lg text-on-navy-2">{visits.length === 1 ? "clean booked" : "cleans booked"}</span>
+            <span className="font-display text-4xl font-semibold tabular">{bookedToday}</span>
+            <span className="text-lg text-on-navy-2">{bookedToday === 1 ? "clean booked" : "cleans booked"}</span>
           </p>
           <dl className="grid grid-cols-3 gap-4 border-t border-line-navy pt-6">
             {[
