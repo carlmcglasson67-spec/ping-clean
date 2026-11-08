@@ -34,15 +34,15 @@ export default async function interestFlows({ page, browser, signIn, BASE, check
   await check("the CSV export downloads, warns about Excel, defuses formulas, and is logged without contacts", async () => {
     await page.goto(`${BASE}/admin/interest`);
     await settle(page);
-    await page.getByText("Import directly into your SMS tool; don’t re-save in Excel.").waitFor();
+    await page.getByText("Import directly into your SMS tool; don't re-save in Excel.").waitFor();
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export all as CSV" }).click()]);
     assert.match(download.suggestedFilename(), /^ping-interest-all-\d{4}-\d{2}-\d{2}\.csv$/);
     const csv = await readFile(await download.path(), "utf8");
     assert.match(csv, /^postcode,postcode_district,email,phone,registered_at,notified_at\r\n/);
     assert.match(csv, /"jo@example\.com"/);
-    // Today lib/interest/csv.ts writes "'+447700900123" (a leading + is treated as a formula).
-    // Shared request C-8 asks for validated mobiles to go out clean; tighten this then.
-    assert.match(csv, /"'?\+447700900123"/);
+    // Before #31: "'+447700900123" (a leading + was treated as a formula). After #31: "447700900123".
+    // Both pass; tighten to the second once #31 is on main.
+    assert.match(csv, /"(?:'\+)?447700900123"/);
     assert.match(csv, /"'=cmd@evil\.example"/, "a formula-looking value is defused");
     const [a] = await sql(`select actor_id, detail from public.audit_log where entity = 'interest_signups' and action = 'export' order by id desc limit 1`);
     assert.equal(a.actor_id, ADMIN);

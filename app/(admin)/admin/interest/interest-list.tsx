@@ -78,7 +78,7 @@ export function InterestList({ rows }: { rows: InterestRow[] }) {
             </div>
             {deleting === r.id ? (
               <DeleteConfirm row={r} pending={pending} onCancel={() => setDeleting(null)}
-                onDelete={(arrivedBy, senderMatches) => run(() => deleteInterest({ id: r.id, contactType: r.contact_type, arrivedBy, senderMatches }), () => setDeleting(null))} />
+                onDelete={(arrivedBy, senderMatches) => run(() => deleteInterest({ id: r.id, arrivedBy, senderMatches }), () => setDeleting(null))} />
             ) : null}
           </li>
         ))}
