@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     template: "%s · Ping Clean",
   },
   description:
-    "The same vetted, insured cleaner every week. Fixed prices, a checklist and photos on every clean. Workington, Whitehaven, Cockermouth and across West Cumbria.",
+    "Book up to 8 regular cleans with one vetted, insured cleaner. A checklist and photos on every clean, no contract, and you pay after each one. Workington, Whitehaven, Cockermouth and across West Cumbria.",
   applicationName: "Ping Clean",
   // Icons come from app/icon.svg, app/apple-icon.png and app/favicon.ico (scripts/brand/).
 };
