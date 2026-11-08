@@ -6,6 +6,15 @@ import { as, CHECK, DENIED, IDS, pool, setupThen, U, type Query } from "./helper
 afterAll(() => pool.end());
 
 const SEED_PAYMENT = "00000000-0000-4000-f000-000000000001";
+const TODAY_PAYMENT = "00000000-0000-4000-f000-0000000000bb";
+
+/** A succeeded charge for today's clean (Anna's), moved along the map as the webhooks will. */
+async function chargeToday(su: Query) {
+  await su.rows(`insert into public.payments (id, visit_id, customer_id, amount_pence, application_fee_pence, cleaner_amount_pence, idempotency_key)
+                 values ($1, $2, $3, 5000, 1250, 3750, 'k-today')`, [TODAY_PAYMENT, IDS.visitToday, U.anna]);
+  await su.rows(`update public.payments set status = 'processing' where id = $1`, [TODAY_PAYMENT]);
+  await su.rows(`update public.payments set status = 'succeeded' where id = $1`, [TODAY_PAYMENT]);
+}
 const ROLES = ["anon", "anna", "ben", "tara", "alex", "sam", "admin"] as const;
 const asWho = <T>(who: (typeof ROLES)[number], setup: (su: Query) => Promise<void>, fn: (q: Query) => Promise<T>) =>
   setupThen(setup, who === "anon" ? null : U[who], async (q) => {
@@ -154,9 +163,11 @@ describe("payments", () => {
 });
 
 describe("refunds", () => {
+  // A refund starts pending and moves to where Stripe says it ended up.
   const refund = (amount: number, cleaner: number, ping: number, key: string, status = "succeeded") =>
-    `insert into public.refunds (payment_id, amount_pence, cleaner_part_pence, ping_part_pence, reason, note, idempotency_key, status)
-     values ('${SEED_PAYMENT}', ${amount}, ${cleaner}, ${ping}, 'clean_quality', 'Kitchen floor missed', '${key}', '${status}')`;
+    `insert into public.refunds (payment_id, amount_pence, cleaner_part_pence, ping_part_pence, reason, note, idempotency_key)
+     values ('${SEED_PAYMENT}', ${amount}, ${cleaner}, ${ping}, 'clean_quality', 'Kitchen floor missed', '${key}');
+     update public.refunds set status = '${status}' where idempotency_key = '${key}'`;
 
   it("must add up, and never total more than the payment (failed refunds don't count)", async () => {
     const r = await as("superuser", async (q) => ({
@@ -189,8 +200,9 @@ describe("refunds", () => {
 describe("payouts and payout batches", () => {
   it("only move along the state map, and a hold needs a reason", async () => {
     const run = (moves: [string, string | null][]) => as("superuser", async (q) => {
-      await q.rows(`insert into public.payouts (id, visit_id, cleaner_id, amount_pence, available_after, idempotency_key)
-                    values ('00000000-0000-4000-f200-0000000000aa', $1, $2, 3750, now() + interval '3 days', 'po-map')`, [IDS.visitToday, U.tara]);
+      await chargeToday(q);
+      await q.rows(`insert into public.payouts (id, visit_id, cleaner_id, payment_id, amount_pence, available_after, idempotency_key)
+                    values ('00000000-0000-4000-f200-0000000000aa', $1, $2, '${TODAY_PAYMENT}', 3750, now() + interval '3 days', 'po-map')`, [IDS.visitToday, U.tara]);
       const out: string[] = [];
       for (const [m, reason] of moves) {
         out.push(await q.attempt(`update public.payouts set status = '${m}', held_reason = ${reason ? `'${reason}'` : "null"},
@@ -201,7 +213,8 @@ describe("payouts and payout batches", () => {
       return out;
     });
     expect(await run([["held", null]])).toEqual([CHECK]);
-    expect(await run([["held", "Refund being looked at"], ["pending", null], ["in_batch", null], ["paid", null]])).toEqual(["ok", "ok", "ok", "ok"]);
+    expect(await run([["held", "Refund being looked at"]])).toEqual([CHECK]); // reasons come from a fixed list
+    expect(await run([["held", "refund_pending"], ["pending", null], ["in_batch", null], ["paid", null]])).toEqual(["ok", "ok", "ok", "ok"]);
     expect(await run([["in_batch", null], ["failed", null], ["pending", null]])).toEqual(["ok", "ok", "ok"]);
     expect(await run([["paid", null]])).toEqual(["PC041"]);
     expect(await run([["cancelled", null], ["pending", null]])).toEqual(["ok", "PC041"]);

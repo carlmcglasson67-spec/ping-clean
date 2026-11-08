@@ -31,6 +31,12 @@ export const PING_ERRORS = {
   PC040: "That payment has already moved on. Refresh to see where it stands.",
   PC041: "That payout has already moved on. Refresh to see where it stands.",
   PC042: "Refunds can't add up to more than was paid.",
+  PC043: "That payout doesn't match a paid charge for this clean.",
+  PC044: "That charge doesn't match the clean it's for.",
+  PC045: "Payment records are kept for good and can't be removed.",
+  PC046: "That payment record has to start at the beginning.",
+  PC047: "That refund has already moved on. Refresh to see where it stands.",
+  PC048: "That payment can't be refunded.",
   // Register interest
   PC030: "Enter a full UK postcode, like CA14 3XX.",
   PC031: "Enter an email address or a UK mobile number.",
