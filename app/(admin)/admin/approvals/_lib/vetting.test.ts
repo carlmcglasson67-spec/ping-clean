@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { latestByKind, readiness, reviewInput, type DocRow } from "./vetting";
+import { isOutOfDate, latestByKind, readiness, reviewInput, type DocRow } from "./vetting";
 
 const doc = (kind: DocRow["kind"], status: DocRow["status"], created_at: string, expires_on: string | null = null): DocRow => ({
   id: `${kind}-${created_at}`, cleaner_id: "c", kind, status, expires_on, created_at,
@@ -27,7 +27,15 @@ describe("vetting", () => {
     expect(reviewInput.safeParse({ ...base, reason: "Photo is cut off" }).success).toBe(true);
   });
 
-  it("only moves a document from a status it can leave", () => {
+  it("an out-of-date document is the day its date comes, in London", () => {
+    expect(isOutOfDate(null, "2026-11-08")).toBe(false);
+    expect(isOutOfDate("2026-11-09", "2026-11-08")).toBe(false);
+    expect(isOutOfDate("2026-11-08", "2026-11-08")).toBe(true);
+    expect(isOutOfDate("2025-01-01", "2026-11-08")).toBe(true);
+  });
+
+  it("only moves a document from a status it can leave, and never verifies an expired one", () => {
+    expect(reviewInput.safeParse({ decision: "verify", documentId: "x", expected: "expired" }).success).toBe(false);
     expect(reviewInput.safeParse({ decision: "verify", documentId: "x", expected: "verified" }).success).toBe(false);
     expect(reviewInput.safeParse({ decision: "reject", documentId: "x", expected: "rejected", reason: "Again please" }).success).toBe(false);
   });

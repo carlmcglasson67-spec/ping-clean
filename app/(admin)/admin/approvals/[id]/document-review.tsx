@@ -13,7 +13,7 @@ import { reviewDocument } from "../actions";
  * Open, verify or send back one document. Sending back needs a reason, because the cleaner
  * reads it ("The photo is cut off at the bottom, please send all of it").
  */
-export function DocumentReview({ documentId, status, openHref, rejectionReason }: { documentId: string; status: DocStatus; openHref: string; rejectionReason: string | null }) {
+export function DocumentReview({ documentId, status, openHref, rejectionReason, outOfDate }: { documentId: string; status: DocStatus; openHref: string; rejectionReason: string | null; outOfDate: boolean }) {
   const router = useRouter();
   const reasonId = useId();
   const [rejecting, setRejecting] = useState(false);
@@ -37,7 +37,8 @@ export function DocumentReview({ documentId, status, openHref, rejectionReason }
       }
     });
 
-  const canVerify = status !== "verified";
+  // Never an out-of-date document, and never one already expired: those need a new upload.
+  const canVerify = (status === "pending" || status === "rejected") && !outOfDate;
   const canReject = status === "pending" || status === "verified";
 
   return (
@@ -53,7 +54,7 @@ export function DocumentReview({ documentId, status, openHref, rejectionReason }
           Open document
         </a>
         {canVerify ? (
-          <Button variant="primary" pending={pending && !rejecting} disabled={pending} onClick={() => run({ decision: "verify", documentId, expected: status as "pending" | "rejected" | "expired" })}>
+          <Button variant="primary" pending={pending && !rejecting} disabled={pending} onClick={() => run({ decision: "verify", documentId, expected: status as "pending" | "rejected" })}>
             Verify
           </Button>
         ) : null}
@@ -63,6 +64,7 @@ export function DocumentReview({ documentId, status, openHref, rejectionReason }
           </Button>
         ) : null}
       </div>
+      {outOfDate && status !== "verified" ? <p className="text-sm font-semibold text-bad">Out of date, so it can&rsquo;t be verified. Send it back and ask for a current one.</p> : null}
       <p className="text-sm text-navy-3">The link opens for 10 minutes, then expires. Check the name, the dates and that nothing is cut off.</p>
 
       {rejecting ? (

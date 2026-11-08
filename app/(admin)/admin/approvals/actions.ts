@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
+import { todayInLondon } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
 import { adminErrorMessage, NOT_SAVED, type ActionResult } from "../_lib/errors";
 import { pgUuid } from "../_lib/ids";
-import { reviewInput } from "./_lib/vetting";
+import { isOutOfDate, reviewInput } from "./_lib/vetting";
 
 /**
  * Verify a document, or send it back with a reason the cleaner will read.
@@ -24,7 +25,22 @@ export async function reviewDocument(raw: unknown): Promise<ActionResult> {
 
   const input = parsed.data;
   const supabase = await createClient();
-  const { data, error } = await supabase
+  const today = todayInLondon();
+
+  // Never verify a document that's out of date: checked here on the server against the
+  // stored date, and again in the write itself (the expiry must still be what we read).
+  let expiresOn: string | null = null;
+  if (input.decision === "verify") {
+    const { data: doc, error: readError } = await supabase.from("cleaner_documents").select("expires_on").eq("id", id.data).maybeSingle();
+    if (readError) return { ok: false, message: adminErrorMessage(readError) };
+    if (!doc) return { ok: false, message: "That document wasn't found." };
+    if (isOutOfDate(doc.expires_on, today)) {
+      return { ok: false, message: "This document is out of date, so it can't be verified. Send it back and ask the cleaner for a current one." };
+    }
+    expiresOn = doc.expires_on;
+  }
+
+  let write = supabase
     .from("cleaner_documents")
     .update({
       status: input.decision === "verify" ? "verified" : "rejected",
@@ -33,8 +49,9 @@ export async function reviewDocument(raw: unknown): Promise<ActionResult> {
       rejection_reason: input.decision === "reject" ? input.reason : null,
     })
     .eq("id", id.data)
-    .eq("status", input.expected)
-    .select("cleaner_id");
+    .eq("status", input.expected);
+  if (input.decision === "verify") write = expiresOn ? write.eq("expires_on", expiresOn).gt("expires_on", today) : write.is("expires_on", null);
+  const { data, error } = await write.select("cleaner_id");
 
   if (error) return { ok: false, message: adminErrorMessage(error) };
   if (!data?.length) return { ok: false, message: "Someone on the team has just reviewed that document. Refresh to see where it stands." };
