@@ -202,3 +202,70 @@ Track A will likely need the same for checkout; worth merging this first.
 - **Why:** the brief's item 6, and the "we'll ping you" promise on the job board.
 - **Track B will build:** the "Turn on job alerts" button in `/work/you`, and the
   subscribe/unsubscribe Server Actions.
+
+## Track C — admin console
+
+### C-1. Cleaner decisions: approve, decline, set tier, suspend, reactivate (blocks console item 2). **Needs a schema change.**
+- **What:** `cleaners` has no UPDATE grant on `status`, `tier`, `approved_at` or `approved_by` (correctly),
+  and there is no admin function for them, so the console can review documents (existing
+  `documents_admin_review` policy) but can't let anyone work. Proposed, all `security definer`,
+  `search_path = ''`, admin only (`private.require_admin()`), `revoke all from public, anon`,
+  `grant execute to authenticated`, lock order cleaner then series:
+  ```sql
+  public.admin_review_cleaner(p_cleaner uuid, p_decision text, p_tier public.cleaner_tier, p_reason text) returns void
+    -- p_decision: 'approve' | 'decline' | 'suspend' | 'reactivate'
+  public.admin_set_cleaner_tier(p_cleaner uuid, p_tier public.cleaner_tier, p_reason text) returns void
+  ```
+  - **approve**: applicant → active, `approved_at = now()`, `approved_by = me`, tier = `p_tier`. Only if the
+    latest document of each of the four kinds is `verified`, and insurance `expires_on` is after today
+    (London). Otherwise PC040 with `detail` = the kinds still missing, e.g. `dbs,insurance`.
+  - **decline**: applicant → `left`, reason required.
+  - **suspend**: active → suspended, reason required. (They lose addresses at once through
+    `properties_cleaner_claimed`; their held blocks stall and alert, as the engine already does.)
+  - **reactivate**: suspended → active; same document check as approve (PC040, or PC042 insurance expired).
+  - Any other move: PC041 "That cleaner can't go from X to that".
+  - Reasons: the `[[:alnum:]]{3,}`, ≤ 300 rule used by `admin_end_block` (22023).
+  - **Where the reason lives:** a new admin-only table `cleaner_reviews (id, cleaner_id, decision, tier,
+    reason, actor_id, created_at)`, RLS on, admin select only, no direct writes. The `cleaners` audit
+    trigger already logs status and tier changes with the admin as actor. Carl to decide whether the
+    cleaner should see the reason (see decisions in the approvals PR).
+  - Tests per role: only admins; approve refused with a document pending, rejected or expired; every
+    illegal move refused; audit rows written; a suspended cleaner loses the job board and addresses.
+- **Until it lands:** the approvals screen reviews documents and shows the decision panel switched off,
+  saying why.
+
+### C-2. Find an interest entry by the contact that asked to be deleted (issue #21 item 5)
+- **What:** `public.admin_find_interest(p_contact text) returns table (id uuid, postcode_district text,
+  contact_type text, contact_masked text, notified_at timestamptz)`. Normalises the email or UK mobile
+  with the existing `private.normalise_email` / `private.normalise_uk_mobile`, exact match only,
+  admin only, audited as `lookup` with the row count and never the contact.
+- **Why:** the console only ever sees masked contacts (`j•••@example.com`), so today the admin confirms
+  by hand that the request came from that address. With this, the admin types the address or number the
+  request came from and only its own rows are offered for deletion: no chance of deleting the wrong one.
+- **Until it lands:** delete asks the admin to say how the request arrived and tick that the sender
+  matches the masked contact, then confirm.
+
+### C-3. Admin wording in lib/db/errors.ts
+- **What:** `pingErrorMessage(error, { audience: "admin" })`, with admin wording for PC001 ("That cleaner
+  isn't active any more"), PC002, PC004 and 22023, and the new PC040–PC042.
+- **Why:** the shared messages are written for cleaners ("That job isn't available to you"), which reads
+  wrong when an admin assigns. The console keeps a small override in `app/(admin)/admin/_lib/errors.ts`
+  until this lands, then deletes it.
+
+### C-4. AppShell: "Sign out" wraps onto two lines at 390px (components/ui/app-shell.tsx)
+- **What:** add `whitespace-nowrap` to the sign-out button. Seen on every admin screen on a phone.
+
+### C-5. A late-cancellation split helper in lib/money
+- **What:** `splitLateCancelFee(feePence: number, cleanerShareBps: number): { cleanerPence, pingPence }`,
+  half-up like `splitVisitPrice`, mirrored by whatever SQL Phase 5 charges with, against one fixture.
+- **Why:** the settings screen gives a live pence example for the visit price but can only describe the
+  late-cancellation split in words: that maths isn't in lib/money, and the console mustn't invent it.
+
+### C-6. One e2e runner (same as B2)
+- Track C's flows are in `tests/e2e/admin.flows.mjs`, called from the end of `roles.e2e.mjs` (a two-line
+  change, flagged in the PR). B2's runner would remove the need to touch that file.
+
+### C-7. Later: settle a visit by hand
+- `visit_unfinished` and `visit_no_show` alerts say "settle it by hand", and there's no function to do it
+  (complete, cancel or confirm a no-show, with a reason). It decides charging, so it belongs with Phase 5.
+  The console resolves the alert only, for now.

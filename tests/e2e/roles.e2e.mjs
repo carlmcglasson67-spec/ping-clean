@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
+import { adminFlows } from "./admin.flows.mjs";
 import { authFlows } from "./auth.flows.mjs";
 import { cleanerFlows } from "./cleaner.e2e.mjs";
 import { startFakeSupabase } from "./fake-supabase.mjs";
@@ -191,6 +192,8 @@ try {
   await authFlows({ browser, BASE, check, shots: process.env.SIGNUP_SHOT_DIR ?? SHOTS });
   // Track B's cleaner flows. Last, because they change the seeded jobs and visits.
   await cleanerFlows({ browser, BASE, check, signIn, SHOTS });
+  // Track C's admin console. After Track B's, because it approves, assigns and scores.
+  await adminFlows({ browser, BASE, check, signIn, SHOTS });
 } finally {
   await browser.close();
   stopApp();
