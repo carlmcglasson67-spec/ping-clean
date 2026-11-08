@@ -81,7 +81,7 @@ export default async function InterestPage({ searchParams }: { searchParams: Pro
             <form action="/admin/interest/export" method="post" className="grid justify-items-start gap-2 sm:justify-items-end">
               <input type="hidden" name="district" value={district ?? ""} />
               <Button type="submit" variant="ink" disabled={!list.data?.length}>Export {district ?? "all"} as CSV</Button>
-              <p className="max-w-xs text-sm font-semibold text-warn sm:text-right">Import directly into your SMS tool; don&rsquo;t re-save in Excel.</p>
+              <p className="max-w-xs text-sm font-semibold text-warn sm:text-right">Import directly into your SMS tool; don&apos;t re-save in Excel.</p>
             </form>
           </div>
           <p className="text-sm text-navy-3">The export holds full contact details. Keep it only as long as it takes to send the message, then delete it. Unsubscribed people are never in it.</p>
