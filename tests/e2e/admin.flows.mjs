@@ -2,7 +2,9 @@
 // real UI and real RLS. Runs last in roles.e2e.mjs (after Track B's flows), because it
 // changes data: approvals, assignments, scores.
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readdirSync } from "node:fs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import pg from "pg";
 
 const PASSWORD = "ping-test-2026";
@@ -19,14 +21,14 @@ export async function sql(text, params = []) {
   }
 }
 
-async function settle(page) {
+export async function settle(page) {
   await page.locator("main h1").first().waitFor({ timeout: 15_000 }).catch(() => {});
   await page.waitForLoadState("networkidle");
   await page.evaluate(() => document.fonts.ready);
 }
 
 /** Full-page screenshots at desktop and phone width, for the design review. */
-async function shoot(page, dir, name) {
+export async function shoot(page, dir, name) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await settle(page);
   await page.screenshot({ path: `${dir}/${name}-1440.png`, fullPage: true });
@@ -122,6 +124,14 @@ export async function adminFlows({ browser, BASE, check, signIn, SHOTS }) {
 
   await page.goto(`${BASE}/admin`);
   await shoot(page, dir, "admin-overview");
+
+  // Each admin section brings its own flows file (admin-<section>.flows.mjs), so the
+  // section PRs never edit the same test file. Run in name order, same signed-in admin.
+  const here = dirname(fileURLToPath(import.meta.url));
+  for (const file of readdirSync(here).filter((f) => /^admin-.+\.flows\.mjs$/.test(f)).sort()) {
+    const { default: flows } = await import(`./${file}`);
+    await flows({ page, BASE, check, dir, browser, signIn, sql, settle, shoot });
+  }
 
   await ctx.close();
 }
