@@ -1,6 +1,9 @@
 import Stripe from "stripe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const LEASE = "00000000-0000-4000-8000-000000000005"; // the token stripe_begin_event hands the copy that may process
+const PROCESS = { outcome: "process", lease: LEASE };
+
 vi.mock("server-only", () => ({}));
 const rpc = vi.fn();
 vi.mock("@/lib/db/admin", () => ({ createAdminClient: () => ({ rpc }) }));
@@ -128,7 +131,7 @@ describe("receiveStripeWebhook", () => {
   });
 
   it("records a new event, runs its handler once, and marks it handled", async () => {
-    rpc.mockResolvedValueOnce({ data: "process", error: null }).mockResolvedValueOnce({ data: null, error: null });
+    rpc.mockResolvedValueOnce({ data: PROCESS, error: null }).mockResolvedValueOnce({ data: true, error: null });
     const handler = vi.fn(async () => {});
     HANDLERS.platform["payment_intent.succeeded"] = handler;
     const res = await receiveStripeWebhook(post(event()), "platform");
@@ -137,12 +140,12 @@ describe("receiveStripeWebhook", () => {
     expect(handler).toHaveBeenCalledTimes(1);
     expect(rpc.mock.calls).toEqual([
       ["stripe_begin_event", { p_event_id: "evt_test_unit0001", p_type: "payment_intent.succeeded", p_account: null }],
-      ["stripe_finish_event", { p_event_id: "evt_test_unit0001", p_error: null }],
+      ["stripe_finish_event", { p_event_id: "evt_test_unit0001", p_lease: LEASE, p_error: null }],
     ]);
   });
 
   it("acknowledges a replay without running anything again", async () => {
-    rpc.mockResolvedValueOnce({ data: "duplicate", error: null });
+    rpc.mockResolvedValueOnce({ data: { outcome: "duplicate", lease: null }, error: null });
     const handler = vi.fn(async () => {});
     HANDLERS.platform["payment_intent.succeeded"] = handler;
     const res = await receiveStripeWebhook(post(event()), "platform");
@@ -152,7 +155,7 @@ describe("receiveStripeWebhook", () => {
   });
 
   it("answers 409 without running anything while another copy holds the event, so Stripe retries", async () => {
-    rpc.mockResolvedValueOnce({ data: "busy", error: null });
+    rpc.mockResolvedValueOnce({ data: { outcome: "busy", lease: null }, error: null });
     const handler = vi.fn(async () => {});
     HANDLERS.platform["payment_intent.succeeded"] = handler;
     const res = await receiveStripeWebhook(post(event()), "platform");
@@ -162,18 +165,25 @@ describe("receiveStripeWebhook", () => {
   });
 
   it("records a failed handler and answers 500 so Stripe retries, logging no personal data", async () => {
-    rpc.mockResolvedValueOnce({ data: "process", error: null }).mockResolvedValueOnce({ data: null, error: null });
+    rpc.mockResolvedValueOnce({ data: PROCESS, error: null }).mockResolvedValueOnce({ data: true, error: null });
     HANDLERS.platform["payment_intent.succeeded"] = async () => { throw new Error("database busy"); };
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await receiveStripeWebhook(post(event()), "platform");
     expect(res.status).toBe(500);
-    expect(rpc.mock.calls[1]).toEqual(["stripe_finish_event", { p_event_id: "evt_test_unit0001", p_error: "database busy" }]);
+    expect(rpc.mock.calls[1]).toEqual(["stripe_finish_event", { p_event_id: "evt_test_unit0001", p_lease: LEASE, p_error: "database busy" }]);
     expect(JSON.stringify(err.mock.calls)).not.toContain("anna@example.com");
     err.mockRestore();
   });
 
+  it("answers 409 when its lease ran out and another copy took over, so only that copy confirms", async () => {
+    rpc.mockResolvedValueOnce({ data: PROCESS, error: null }).mockResolvedValueOnce({ data: false, error: null });
+    HANDLERS.platform["payment_intent.succeeded"] = vi.fn(async () => {});
+    const res = await receiveStripeWebhook(post(event()), "platform");
+    expect(res.status).toBe(409);
+  });
+
   it("acknowledges event types with no handler yet (recorded, nothing to do)", async () => {
-    rpc.mockResolvedValueOnce({ data: "process", error: null }).mockResolvedValueOnce({ data: null, error: null });
+    rpc.mockResolvedValueOnce({ data: PROCESS, error: null }).mockResolvedValueOnce({ data: true, error: null });
     const res = await receiveStripeWebhook(post(event({ type: "customer.created" })), "platform");
     expect(await res.json()).toEqual({ received: true, handled: false });
   });

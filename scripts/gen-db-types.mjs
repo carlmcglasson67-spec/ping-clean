@@ -149,11 +149,11 @@ out += `${ind(2)}};
       };
       stripe_begin_event: {
         Args: { p_event_id: string; p_type: string; p_account: string | null };
-        Returns: "process" | "busy" | "duplicate";
+        Returns: { outcome: "process" | "busy" | "duplicate"; lease: string | null };
       };
       stripe_finish_event: {
-        Args: { p_event_id: string; p_error: string | null };
-        Returns: undefined;
+        Args: { p_event_id: string; p_lease: string; p_error: string | null };
+        Returns: boolean;
       };
       stripe_customer_for: {
         Args: { p_profile: string };

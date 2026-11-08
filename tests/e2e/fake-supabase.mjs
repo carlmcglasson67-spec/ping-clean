@@ -410,7 +410,8 @@ export function startFakeSupabase(port = 54321, { siteUrl } = {}) {
         const rows = await asUser(claims, (c) => c.query(`select * from ${call}`, names.map((n) => args[n]))).then((r) => r.rows);
         // PostgREST: set-returning → array; composite → object; scalar → the bare value.
         if (meta[0]?.proretset) return send(res, 200, rows);
-        if (meta[0]?.typtype === "c") return send(res, 200, rows[0] ?? null);
+        // A composite, or OUT parameters (a record): one object.
+        if (meta[0]?.typtype === "c" || meta[0]?.typtype === "p") return send(res, 200, rows[0] ?? null);
         return send(res, 200, rows[0] ? Object.values(rows[0])[0] : null);
       }
       const table = url.pathname.match(/^\/rest\/v1\/([a-z_]+)$/);
