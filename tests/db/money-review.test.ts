@@ -1,7 +1,7 @@
 // Payments PR 2: fixes from the independent security review (8 Nov 2026). Each test tries
 // the reviewer's attack and checks the database refuses it.
 import { afterAll, describe, expect, it } from "vitest";
-import { as, CHECK, DENIED, IDS, pool, U, type Query } from "./helpers";
+import { as, CHECK, DENIED, IDS, pool, setupThen, U, type Query } from "./helpers";
 
 afterAll(() => pool.end());
 
@@ -233,5 +233,77 @@ describe("7. the audit log never stores Stripe ids, keys or a cleaner's account"
     expect(cleaner.detail).toMatchObject({ stripe_account_id: "changed" });
     const paymentUpdate = rows.filter((r) => r.entity === "payments").at(-1)!;
     expect(paymentUpdate.detail).toMatchObject({ stripe_payment_intent_id: "changed", stripe_charge_id: "changed", cleaner_account_id: "changed" });
+  });
+});
+
+describe("re-review: refunds once sent", () => {
+  const refund = async (q: Query, key: string, payment = SEED_PAYMENT) => {
+    await q.rows(`insert into public.refunds (payment_id, amount_pence, cleaner_part_pence, ping_part_pence, reason, idempotency_key)
+                  values ($1, 1000, 750, 250, 'clean_quality', $2)`, [payment, key]);
+  };
+
+  it("can be re-split while pending, but the amount and split are frozen once it leaves pending", async () => {
+    const r = await as("superuser", async (q) => {
+      await refund(q, "r-freeze");
+      const whilePending = await q.attempt(`update public.refunds set amount_pence = 800, cleaner_part_pence = 600, ping_part_pence = 200 where idempotency_key = 'r-freeze'`);
+      await q.rows(`update public.refunds set status = 'succeeded' where idempotency_key = 'r-freeze'`);
+      const out: Record<string, string> = { whilePending };
+      for (const [k, set] of [
+        ["amount", "amount_pence = 2000, cleaner_part_pence = 1500, ping_part_pence = 500"],
+        ["split", "cleaner_part_pence = 0, ping_part_pence = 800"],
+        ["reason", "reason = 'ping_error'"],
+        ["withFailure", "status = 'failed', amount_pence = 2000, cleaner_part_pence = 1500, ping_part_pence = 500"],
+      ] as const) out[k] = await q.attempt(`update public.refunds set ${set} where idempotency_key = 'r-freeze'`);
+      return out;
+    });
+    expect(r).toEqual({ whilePending: "ok", amount: "PC047", split: "PC047", reason: "PC047", withFailure: "PC047" });
+  });
+
+  it("can't succeed on a payment that was lost to a dispute (the admin resolves it)", async () => {
+    const r = await as("superuser", async (q) => {
+      await charge(q, PAY_TODAY, IDS.visitToday);
+      await refund(q, "r-dispute", PAY_TODAY);
+      await q.rows(`update public.payments set status = 'disputed' where id = $1`, [PAY_TODAY]);
+      await q.rows(`update public.payments set status = 'dispute_lost' where id = $1`, [PAY_TODAY]);
+      return {
+        succeed: await q.attempt(`update public.refunds set status = 'succeeded' where idempotency_key = 'r-dispute'`),
+        fail: await q.attempt(`update public.refunds set status = 'failed' where idempotency_key = 'r-dispute'`),
+      };
+    });
+    expect(r).toEqual({ succeed: "PC048", fail: "ok" });
+  });
+});
+
+describe("re-review: a payout only goes into its own cleaner's bank payout", () => {
+  it("refuses Tara's payout in Alex's batch, allows it in her own", async () => {
+    const r = await as("superuser", async (q) => {
+      await charge(q, PAY_TODAY, IDS.visitToday);
+      await q.rows(payout(IDS.visitToday, U.tara, PAY_TODAY, 3750, "po-batch"));
+      const [alex] = await q.rows<{ id: string }>(`insert into public.payout_batches (cleaner_id, amount_pence, idempotency_key)
+                                                    values ($1, 3750, 'batch:alex') returning id`, [U.alex]);
+      const [tara] = await q.rows<{ id: string }>(`insert into public.payout_batches (cleaner_id, amount_pence, idempotency_key)
+                                                    values ($1, 3750, 'batch:tara') returning id`, [U.tara]);
+      const into = (batch: string) => q.attempt(
+        `update public.payouts set status = 'in_batch', batch_id = $1 where idempotency_key = 'po-batch'`, [batch]);
+      return { alex: await into(alex!.id), tara: await into(tara!.id),
+               moved: await q.attempt(`update public.payouts set batch_id = $1 where idempotency_key = 'po-batch'`, [alex!.id]) };
+    });
+    expect(r).toEqual({ alex: "PC043", tara: "ok", moved: "PC043" });
+  });
+});
+
+describe("re-review: ending a block says why its cleans were cancelled", () => {
+  it("admin_end_block stamps the cancelled cleans 'block_ended', and leaves the done one alone", async () => {
+    const rows = await setupThen(async () => {}, U.admin, async (q) => {
+      await q.rows(`select public.admin_end_block($1, 'Customer moving house')`, [IDS.annaSeries]);
+      await q.rows(`reset role`);
+      return q.rows<{ id: string; status: string; cancel_reason: string | null }>(
+        `select id, status::text, cancel_reason from public.visits where series_id = $1 order by scheduled_date`, [IDS.annaSeries]);
+    });
+    expect(rows).toEqual([
+      { id: IDS.visitDone, status: "completed", cancel_reason: null },
+      { id: IDS.visitToday, status: "cancelled", cancel_reason: "block_ended" },
+      { id: IDS.visitNextWeek, status: "cancelled", cancel_reason: "block_ended" },
+    ]);
   });
 });

@@ -1031,7 +1031,7 @@ export type Database = {
       };
       apply_as_cleaner: {
         Args: Record<PropertyKey, never>;
-        Returns: Database["public"]["Tables"]["cleaners"]["Row"];
+        Returns: Database["public"]["Enums"]["cleaner_status"];
       };
       job_board: {
         Args: Record<PropertyKey, never>;
@@ -1098,7 +1098,7 @@ export type Database = {
       };
       stripe_begin_event: {
         Args: { p_event_id: string; p_type: string; p_account: string | null };
-        Returns: "process" | "done";
+        Returns: "process" | "busy" | "duplicate";
       };
       stripe_finish_event: {
         Args: { p_event_id: string; p_error: string | null };

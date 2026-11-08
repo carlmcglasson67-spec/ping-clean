@@ -27,7 +27,8 @@ const json = (status: number, body: object) =>
  * One webhook request, end to end:
  *  1. refuse when the endpoint's secret isn't configured (503, so Stripe retries later);
  *  2. refuse oversized bodies and bad, stale, live-mode or wrong-endpoint events (400/413);
- *  3. record the event id; one already handled is acknowledged and nothing runs again;
+ *  3. record the event id; one already handled is acknowledged and nothing runs again, and
+ *     one another copy is still handling is answered 409 so Stripe retries;
  *  4. run its handler (if any); a failure is recorded and answered 500 so Stripe retries.
  * Logs carry only the event id and type, never the payload (it can hold names and emails).
  */
@@ -58,7 +59,15 @@ export async function receiveStripeWebhook(request: Request, endpoint: Endpoint)
     console.error(`stripe ${endpoint} webhook: couldn't record ${event.id}`, begun.error.code);
     return json(500, { error: "try again" });
   }
-  if (begun.data === "done") return json(200, { received: true, duplicate: true });
+  if (begun.data === "duplicate") return json(200, { received: true, duplicate: true });
+  // Another copy of this event is being handled right now: not done yet, so not a 2xx.
+  // Stripe retries; once that copy finishes the retry is a duplicate, and if it died, the
+  // retry takes over after its 5-minute lease.
+  if (begun.data === "busy") return json(409, { error: "in progress, try again" });
+  if (begun.data !== "process") {
+    console.error(`stripe ${endpoint} webhook: unexpected event-log answer for ${event.id}`);
+    return json(500, { error: "try again" });
+  }
 
   const handler = HANDLERS[endpoint][event.type];
   try {
