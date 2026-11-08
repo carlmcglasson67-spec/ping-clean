@@ -14,8 +14,8 @@ for f in "${files[@]}"; do
       case "$f" in *.example) ;; *) echo "$f: env file must not be committed"; fail=1 ;; esac ;;
   esac
   case "$f" in scripts/check-secrets.sh|.claude/hooks/*) continue ;; esac
-  if grep -nE '(sk|rk)_live_[A-Za-z0-9]{8,}' "$f" >/dev/null 2>&1; then
-    grep -nE '(sk|rk)_live_[A-Za-z0-9]{8,}' "$f" | sed "s|^|$f:|; s|_live_[A-Za-z0-9]*|_live_***|g"
+  if grep -nE '(sk|rk|pk)_live_[A-Za-z0-9]{8,}' "$f" >/dev/null 2>&1; then
+    grep -nE '(sk|rk|pk)_live_[A-Za-z0-9]{8,}' "$f" | sed "s|^|$f:|; s|_live_[A-Za-z0-9]*|_live_***|g"
     echo "  ^ live Stripe key in code"; fail=1
   fi
   case "$f" in

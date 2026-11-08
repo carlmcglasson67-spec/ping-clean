@@ -34,6 +34,12 @@ function signJwt(claims) {
   const sig = createHmac("sha256", SECRET).update(`${head}.${body}`).digest("base64url");
   return `${head}.${body}.${sig}`;
 }
+/** TEST-ONLY service-role key for this fake, signed like Supabase's (role: service_role). */
+export function fakeServiceRoleKey() {
+  const now = Math.floor(Date.now() / 1000);
+  return signJwt({ role: "service_role", iss: "fake-supabase", iat: now, exp: now + 24 * 3600 });
+}
+
 function verifyJwt(token) {
   const [h, b, s] = String(token ?? "").split(".");
   if (!h || !b || !s) return null;
@@ -79,7 +85,9 @@ async function asUser(claims, fn) {
   const c = await pool.connect();
   try {
     await c.query("begin");
-    const role = claims ? "authenticated" : "anon";
+    // The service-role key (a JWT with role "service_role", as on Supabase) runs as the
+    // service_role database role: the only caller register_interest accepts.
+    const role = claims?.role === "service_role" ? "service_role" : claims ? "authenticated" : "anon";
     await c.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify(claims ?? { role: "anon" })]);
     await c.query(`set local role ${role}`);
     const out = await fn(c);
