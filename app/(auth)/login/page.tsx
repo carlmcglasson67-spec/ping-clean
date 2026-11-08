@@ -29,7 +29,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <>
           Same cleaner.
           <br />
-          Every week.
+          Your whole block.
           <br />
           <span className="text-brand-gradient-navy">Sorted.</span>
         </>
