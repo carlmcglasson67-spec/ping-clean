@@ -1,9 +1,10 @@
-import type { Metadata } from "next";
-import { Badge, Card, EmptyState, ErrorState, PageHeader } from "@/components/ui";
+import type { Metadata, Route } from "next";
+import { Badge, ButtonLink, Card, EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { requireRole } from "@/lib/auth/session";
 import { formatDay, formatStamp } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
 import { formatDuration } from "@/lib/money";
+import { orderQueue, pageOf, readAll, ROW_CAP } from "./_lib/queue";
 import { ScoreForm } from "./score-form";
 
 export const metadata: Metadata = { title: "QC" };
@@ -11,25 +12,40 @@ export const metadata: Metadata = { title: "QC" };
 const TEN_MINUTES = 600; // signed photo links (ping-data-security rule 4)
 const PAGE = 12; // cleans per page: every photo is signed on the way in
 
-export default async function QcPage() {
+export default async function QcPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   await requireRole("admin", "/admin/qc");
   const supabase = await createClient();
+  const requested = Number((await searchParams).page ?? 1);
 
-  const [done, scored] = await Promise.all([
-    supabase.from("visits").select("id, series_id, cleaner_id, scheduled_date, completed_at, duration_minutes, couldnt_do_count")
-      .eq("status", "completed").order("completed_at", { ascending: false }).limit(500),
-    supabase.from("visit_qc").select("visit_id, score, reviewed_at, reviewed_by").order("reviewed_at", { ascending: false }),
+  // Every finished clean and every score, read in keyset pages so none is lost to the
+  // 1,000-row cap; only light columns here. Shared request C-10 asks for a database
+  // function to do this join (and paging) in one call.
+  const [finished, scoredAll, recentQ] = await Promise.all([
+    readAll((after) => {
+      const q = supabase.from("visits").select("id, completed_at, couldnt_do_count").eq("status", "completed").order("id").limit(ROW_CAP);
+      return after ? q.gt("id", after) : q;
+    }, "id"),
+    readAll((after) => {
+      const q = supabase.from("visit_qc").select("visit_id").order("visit_id").limit(ROW_CAP);
+      return after ? q.gt("visit_id", after) : q;
+    }, "visit_id"),
+    supabase.from("visit_qc").select("visit_id, score, reviewed_at").order("reviewed_at", { ascending: false }).limit(8),
   ]);
-  if (done.error || scored.error) return <Failed />;
+  if (finished.error || scoredAll.error || recentQ.error) return <Failed />;
 
-  const scoredIds = new Set((scored.data ?? []).map((q) => q.visit_id));
-  const waiting = (done.data ?? []).filter((v) => !scoredIds.has(v.id));
-  // "Couldn't do" first (the cleaner flagged something), then newest.
-  const queue = waiting.slice().sort((a, b) => Number(b.couldnt_do_count > 0) - Number(a.couldnt_do_count > 0)).slice(0, PAGE);
+  const waiting = orderQueue(finished.data ?? [], new Set((scoredAll.data ?? []).map((q) => q.visit_id)));
+  const { page, pages, rows: pageRows } = pageOf(waiting, requested, PAGE);
+  const recent = recentQ.data ?? [];
+  const detailIds = [...new Set([...pageRows.map((v) => v.id), ...recent.map((r) => r.visit_id)])];
+  const details = detailIds.length
+    ? await supabase.from("visits").select("id, series_id, cleaner_id, scheduled_date, completed_at, duration_minutes, couldnt_do_count").in("id", detailIds)
+    : { data: [], error: null };
+  if (details.error) return <Failed />;
+  const visitById = new Map((details.data ?? []).map((v) => [v.id, v]));
+  const queue = pageRows.map((v) => visitById.get(v.id)).filter((v): v is NonNullable<typeof v> => !!v);
   const ids = queue.map((v) => v.id);
-  const recent = (scored.data ?? []).slice(0, 8);
 
-  const seriesIds = [...new Set([...queue, ...(done.data ?? []).filter((v) => recent.some((r) => r.visit_id === v.id))].map((v) => v.series_id))];
+  const seriesIds = [...new Set((details.data ?? []).map((v) => v.series_id))];
   const [photos, items, reviews, series] = await Promise.all([
     ids.length ? supabase.from("visit_photos").select("id, visit_id, kind, room, storage_path, taken_at").in("visit_id", ids).order("taken_at") : empty(),
     ids.length ? supabase.from("checklist_items").select("visit_id, room, label, position, done, skipped_reason").in("visit_id", ids).order("position") : empty(),
@@ -39,7 +55,7 @@ export default async function QcPage() {
   if (photos.error || items.error || reviews.error || series.error) return <Failed />;
 
   const propIds = [...new Set((series.data ?? []).map((s) => s.property_id))];
-  const cleanerIds = [...new Set((done.data ?? []).map((v) => v.cleaner_id).filter((x): x is string => !!x))];
+  const cleanerIds = [...new Set((details.data ?? []).map((v) => v.cleaner_id).filter((x): x is string => !!x))];
   const [props, people, signed] = await Promise.all([
     propIds.length ? supabase.from("properties").select("id, town, postcode_district").in("id", propIds) : empty(),
     cleanerIds.length ? supabase.from("profiles").select("id, full_name").in("id", cleanerIds) : empty(),
@@ -56,7 +72,6 @@ export default async function QcPage() {
     const p = propOf.get(seriesId);
     return p ? `${p.town} ${p.postcode_district}` : "Home";
   };
-  const visitById = new Map((done.data ?? []).map((v) => [v.id, v]));
 
   return (
     <>
@@ -162,7 +177,13 @@ export default async function QcPage() {
             })}
           </ul>
         )}
-        {waiting.length > queue.length ? <p className="text-sm text-navy-3">Showing {queue.length} of {waiting.length}. Score these and the next ones appear.</p> : null}
+        {pages > 1 ? (
+          <nav aria-label="Queue pages" className="flex flex-wrap items-center gap-3">
+            {page > 1 ? <ButtonLink variant="secondary" href={`/admin/qc?page=${page - 1}` as Route}>Previous {PAGE}</ButtonLink> : null}
+            <span className="text-sm text-navy-3">Page {page} of {pages} · {waiting.length} to score</span>
+            {page < pages ? <ButtonLink variant="secondary" href={`/admin/qc?page=${page + 1}` as Route}>Next {PAGE}</ButtonLink> : null}
+          </nav>
+        ) : null}
       </section>
 
       <section aria-labelledby="recent" className="mt-14 grid gap-4">

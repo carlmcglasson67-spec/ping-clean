@@ -73,4 +73,28 @@ export default async function qcFlows({ page, BASE, check, dir, sql, settle, sho
 
   await page.goto(`${BASE}/admin/qc`);
   await shoot(page, dir, "admin-qc-empty");
+
+  await check("more than a page waiting: pages through them all, none dropped", async () => {
+    // 13 older finished cleans (12 a page), on dates no other clean uses.
+    await sql(
+      `insert into public.visits (series_id, customer_id, cleaner_id, scheduled_date, window_start, window_end, duration_minutes, status, started_at, completed_at, price_pence, cleaner_earnings_pence, ping_fee_pence)
+       select v.series_id, v.customer_id, v.cleaner_id, v.scheduled_date - 100 - g, v.window_start, v.window_end, v.duration_minutes, 'completed',
+              now() - make_interval(days => 100 + g), now() - make_interval(days => 100 + g) + interval '2 hours', v.price_pence, v.cleaner_earnings_pence, v.ping_fee_pence
+       from public.visits v, generate_series(1, 13) g where v.id = $1`, [ANNA_TODAY]);
+    const [{ n }] = await sql(`select count(*)::int as n from public.visits v where v.status = 'completed' and not exists (select 1 from public.visit_qc q where q.visit_id = v.id)`);
+    assert.equal(n, 13);
+    await page.goto(`${BASE}/admin/qc`);
+    await settle(page);
+    const queueItems = () => page.getByRole("region", { name: /To score/ }).locator(":scope > ul > li");
+    assert.equal(await queueItems().count(), 12);
+    await page.getByText("Page 1 of 2 · 13 to score").waitFor();
+    await page.getByRole("link", { name: "Next 12" }).click();
+    await page.waitForURL((u) => u.searchParams.get("page") === "2");
+    await settle(page);
+    assert.equal(await queueItems().count(), 1);
+    await page.getByRole("link", { name: "Previous 12" }).waitFor();
+    await page.goto(`${BASE}/admin/qc?page=99`); // a page that doesn't exist shows the last one
+    await settle(page);
+    await page.getByText("Page 2 of 2 · 13 to score").waitFor();
+  });
 }
