@@ -8,6 +8,7 @@ import { STANDARD_CLEAN_COUNT } from "./_content/checklist";
 import { FEATURED_FAQ } from "./_content/faq";
 import { STEPS } from "./_content/how";
 import { InstantPrice } from "./_components/instant-price";
+import { interestFormSetup } from "@/lib/interest/server";
 import { getPricing } from "./_lib/pricing";
 import { AREA_LINKS, CLEANERS_LINK, FAQ_LINK } from "./_content/nav";
 
@@ -30,7 +31,7 @@ const PROMISES = [
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const pricing = await getPricing();
+  const [pricing, interest] = await Promise.all([getPricing(), interestFormSetup()]);
   return (
     <>
       {/* ------------------------------------------------------------ Hero */}
@@ -111,7 +112,7 @@ export default async function Home() {
               </Link>
             ) : null}
           </div>
-          <InstantPrice pricing={pricing} />
+          <InstantPrice pricing={pricing} interest={interest} />
         </div>
       </section>
 

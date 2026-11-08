@@ -6,6 +6,7 @@ import { createClient } from "@/lib/db/server";
 import { InstantPrice } from "../../../(site)/_components/instant-price";
 import { addDays } from "../../../(site)/_lib/checkout";
 import { parsePostcode } from "../../../(site)/_lib/postcode";
+import { interestFormSetup } from "@/lib/interest/server";
 import { getPricing } from "../../../(site)/_lib/pricing";
 import { clampMinutes } from "../../../(site)/_lib/quote";
 import { CheckoutForm } from "./checkout-form";
@@ -19,10 +20,11 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
 
   const pricing = await getPricing();
   if (pricing.status !== "open") {
+    const interest = await interestFormSetup();
     return (
       <>
         <PageHeader eyebrow="Book a clean" title="Not quite yet." lede="We’ll open online booking as soon as our prices are set and our first cleaners are ready." />
-        <InstantPrice pricing={pricing} />
+        <InstantPrice pricing={pricing} interest={interest} />
       </>
     );
   }
