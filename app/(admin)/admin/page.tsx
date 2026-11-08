@@ -24,7 +24,7 @@ export default async function AdminHome() {
   const HEAD = { count: "exact", head: true } as const;
   const [settings, applicants, pendingDocs, unclaimedQ, offeringQ, todayQ, doneTodayQ, nowQ, toStartQ, alertsQ, completedQ, scoredQ, audit, ...kindQ] = await Promise.all([
     supabase.from("settings").select("*").maybeSingle(),
-    supabase.from("cleaners").select("*", HEAD).eq("status", "applicant"),
+    supabase.from("cleaners").select("id", HEAD).eq("status", "applicant"), // "id", not "*": admins can't read stripe_account_id
     supabase.from("cleaner_documents").select("*", HEAD).eq("status", "pending"),
     supabase.from("series").select("*", HEAD).eq("status", "unclaimed"),
     supabase.from("series").select("*", HEAD).eq("status", "offering"),
