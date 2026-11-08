@@ -25,6 +25,8 @@ export type Field = {
   required?: boolean;
   /** What the input box is followed by: "£", "hours"… */
   suffix?: string;
+  /** The most it can sensibly be (minutes and hours fields). Chosen by Track C, listed in the PR for Carl. */
+  max?: number;
 };
 
 export type Group = { id: string; title: string; lede: string; fields: Field[] };
@@ -57,13 +59,13 @@ export const GROUPS: Group[] = [
     title: "Offering jobs",
     lede: "A new block goes to Top cleaners first, then Approved, then everyone. These are the waits between.",
     fields: [
-      { key: "top_window_minutes", label: "Top cleaners only, for", unit: "minutes", required: true, suffix: "minutes",
+      { key: "top_window_minutes", label: "Top cleaners only, for", unit: "minutes", required: true, suffix: "minutes", max: 10_080,
         explain: "How long only Top-tier cleaners see a new job." },
-      { key: "approved_window_minutes", label: "Then Top and Approved, for", unit: "minutes", required: true, suffix: "minutes",
+      { key: "approved_window_minutes", label: "Then Top and Approved, for", unit: "minutes", required: true, suffix: "minutes", max: 10_080,
         explain: "After that window, how long until every approved cleaner, New tier included, can see it." },
-      { key: "unclaimed_alert_minutes", label: "Alert me if nobody claims it within", unit: "minutes", required: true, suffix: "minutes more",
+      { key: "unclaimed_alert_minutes", label: "Alert me if nobody claims it within", unit: "minutes", required: true, suffix: "minutes more", max: 10_080,
         explain: "Counted after both windows. Then it's marked unclaimed and appears in Jobs for you to assign." },
-      { key: "rebook_first_refusal_minutes", label: "Previous cleaner gets a rebook first, for", unit: "minutes", suffix: "minutes",
+      { key: "rebook_first_refusal_minutes", label: "Previous cleaner gets a rebook first, for", unit: "minutes", suffix: "minutes", max: 20_160,
         explain: "When a customer books again, the cleaner who did their last block sees it first. Empty means off: rebooks go straight to everyone." },
     ],
   },
@@ -72,13 +74,13 @@ export const GROUPS: Group[] = [
     title: "Cancellations and payouts",
     lede: "What happens when a customer cancels late, and how long Ping holds a cleaner's pay in case of a complaint.",
     fields: [
-      { key: "cancel_notice_hours", label: "Free cancellation up to", unit: "hours", suffix: "hours before",
+      { key: "cancel_notice_hours", label: "Free cancellation up to", unit: "hours", suffix: "hours before", max: 168,
         explain: "A customer who cancels with less notice than this pays the late fee." },
       { key: "late_cancel_fee_pence", label: "Late cancellation fee", unit: "pounds",
         explain: "Charged to the customer for a late cancellation." },
       { key: "late_cancel_cleaner_share_bps", label: "Cleaner's share of that fee", unit: "percent", suffix: "%",
         explain: "The part of the late fee that goes to the cleaner who lost the work." },
-      { key: "dispute_window_hours", label: "Hold a cleaner's pay for", unit: "hours", required: true, suffix: "hours after the clean",
+      { key: "dispute_window_hours", label: "Hold a cleaner's pay for", unit: "hours", required: true, suffix: "hours after the clean", max: 720,
         explain: "Time for the customer to raise a problem before the cleaner is paid." },
     ],
   },
@@ -97,6 +99,13 @@ export const GROUPS: Group[] = [
 
 export const FIELDS: Field[] = GROUPS.flatMap((g) => g.fields);
 const FIELD = new Map(FIELDS.map((f) => [f.key, f]));
+
+/** A field's upper limit as people say it: "7 days", "30 days". */
+export function limitInWords(f: Field): string {
+  if (f.max === undefined) return "";
+  const hours = f.unit === "minutes" ? f.max / 60 : f.max;
+  return hours % 24 === 0 ? `${hours / 24} days` : `${hours} hours`;
+}
 
 // ------------------------------------------------------------------ to the form
 
@@ -200,6 +209,7 @@ export function parseSettings(values: Values): ParseResult {
         if (v === null) err = `A whole number of ${f.unit}.`;
         else if (f.key === "unclaimed_alert_minutes" && v === 0) err = "At least 1 minute.";
         else if (f.key === "rebook_first_refusal_minutes" && v === 0) err = "At least 1 minute, or leave it empty to switch it off.";
+        else if (f.max !== undefined && v > f.max) err = `At most ${f.max.toLocaleString("en-GB")} ${f.unit} (${limitInWords(f)}).`;
         break;
       case "percent":
         v = percentBps(t);

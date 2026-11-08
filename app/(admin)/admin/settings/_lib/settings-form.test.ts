@@ -55,6 +55,17 @@ describe("settings form: parsing", () => {
     expect(bad({ commission_value: "" }).commission_value).toMatch(/Type the commission/);
   });
 
+  it("minutes and hours have sensible upper limits", () => {
+    const bad = (v: Values) => parseSettings({ ...full, ...v }).errors;
+    expect(parseSettings({ ...full, top_window_minutes: "10080", rebook_first_refusal_minutes: "20160", cancel_notice_hours: "168", dispute_window_hours: "720" }).ok).toBe(true);
+    expect(bad({ top_window_minutes: "10081" }).top_window_minutes).toBe("At most 10,080 minutes (7 days).");
+    expect(bad({ approved_window_minutes: "10081" }).approved_window_minutes).toBeDefined();
+    expect(bad({ unclaimed_alert_minutes: "10081" }).unclaimed_alert_minutes).toBeDefined();
+    expect(bad({ rebook_first_refusal_minutes: "20161" }).rebook_first_refusal_minutes).toBe("At most 20,160 minutes (14 days).");
+    expect(bad({ cancel_notice_hours: "169" }).cancel_notice_hours).toBe("At most 168 hours (7 days).");
+    expect(bad({ dispute_window_hours: "721" }).dispute_window_hours).toBe("At most 720 hours (30 days).");
+  });
+
   it("a per-hour commission is pounds, and can't swallow the whole price", () => {
     expect(parseSettings({ ...full, commission_type: "per_hour", commission_value: "5" })).toMatchObject({ ok: true, data: { commission_value: 500 } });
     const r = parseSettings({ ...full, commission_type: "per_hour", commission_value: "22.50" });

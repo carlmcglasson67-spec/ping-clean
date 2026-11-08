@@ -42,12 +42,23 @@ export async function saveSettings(raw: unknown): Promise<SaveResult> {
   if (diff.length === 0) return { ok: true, message: "Nothing had changed, so nothing was saved." };
   const patch = Object.fromEntries(diff.map((c) => [c.key, next.data[c.key]])) as Partial<SettingsData>;
 
-  // Compare-and-set: each changed field must still hold the value the admin saw, so a save
-  // racing another one between the read above and this write changes nothing.
-  let write = supabase.from("settings").update(patch).eq("id", true);
+  // Compare-and-set, in the write itself: the row must still be exactly as the admin saw it
+  // (updated_at), and each changed field must still hold the value they saw. A save racing
+  // another one between the read above and this write changes nothing.
+  // updated_at is matched to the millisecond the admin saw ([seen, seen + 1 ms)) rather than
+  // with eq: PostgREST sends microseconds, but the e2e stand-in rounds them away. The real
+  // value always lies in that range, and every save moves updated_at on.
+  const seen = Date.parse(parsed.data.expectedUpdatedAt);
+  if (Number.isNaN(seen)) return { ok: false, message: STALE, stale: true };
+  let write = supabase
+    .from("settings")
+    .update(patch)
+    .eq("id", true)
+    .gte("updated_at", new Date(seen).toISOString())
+    .lt("updated_at", new Date(seen + 1).toISOString());
   for (const c of diff) {
     const old = current[c.key];
-    if (Array.isArray(old)) continue; // the district list: covered by the updated_at check above
+    if (Array.isArray(old)) continue; // the district list: covered by updated_at
     write = old === null ? write.filter(c.key, "is", null) : write.filter(c.key, "eq", String(old));
   }
   const { data, error } = await write.select("updated_at");
