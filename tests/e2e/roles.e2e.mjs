@@ -7,7 +7,8 @@ import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
 import { authFlows } from "./auth.flows.mjs";
 import { cleanerFlows } from "./cleaner.e2e.mjs";
-import { startFakeSupabase } from "./fake-supabase.mjs";
+import { fakeServiceRoleKey, startFakeSupabase } from "./fake-supabase.mjs";
+import { interestFlows } from "./interest.e2e.mjs";
 
 const PORT = 3200;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -23,6 +24,8 @@ const env = {
   NEXT_PUBLIC_SITE_URL: BASE,
   RESET_PASS_SECRET: "e2e-reset-pass-secret-not-a-real-one-0000",
   PING_DIST_DIR: ".next-e2e",
+  // Register interest writes through the service-role client (lib/db/admin.ts).
+  SUPABASE_SERVICE_ROLE_KEY: fakeServiceRoleKey(),
 };
 
 // Anna's regular clean falls on today's weekday (see seed.sql), in London time.
@@ -189,6 +192,7 @@ try {
   }
 
   await authFlows({ browser, BASE, check, shots: process.env.SIGNUP_SHOT_DIR ?? SHOTS });
+  await interestFlows({ browser, BASE, check, shots: process.env.INTEREST_SHOT_DIR ?? SHOTS });
   // Track B's cleaner flows. Last, because they change the seeded jobs and visits.
   await cleanerFlows({ browser, BASE, check, signIn, SHOTS });
 } finally {
