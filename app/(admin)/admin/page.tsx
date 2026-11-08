@@ -28,7 +28,8 @@ export default async function AdminHome() {
     supabase.from("cleaner_documents").select("*", HEAD).eq("status", "pending"),
     supabase.from("series").select("*", HEAD).eq("status", "unclaimed"),
     supabase.from("series").select("*", HEAD).eq("status", "offering"),
-    supabase.from("visits").select("*", HEAD).eq("scheduled_date", today),
+    // Ending a block cancels its cleans rather than deleting them: they aren't booked any more.
+    supabase.from("visits").select("*", HEAD).eq("scheduled_date", today).neq("status", "cancelled"),
     supabase.from("visits").select("*", HEAD).eq("scheduled_date", today).eq("status", "completed"),
     supabase.from("visits").select("*", HEAD).eq("scheduled_date", today).eq("status", "in_progress"),
     supabase.from("visits").select("*", HEAD).eq("scheduled_date", today).eq("status", "scheduled"),
