@@ -16,6 +16,7 @@ export const PING_ERRORS = {
   PC013: "Tick every item, or mark it “couldn't do” with a reason.",
   PC014: "Add at least one before and one after photo.",
   PC015: "No checklist has been set up yet. Call the Ping office.",
+  PC016: "That clean has payment records, so it can't be removed. Cancel it instead.",
   // Booking
   PC020: "Booking isn't open yet.",
   PC021: "That home isn't on your account.",
