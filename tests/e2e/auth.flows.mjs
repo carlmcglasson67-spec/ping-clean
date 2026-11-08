@@ -183,7 +183,12 @@ export async function authFlows({ browser, BASE, check, shots }) {
       await page.waitForLoadState("networkidle");
       await page.waitForTimeout(500);
     });
-    assert.ok(seen.includes("/work/apply"), `expected a visit to /work/apply, saw ${seen.join(", ")}`);
+    // Now that /work/apply is a real page for customers (#17), the sign-in action's redirect
+    // renders it in the same response, so there's no separate request for it: the browser's
+    // address is the proof. Without the page, the chain of redirects requests it instead.
+    const landed = new URL(page.url()).pathname === "/work/apply";
+    assert.ok(landed || seen.includes("/work/apply"), `expected to land on /work/apply, saw ${seen.join(", ")} (at ${page.url()})`);
+    if (landed) await page.getByRole("button", { name: "Start my application" }).waitFor();
     await ctx.close();
   });
 

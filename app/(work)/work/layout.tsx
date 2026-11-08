@@ -1,15 +1,12 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { AppShell } from "@/components/ui/app-shell";
-import { firstName, requireRole } from "@/lib/auth/session";
 
+// The cleaner app. Two parts:
+//   (app)/  everything a cleaner or applicant uses: guarded by role in its own layout
+//   apply/  where a signed-in customer becomes an applicant (they aren't a cleaner yet,
+//           so it can't sit behind the cleaner guard)
 export const metadata: Metadata = { title: "Cleaner", robots: { index: false } };
 
-export default async function WorkLayout({ children }: { children: ReactNode }) {
-  const session = await requireRole("cleaner");
-  return (
-    <AppShell area="/work" who={firstName(session)}>
-      {children}
-    </AppShell>
-  );
+export default function WorkRoot({ children }: { children: ReactNode }) {
+  return children;
 }

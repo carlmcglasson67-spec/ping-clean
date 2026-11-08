@@ -4,7 +4,11 @@
 // (SET ROLE authenticated + request.jwt.claims), so row level security decides what
 // comes back, exactly as on Supabase. Supports only the PostgREST subset Ping uses:
 //   select=cols | col=eq./neq./gt./gte./lt./lte./in.(…) | order=col.asc|desc | limit=n
-//   HEAD + Prefer: count=exact | POST /rpc/<fn>
+//   HEAD + Prefer: count=exact | POST /rpc/<fn> with named args
+//   PATCH (update) and POST (insert), with Prefer: return=representation|minimal
+//   Storage: upload (owner + size metadata), sign one or many, and fetch-by-signed-URL, gated by the real
+//   storage.objects policies. File bytes live in memory only. CORS like Supabase.
+//   Auth: password sign-in, sign-up, resend, recovery and verify (email links go to a test outbox).
 // Never deploy this. Real environments use a real Supabase project.
 import { createHmac, randomUUID } from "node:crypto";
 import http from "node:http";
@@ -89,6 +93,78 @@ async function asUser(claims, fn) {
   }
 }
 
+const selectCols = (params) =>
+  (params.get("select") ?? "*").split(",").map((c) => (c.trim() === "*" ? "*" : ident(c.trim()))).join(", ");
+
+function buildSelect(table, params) {
+  const values = [];
+  const cols = selectCols(params);
+  const where = buildWhere(params, values);
+  let sql = `select ${cols} from public.${ident(table)}`;
+  if (where.length) sql += ` where ${where.join(" and ")}`;
+  const order = params.get("order");
+  if (order) {
+    sql += " order by " + order.split(",").map((o) => {
+      const [c, dir] = o.split(".");
+      return `${ident(c)} ${dir === "desc" ? "desc" : "asc"}`;
+    }).join(", ");
+  }
+  const limit = Number(params.get("limit"));
+  if (limit) sql += ` limit ${Math.min(limit, 1000)}`;
+  return { sql, values };
+}
+
+// Column types, so JSON bodies can be bound correctly (jsonb vs text[]).
+const columnTypes = new Map();
+async function colType(table, col) {
+  const key = `${table}.${col}`;
+  if (!columnTypes.has(key)) {
+    const { rows } = await pool.query(
+      `select data_type from information_schema.columns where table_schema = 'public' and table_name = $1 and column_name = $2`,
+      [table, col],
+    );
+    columnTypes.set(key, rows[0]?.data_type ?? "text");
+  }
+  return columnTypes.get(key);
+}
+async function bind(table, col, v) {
+  return (await colType(table, col)) === "jsonb" ? JSON.stringify(v) : v;
+}
+
+/** PATCH /rest/v1/<table>?filters — an UPDATE as the signed-in user (RLS applies). */
+async function buildUpdate(table, params, body) {
+  const values = [];
+  const sets = [];
+  for (const [k, v] of Object.entries(body)) {
+    values.push(await bind(table, k, v));
+    sets.push(`${ident(k)} = $${values.length}`);
+  }
+  const where = buildWhere(params, values);
+  let sql = `update public.${ident(table)} set ${sets.join(", ")}`;
+  if (where.length) sql += ` where ${where.join(" and ")}`;
+  return { sql: `${sql} returning ${selectCols(params)}`, values };
+}
+
+/** POST /rest/v1/<table> — an INSERT of one row or many, as the signed-in user. */
+async function buildInsert(table, params, body) {
+  const rows = Array.isArray(body) ? body : [body];
+  const cols = Object.keys(rows[0] ?? {});
+  const values = [];
+  const tuples = [];
+  for (const r of rows) {
+    const ph = [];
+    for (const c of cols) {
+      values.push(await bind(table, c, r[c] ?? null));
+      ph.push(`$${values.length}`);
+    }
+    tuples.push(`(${ph.join(", ")})`);
+  }
+  return {
+    sql: `insert into public.${ident(table)} (${cols.map(ident).join(", ")}) values ${tuples.join(", ")} returning ${selectCols(params)}`,
+    values,
+  };
+}
+
 // ---------------- email (test only)
 // Sign-up, resend and recovery "send" their links here instead of by email. The links are
 // built the way Ping's Supabase email templates build them: {{ .RedirectTo }}&token_hash=…&type=…
@@ -137,34 +213,27 @@ function buildWhere(params, values) {
   return where;
 }
 
-function buildSelect(table, params) {
-  const values = [];
-  const cols = (params.get("select") ?? "*").split(",").map((c) => (c.trim() === "*" ? "*" : ident(c.trim()))).join(", ");
-  const where = buildWhere(params, values);
-  let sql = `select ${cols} from public.${ident(table)}`;
-  if (where.length) sql += ` where ${where.join(" and ")}`;
-  const order = params.get("order");
-  if (order) {
-    sql += " order by " + order.split(",").map((o) => {
-      const [c, dir] = o.split(".");
-      return `${ident(c)} ${dir === "desc" ? "desc" : "asc"}`;
-    }).join(", ");
-  }
-  const limit = Number(params.get("limit"));
-  if (limit) sql += ` limit ${Math.min(limit, 1000)}`;
-  return { sql, values };
-}
+// The browser talks to Supabase directly for uploads, so answer CORS like Supabase does.
+const CORS = { "access-control-allow-origin": "*", "access-control-expose-headers": "content-range" };
 
 const send = (res, status, body, headers = {}) => {
-  res.writeHead(status, { "content-type": "application/json", ...headers });
-  res.end(body === undefined ? "" : JSON.stringify(body));
+  res.writeHead(status, { "content-type": "application/json", ...CORS, ...headers });
+  res.end(body === undefined || status === 204 ? "" : JSON.stringify(body));
 };
 
-const readBody = (req) => new Promise((r) => {
-  let d = "";
-  req.on("data", (c) => (d += c));
-  req.on("end", () => r(d ? JSON.parse(d) : {}));
+const readRaw = (req) => new Promise((r) => {
+  const chunks = [];
+  req.on("data", (c) => chunks.push(c));
+  req.on("end", () => r(Buffer.concat(chunks)));
 });
+const readBody = async (req) => {
+  const d = (await readRaw(req)).toString();
+  return d ? JSON.parse(d) : {};
+};
+
+// Signed storage URLs: HMAC over bucket/path/expiry, checked when the URL is fetched.
+const signPath = (bucket, path, exp) => createHmac("sha256", SECRET).update(`${bucket}/${path}:${exp}`).digest("base64url");
+const storedFiles = new Map(); // "<bucket>/<path>" → { type, bytes }
 
 export function startFakeSupabase(port = 54321, { siteUrl } = {}) {
   if (siteUrl) SITE_URL = siteUrl;
@@ -248,6 +317,67 @@ export function startFakeSupabase(port = 54321, { siteUrl } = {}) {
       }
       if (url.pathname === "/auth/v1/logout") return send(res, 204);
 
+      if (req.method === "OPTIONS") {
+        return send(res, 204, undefined, {
+          "access-control-allow-methods": "GET, POST, PATCH, PUT, DELETE, HEAD, OPTIONS",
+          "access-control-allow-headers": String(req.headers["access-control-request-headers"] ?? "*"),
+          "access-control-max-age": "600",
+        });
+      }
+
+      // ---------------- storage (private buckets; storage.objects RLS decides, as on Supabase)
+      const signMany = url.pathname.match(/^\/storage\/v1\/object\/sign\/([a-z-]+)$/);
+      if (signMany && req.method === "POST") {
+        const [, bucket] = signMany;
+        const { expiresIn, paths } = await readBody(req);
+        const exp = Math.floor(Date.now() / 1000) + Number(expiresIn);
+        const out = [];
+        for (const path of paths ?? []) {
+          const found = await asUser(claims, (c) => c.query(`select 1 from storage.objects where bucket_id = $1 and name = $2`, [bucket, path]));
+          out.push(found.rows[0]
+            ? { path, error: null, signedURL: `/object/sign/${bucket}/${encodeURI(path)}?token=${exp}.${signPath(bucket, path, exp)}` }
+            : { path, error: "Either the object does not exist or you do not have access to it", signedURL: null });
+        }
+        return send(res, 200, out);
+      }
+      const signed = url.pathname.match(/^\/storage\/v1\/object\/sign\/([a-z-]+)\/(.+)$/);
+      if (signed && req.method === "POST") {
+        const [, bucket, path] = signed;
+        const { expiresIn } = await readBody(req);
+        const found = await asUser(claims, (c) => c.query(`select 1 from storage.objects where bucket_id = $1 and name = $2`, [bucket, decodeURIComponent(path)]));
+        if (!found.rows[0]) return send(res, 400, { statusCode: "404", error: "not_found", message: "Object not found" });
+        const exp = Math.floor(Date.now() / 1000) + Number(expiresIn);
+        return send(res, 200, { signedURL: `/object/sign/${bucket}/${path}?token=${exp}.${signPath(bucket, decodeURIComponent(path), exp)}` });
+      }
+      if (signed && req.method === "GET") {
+        const [, bucket, path] = signed;
+        const [exp, sig] = String(url.searchParams.get("token") ?? "").split(".");
+        const name = decodeURIComponent(path);
+        if (!sig || sig !== signPath(bucket, name, exp) || Number(exp) * 1000 < Date.now()) {
+          return send(res, 400, { statusCode: "400", error: "InvalidJWT", message: "invalid signature or expired" });
+        }
+        const file = storedFiles.get(`${bucket}/${name}`);
+        res.writeHead(200, { "content-type": file?.type ?? "application/octet-stream", ...CORS });
+        return res.end(file?.bytes ?? Buffer.alloc(0));
+      }
+      const object = url.pathname.match(/^\/storage\/v1\/object\/([a-z-]+)\/(.+)$/);
+      if (object && req.method === "POST") {
+        const [, bucket, path] = object;
+        const name = decodeURIComponent(path);
+        const bytes = await readRaw(req);
+        try {
+          // Like Supabase: the uploader owns it, and metadata records its size (complete_visit checks both).
+          await asUser(claims, (c) => c.query(
+            `insert into storage.objects (bucket_id, name, owner, metadata) values ($1, $2, $3, $4)`,
+            [bucket, name, claims?.sub ?? null, JSON.stringify({ size: bytes.length, mimetype: String(req.headers["content-type"] ?? "") })],
+          ));
+        } catch (e) {
+          return send(res, 400, { statusCode: "403", error: "Unauthorized", message: e.message });
+        }
+        storedFiles.set(`${bucket}/${name}`, { type: String(req.headers["content-type"] ?? ""), bytes });
+        return send(res, 200, { Key: `${bucket}/${name}`, Id: randomUUID() });
+      }
+
       // ---------------- test-only controls
       if (url.pathname === "/__test/mail") {
         const found = outbox.filter((m) => m.email === url.searchParams.get("email") && (!url.searchParams.get("type") || m.type === url.searchParams.get("type")));
@@ -261,10 +391,31 @@ export function startFakeSupabase(port = 54321, { siteUrl } = {}) {
       // ---------------- rest
       const rpc = url.pathname.match(/^\/rest\/v1\/rpc\/([a-z_]+)$/);
       if (rpc) {
-        const rows = await asUser(claims, (c) => c.query(`select * from public.${ident(rpc[1])}()`)).then((r) => r.rows);
-        return send(res, 200, rows);
+        const fn = rpc[1];
+        const args = req.method === "POST" ? await readBody(req) : {};
+        const names = Object.keys(args);
+        const call = `public.${ident(fn)}(${names.map((n, i) => `${ident(n)} => $${i + 1}`).join(", ")})`;
+        const { rows: meta } = await pool.query(
+          `select p.proretset, t.typtype from pg_proc p join pg_type t on t.oid = p.prorettype where p.proname = $1 and p.pronamespace = 'public'::regnamespace`,
+          [fn],
+        );
+        const rows = await asUser(claims, (c) => c.query(`select * from ${call}`, names.map((n) => args[n]))).then((r) => r.rows);
+        // PostgREST: set-returning → array; composite → object; scalar → the bare value.
+        if (meta[0]?.proretset) return send(res, 200, rows);
+        if (meta[0]?.typtype === "c") return send(res, 200, rows[0] ?? null);
+        return send(res, 200, rows[0] ? Object.values(rows[0])[0] : null);
       }
       const table = url.pathname.match(/^\/rest\/v1\/([a-z_]+)$/);
+      if (table && (req.method === "PATCH" || req.method === "POST")) {
+        const body = await readBody(req);
+        const { sql, values } = req.method === "PATCH"
+          ? await buildUpdate(table[1], url.searchParams, body)
+          : await buildInsert(table[1], url.searchParams, body);
+        const rows = await asUser(claims, (c) => c.query(sql, values)).then((r) => r.rows);
+        const wantsRows = /return=representation/.test(String(req.headers.prefer ?? ""));
+        if (!wantsRows) return send(res, req.method === "POST" ? 201 : 204);
+        return send(res, req.method === "POST" ? 201 : 200, rows);
+      }
       if (table && (req.method === "GET" || req.method === "HEAD")) {
         const { sql, values } = buildSelect(table[1], url.searchParams);
         const rows = await asUser(claims, (c) => c.query(sql, values)).then((r) => r.rows);
@@ -273,20 +424,9 @@ export function startFakeSupabase(port = 54321, { siteUrl } = {}) {
         if (req.method === "HEAD") return send(res, 200, undefined, { "content-range": range });
         return send(res, 200, rows, { "content-range": range });
       }
-      if (table && req.method === "PATCH") {
-        // Update as the signed-in user: RLS and column grants decide, as on Supabase.
-        const body = await readBody(req);
-        const values = [];
-        const sets = Object.entries(body).map(([k, v]) => { values.push(v); return `${ident(k)} = $${values.length}`; });
-        if (!sets.length) return send(res, 400, { message: "nothing to update" });
-        const where = buildWhere(url.searchParams, values);
-        const sql = `update public.${ident(table[1])} set ${sets.join(", ")}${where.length ? ` where ${where.join(" and ")}` : ""} returning *`;
-        const rows = await asUser(claims, (c) => c.query(sql, values)).then((r) => r.rows);
-        return /return=representation/.test(String(req.headers.prefer ?? "")) ? send(res, 200, rows) : send(res, 204);
-      }
       return send(res, 404, { message: `fake-supabase: ${req.method} ${url.pathname} not supported` });
     } catch (e) {
-      return send(res, e.status ?? 400, { code: e.code ?? "PGRST000", message: e.message });
+      return send(res, e.status ?? 400, { code: e.code ?? "PGRST000", message: e.message, details: e.detail ?? null });
     }
   });
   return new Promise((resolve) => server.listen(port, "127.0.0.1", () => resolve({ server, close: async () => { server.close(); await pool.end(); } })));

@@ -1,12 +1,13 @@
+import Link from "next/link";
+import { buttonClass } from "@/components/ui/button";
 import { Badge, Card, EmptyState, ErrorState, PageHeader, PingMark, Stat } from "@/components/ui";
 import { firstName, requireRole } from "@/lib/auth/session";
 import { formatWindow, monthStartInLondon, relativeDay, todayInLondon } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
-import { DOCUMENT_KIND, DOCUMENT_STATUS, TIER, VISIT_STATUS } from "@/lib/labels";
+import { TIER, VISIT_STATUS } from "@/lib/labels";
 import { formatDuration, formatPence, formatPenceShort } from "@/lib/money";
 import type { Enums } from "@/lib/db/types";
-
-const REQUIRED_DOCS: Enums<"document_kind">[] = ["dbs", "insurance", "photo_id", "right_to_work"];
+import { Application } from "./application";
 
 export default async function WorkHome() {
   const session = await requireRole("cleaner", "/work");
@@ -21,7 +22,7 @@ export default async function WorkHome() {
     return <ErrorState>We couldn&rsquo;t load your account just now. Check your signal and refresh.</ErrorState>;
   }
   if (!me || me.status === "applicant") {
-    return <Applicant name={firstName(session)} cleanerId={session.userId} />;
+    return <Application name={firstName(session)} cleanerId={session.userId} />;
   }
   if (me.status !== "active") {
     return (
@@ -48,7 +49,8 @@ export default async function WorkHome() {
       .eq("status", "scheduled")
       .order("scheduled_date")
       .limit(5),
-    supabase.from("job_offers").select("id").eq("status", "open"),
+    // The same list the job board shows, so the count never promises a job that's gone.
+    supabase.rpc("job_board"),
     supabase.from("payouts").select("amount_pence, status, paid_at").gte("created_at", monthStartInLondon()),
   ]);
   const failed = todays.error || upcoming.error || offers.error || payouts.error;
@@ -61,7 +63,14 @@ export default async function WorkHome() {
       <PageHeader
         eyebrow={`${TIER[me.tier]} cleaner`}
         title={`Hi ${firstName(session)}. ${jobs.length === 0 ? "Nothing booked today." : jobs.length === 1 ? "One clean today." : `${jobs.length} cleans today.`}`}
-        lede={`You cover ${me.areas.length ? me.areas.join(", ") : "no areas yet"}.`}
+        lede={
+          <>
+            You cover {me.areas.length ? me.areas.join(", ") : "no areas yet"}.{" "}
+            <Link href="/work/areas" className="inline-flex min-h-12 items-center font-semibold text-navy underline decoration-line decoration-2 underline-offset-4 hover:decoration-navy">
+              {me.areas.length ? "Change" : "Choose your areas"}
+            </Link>
+          </>
+        }
       />
 
       {failed ? (
@@ -77,25 +86,38 @@ export default async function WorkHome() {
                 New jobs in your areas will show up here once you claim them.
               </EmptyState>
             ) : (
-              <ol className="grid gap-3">
-                {jobs.map((v) => <VisitRow key={v.id} v={v} />)}
-              </ol>
+              <>
+                <ol className="grid gap-3">
+                  {jobs.map((v) => <VisitRow key={v.id} v={v} />)}
+                </ol>
+                <Link href="/work/today" className={buttonClass("ink", "lg", "w-full sm:w-auto sm:justify-self-start")}>
+                  Addresses and directions
+                </Link>
+              </>
             )}
           </section>
 
-          <Card className="grain relative overflow-hidden bg-signal text-ink ring-0 lg:col-start-2 lg:row-start-1 lg:self-start">
+          <Card className="grain relative overflow-hidden bg-teal text-navy ring-0 lg:col-start-2 lg:row-start-1 lg:self-start">
             <div className="flex items-center gap-3">
-              <PingMark pulse dot="ink" className="text-ink" />
+              <PingMark pulse dot="ink" className="text-navy" />
               <p className="text-sm font-bold uppercase tracking-[0.14em]">New jobs for you</p>
             </div>
             <p className="mt-5 font-display text-4xl font-semibold tabular">{offers.data?.length ?? 0}</p>
-            <p className="mt-2 max-w-xs text-ink/80">
+            <p className="mt-2 max-w-xs text-navy/80">
               {offers.data?.length ? "Waiting in your areas now. First to claim gets the job." : "We'll ping you the moment one comes up in your areas."}
             </p>
+            <Link href="/work/jobs" className={buttonClass("ink", "lg", "mt-6 w-full sm:w-auto")}>
+              {offers.data?.length ? "See the jobs" : "Open the job board"}
+            </Link>
           </Card>
 
           <section aria-labelledby="coming" className="grid content-start gap-4 lg:col-start-1 lg:row-start-2">
-            <h2 id="coming" className="text-xl font-semibold">Coming up</h2>
+            <div className="flex items-baseline justify-between gap-4">
+              <h2 id="coming" className="text-xl font-semibold">Coming up</h2>
+              <Link href="/work/calendar" className="inline-flex min-h-12 items-center font-semibold text-navy underline decoration-line decoration-2 underline-offset-4 hover:decoration-navy">
+                Your calendar
+              </Link>
+            </div>
             {(upcoming.data ?? []).length === 0 ? (
               <EmptyState title="Nothing else booked yet" />
             ) : (
@@ -138,64 +160,17 @@ function VisitRow({ v, showDay = false }: { v: VisitLite; showDay?: boolean }) {
       <Card className="flex items-center gap-5 p-5 sm:p-6">
         <div className="grid flex-1 gap-1">
           <p className="text-lg font-semibold">{showDay ? relativeDay(v.scheduled_date) : formatWindow(v.window_start, v.window_end)}</p>
-          <p className="text-sm text-ink-2">
+          <p className="text-sm text-navy-2">
             {showDay ? `${formatWindow(v.window_start, v.window_end)} · ` : ""}
             {formatDuration(v.duration_minutes)}
           </p>
         </div>
         <div className="grid justify-items-end gap-2">
           <Badge tone={st.tone}>{st.label}</Badge>
-          <span className="text-sm font-semibold tabular text-ink-2">You earn {formatPence(v.cleaner_earnings_pence)}</span>
+          <span className="text-sm font-semibold tabular text-navy-2">You earn {formatPence(v.cleaner_earnings_pence)}</span>
         </div>
       </Card>
     </li>
   );
 }
 
-async function Applicant({ name, cleanerId }: { name: string; cleanerId: string }) {
-  const supabase = await createClient();
-  const { data: docs, error } = await supabase
-    .from("cleaner_documents")
-    .select("kind, status, expires_on")
-    .eq("cleaner_id", cleanerId);
-  const byKind = new Map((docs ?? []).map((d) => [d.kind, d]));
-  const done = REQUIRED_DOCS.filter((k) => byKind.get(k)?.status === "verified").length;
-
-  return (
-    <>
-      <PageHeader
-        eyebrow="Your application"
-        title={`Thanks for applying, ${name}.`}
-        lede="We check every cleaner before they see a single job. Here's where yours is up to."
-      />
-      {error ? (
-        <ErrorState>Your documents didn&rsquo;t load. Check your signal and refresh.</ErrorState>
-      ) : (
-        <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
-          <Card className="grain relative overflow-hidden bg-ink text-paper ring-0">
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">Checks complete</p>
-            <p className="mt-5 font-display text-4xl font-semibold tabular">
-              {done}<span className="text-paper/40">/{REQUIRED_DOCS.length}</span>
-            </p>
-            <p className="mt-4 max-w-xs text-paper/70">When all four are verified, the Ping team approves you and jobs start appearing.</p>
-          </Card>
-          <ol className="grid gap-3">
-            {REQUIRED_DOCS.map((kind, i) => {
-              const doc = byKind.get(kind);
-              const st = doc ? DOCUMENT_STATUS[doc.status] : null;
-              return (
-                <li key={kind}>
-                  <Card className="flex items-center gap-5 p-5 sm:p-6">
-                    <span className="font-display text-xl font-semibold text-ink-3 tabular">{String(i + 1).padStart(2, "0")}</span>
-                    <p className="flex-1 text-lg font-semibold">{DOCUMENT_KIND[kind]}</p>
-                    {st ? <Badge tone={st.tone}>{st.label}</Badge> : <Badge>Not sent yet</Badge>}
-                  </Card>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
-      )}
-    </>
-  );
-}
