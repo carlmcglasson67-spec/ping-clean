@@ -35,6 +35,11 @@ export function readiness(docs: readonly DocRow[], today: string) {
   return { ready: waiting.length === 0, waiting, toCheck: [...latest.values()].filter((d) => d.status === "pending").length };
 }
 
+/** Out of date on `today` (London, YYYY-MM-DD): its expiry or cover-end date has come. */
+export function isOutOfDate(expiresOn: string | null | undefined, today: string): boolean {
+  return !!expiresOn && expiresOn <= today;
+}
+
 /** A reason a person can act on: a real word or more, at most 300 characters (the database's rule). */
 export const reason = z
   .string()
@@ -43,6 +48,7 @@ export const reason = z
   .regex(/[\p{L}\p{N}]{3,}/u, "Say why, in a few words.");
 
 export const reviewInput = z.discriminatedUnion("decision", [
-  z.object({ decision: z.literal("verify"), documentId: z.string(), expected: z.enum(["pending", "rejected", "expired"]) }),
+  // An expired document is never verified: the cleaner sends a new one.
+  z.object({ decision: z.literal("verify"), documentId: z.string(), expected: z.enum(["pending", "rejected"]) }),
   z.object({ decision: z.literal("reject"), documentId: z.string(), expected: z.enum(["pending", "verified"]), reason }),
 ]);

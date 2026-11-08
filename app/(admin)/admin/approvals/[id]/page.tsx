@@ -101,6 +101,7 @@ export default async function CleanerPage({ params, searchParams }: { params: Pr
                         status={doc.status}
                         openHref={`/admin/approvals/document/${doc.id}`}
                         rejectionReason={doc.status === "rejected" ? doc.rejection_reason : null}
+                        outOfDate={expired}
                       />
                     ) : null}
                     {older.length ? (

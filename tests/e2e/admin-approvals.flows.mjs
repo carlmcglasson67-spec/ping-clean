@@ -99,6 +99,28 @@ export default async function approvalsFlows({ page, BASE, check, dir, browser, 
     assert.equal(d.status, "verified");
   });
 
+  await check("an out-of-date document is never verified: no button, and the server refuses it too", async () => {
+    // In date when the page loads: Verify shows.
+    await sql(`update public.cleaner_documents set status = 'pending', reviewed_by = null, reviewed_at = null,
+               expires_on = (now() at time zone 'Europe/London')::date + 30 where id = $1`, [SAM_DBS]);
+    await page.reload();
+    await settle(page);
+    // Then its date passes before the admin taps (the browser's view is stale).
+    await sql(`update public.cleaner_documents set expires_on = (now() at time zone 'Europe/London')::date - 1 where id = $1`, [SAM_DBS]);
+    await dbsCard().getByRole("button", { name: "Verify" }).click();
+    await dbsCard().getByText(/out of date, so it can.t be verified/).waitFor();
+    let [d] = await sql(`select status from public.cleaner_documents where id = $1`, [SAM_DBS]);
+    assert.equal(d.status, "pending", "not verified");
+    // Today's date counts as out of date too, and the page offers no Verify at all.
+    await sql(`update public.cleaner_documents set expires_on = (now() at time zone 'Europe/London')::date where id = $1`, [SAM_DBS]);
+    await page.reload();
+    await settle(page);
+    assert.equal(await dbsCard().getByRole("button", { name: "Verify" }).count(), 0);
+    await dbsCard().getByText("Out of date", { exact: true }).waitFor();
+    [d] = await sql(`select status from public.cleaner_documents where id = $1`, [SAM_DBS]);
+    assert.equal(d.status, "pending");
+  });
+
   await page.goto(`${BASE}/admin/approvals`);
   await shoot(page, dir, "admin-approvals");
   await page.goto(`${BASE}/admin/approvals/${SAM}`);
