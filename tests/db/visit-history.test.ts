@@ -6,13 +6,20 @@ afterAll(() => pool.end());
 
 const END = `select public.admin_end_block($1, $2)`;
 
-/** A payment row on a visit, as the charge job will write one. */
+/** A charge on one of Anna's cleans, as the charge job will write one (the seed's split). */
 const pay = (su: Query, visit: string, key: string) =>
-  su.rows(`insert into public.payments (visit_id, customer_id, amount_pence, application_fee_pence, idempotency_key)
-           values ($1, $2, 5000, 1000, $3)`, [visit, U.anna, key]);
-const payout = (su: Query, visit: string, key: string) =>
-  su.rows(`insert into public.payouts (visit_id, cleaner_id, amount_pence, available_after, idempotency_key)
-           values ($1, $2, 4000, now() + interval '3 days', $3)`, [visit, U.tara, key]);
+  su.rows(`insert into public.payments (visit_id, customer_id, amount_pence, application_fee_pence, cleaner_amount_pence, idempotency_key)
+           values ($1, $2, 5000, 1250, 3750, $3)`, [visit, U.anna, key]);
+/** A payout for Tara's earnings, made (as always) from a succeeded charge for the same clean. */
+const payout = async (su: Query, visit: string, key: string) => {
+  const [p] = await su.rows<{ id: string }>(
+    `insert into public.payments (visit_id, customer_id, amount_pence, application_fee_pence, cleaner_amount_pence, idempotency_key)
+     values ($1, $2, 5000, 1250, 3750, $3) returning id`, [visit, U.anna, `${key}:charge`]);
+  await su.rows(`update public.payments set status = 'processing' where id = $1`, [p!.id]);
+  await su.rows(`update public.payments set status = 'succeeded' where id = $1`, [p!.id]);
+  await su.rows(`insert into public.payouts (visit_id, cleaner_id, payment_id, amount_pence, available_after, idempotency_key)
+                 values ($1, $2, $3, 3750, now() + interval '3 days', $4)`, [visit, U.tara, p!.id, key]);
+};
 
 describe("ending a block keeps its visits", () => {
   it("cancels the cleans still to come, stamped with when and by whom, instead of deleting them", async () => {
