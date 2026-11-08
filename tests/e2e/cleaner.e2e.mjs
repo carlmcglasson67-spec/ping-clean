@@ -54,6 +54,39 @@ export async function cleanerFlows({ browser, BASE, check, signIn, SHOTS }) {
   await createCasey();
 
   console.log("e2e: cleaner application (Track B)");
+  await check("a brand-new visitor to /work/apply signs up, confirms, and lands back on the application", async () => {
+    const ctx = await browser.newContext(PHONE);
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/work/apply`);
+    assert.equal(new URL(page.url()).pathname, "/signup");
+    assert.equal(new URL(page.url()).searchParams.get("next"), "/work/apply");
+    const email = `dana.${Date.now()}@ping.test`;
+    await page.getByLabel("Your name").fill("Dana New");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Create a password").fill("blue kettle 42");
+    await page.getByLabel(/terms of use/).check();
+    await page.getByLabel(/privacy notice/).check();
+    await page.getByRole("button", { name: "Create my account" }).click();
+    await page.getByTestId("check-email").waitFor();
+    let link = null;
+    for (let i = 0; i < 20 && !link; i++) {
+      const r = await fetch(`http://127.0.0.1:54321/__test/mail?email=${encodeURIComponent(email)}&type=signup`);
+      if (r.ok) link = (await r.json()).link;
+      else await new Promise((res) => setTimeout(res, 150));
+    }
+    assert.ok(link, "a confirmation email was sent");
+    await page.goto(link);
+    await page.getByRole("button", { name: "Confirm my email" }).click();
+    await page.waitForURL((u) => u.pathname === "/auth/confirmed");
+    await page.getByRole("link", { name: "Continue" }).click();
+    await page.waitForURL(`${BASE}/work/apply`, { timeout: 15_000 });
+    await page.getByRole("button", { name: "Start my application" }).click();
+    await page.waitForURL(`${BASE}/work/details`, { timeout: 15_000 });
+    const [p] = await sql(`select role from public.profiles where email = $1`, [email]);
+    assert.equal(p.role, "cleaner");
+    await ctx.close();
+  });
+
   {
     const ctx = await browser.newContext(PHONE);
     const page = await ctx.newPage();

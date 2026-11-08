@@ -1,6 +1,5 @@
 "use server";
 
-import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/db/server";
@@ -15,9 +14,8 @@ export type ApplyState = { error?: string; ok?: boolean };
  */
 export async function applyAsCleaner(): Promise<ApplyState> {
   const session = await getSession();
-  // /signup arrives with #19 (it links to sign-in for people with an account). Typed loosely
-  // until then: typed routes only know pages that exist on this branch.
-  if (!session) redirect("/signup?next=/work/apply" as Route);
+  // New applicants are usually new to Ping: sign-up links to sign-in for anyone with an account.
+  if (!session) redirect("/signup?next=/work/apply");
   if (session.role === "cleaner") return { ok: true }; // a second tap: already applied
   if (session.role !== "customer") return { error: "Ping team accounts can't apply to clean. Use a separate login." };
 

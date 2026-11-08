@@ -1,6 +1,8 @@
 export { Button, ButtonLink, Spinner, buttonClass } from "./button";
 export { cn } from "./cn";
+export { Checkbox } from "./checkbox";
 export { Field } from "./field";
+export { PasswordField } from "./password-field";
 export { Logo, LogoMark, Wordmark } from "./logo";
 export type { LogoColour } from "./logo";
 export { EmptyState, ErrorState, PingMark } from "./states";

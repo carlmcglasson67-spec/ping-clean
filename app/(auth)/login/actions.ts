@@ -43,6 +43,11 @@ export async function signIn(_prev: LoginState, formData: FormData): Promise<Log
   if (error || !data.user) {
     // Same message whether the email exists or not, so the form can't be used to find accounts.
     const tooMany = error?.status === 429;
+    // Supabase only says "not confirmed" once the password is right, so this reveals
+    // nothing to someone guessing.
+    if (error?.code === "email_not_confirmed") {
+      return { email, error: "Nearly there: open the link we emailed you to finish setting up your account, then sign in." };
+    }
     return {
       email,
       error: tooMany

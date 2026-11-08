@@ -147,6 +147,58 @@ out += `${ind(2)}};
         Args: { p_series: string };
         Returns: undefined;
       };
+      register_interest: {
+        Args: {
+          p_postcode: string;
+          p_email: string | null;
+          p_phone: string | null;
+          p_notify: boolean;
+          p_source: "instant_price" | "holding_page";
+          p_consent_version: string;
+        };
+        Returns: "thanks";
+      };
+      interest_retention_months: {
+        Args: Record<PropertyKey, never>;
+        Returns: number | null;
+      };
+      admin_interest_counts: {
+        Args: Record<PropertyKey, never>;
+        Returns: { postcode_district: string; signups: number; not_yet_notified: number; newest: string }[];
+      };
+      admin_list_interest: {
+        Args: { p_district?: string | null };
+        Returns: {
+          id: string;
+          postcode_district: string;
+          contact_type: "email" | "phone";
+          contact_masked: string;
+          source: "instant_price" | "holding_page";
+          registered_at: string;
+          notified_at: string | null;
+          unsubscribed_at: string | null;
+        }[];
+      };
+      admin_mark_interest_notified: {
+        Args: { p_ids: string[]; p_notified?: boolean };
+        Returns: number;
+      };
+      admin_delete_interest: {
+        Args: { p_ids: string[] };
+        Returns: number;
+      };
+      admin_export_interest: {
+        Args: { p_district?: string | null };
+        Returns: {
+          id: string;
+          postcode: string;
+          postcode_district: string;
+          email: string | null;
+          phone: string | null;
+          registered_at: string;
+          notified_at: string | null;
+        }[];
+      };
     };
     Enums: {
 `;
