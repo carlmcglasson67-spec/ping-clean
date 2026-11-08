@@ -13,7 +13,7 @@ export function SiteFooter() {
             <p className="mt-8 max-w-md font-display text-2xl font-semibold leading-tight">
               A cleaner home is just <span className="text-brand-gradient-navy">a Ping away.</span>
             </p>
-            <p className="mt-4 max-w-md text-lg text-on-navy-2">Regular home cleaning for West Cumbria. Same cleaner, proper checklist, pay after.</p>
+            <p className="mt-4 max-w-md text-lg text-on-navy-2">Regular home cleaning for West Cumbria. One cleaner per block, a proper checklist, pay after.</p>
           </div>
 
           <FooterCol title="Regular cleaning" className="lg:col-span-2">

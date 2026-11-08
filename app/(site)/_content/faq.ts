@@ -22,7 +22,7 @@ export const FAQ: FaqGroup[] = [
       },
       {
         q: "How often can I have a clean?",
-        a: "Every week, every two weeks or every four weeks, on the day that suits you. Most homes settle on weekly or fortnightly.",
+        a: "Every week or every two weeks, on the day that suits you. Book a block of up to 8 cleans; there’s no contract, and you can rebook any time.",
         featured: true,
       },
       {
@@ -36,8 +36,8 @@ export const FAQ: FaqGroup[] = [
     title: "Your cleaner",
     items: [
       {
-        q: "Will I get the same cleaner every time?",
-        a: "Yes. Your regular clean is taken on by one cleaner as a whole arrangement, not visit by visit, so the same person comes each time and gets to know your home.",
+        q: "Will I get the same cleaner?",
+        a: "One cleaner takes on your whole block, so the same person does every clean in it and gets to know your home. When you rebook, they’re offered it first. If they can’t take it, or something comes up partway through, Ping finds a vetted replacement and tells you who’s coming.",
         featured: true,
       },
       {

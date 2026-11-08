@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: { params: Promise<{ town: str
   if (!town) return {};
   return {
     title: `Regular cleaning in ${town.name}`,
-    description: `A vetted, insured cleaner every visit in ${town.name} and around ${town.around.slice(0, 3).join(", ")}. Fixed hourly price, a checklist and photos on every clean, and you pay only once it’s done.`,
+    description: `One vetted, insured cleaner for your whole block in ${town.name} and around ${town.around.slice(0, 3).join(", ")}. Fixed hourly price, a checklist and photos on every clean, and you pay only once it’s done.`,
     alternates: { canonical: areaHref(town.slug) },
   };
 }
@@ -35,8 +35,8 @@ function localFaq(t: Town): Faq[] {
       a: `Ping cleaners choose the postcode districts they travel to, and ${t.districts.join(" and ")} is the district for ${t.name}. Put your postcode into the instant price and you’ll see straight away whether we’re booking where you live.`,
     },
     {
-      q: `Will I get the same cleaner in ${t.name} every time?`,
-      a: "Yes. Your regular clean is taken on by one cleaner as a whole arrangement, not visit by visit, so the same person comes each time and gets to know your home.",
+      q: `Will I get the same cleaner in ${t.name}?`,
+      a: "One cleaner takes on your whole block, so the same person does every clean in it and gets to know your home. When you rebook, they’re offered it first. If they can’t take it, or something comes up partway through, Ping finds a vetted replacement and tells you who’s coming.",
     },
     {
       q: "Is the price different here?",
@@ -143,7 +143,7 @@ export default async function AreaPage({ params }: { params: Promise<{ town: str
           <div className="lg:col-span-5">
             <Eyebrow tone="onInk">How it works</Eyebrow>
             <h2 id="how-title" className="mt-5 text-3xl font-semibold">
-              Book once. Same cleaner every visit.
+              Book a block. One cleaner for all of it.
             </h2>
           </div>
           <div className="lg:col-span-6 lg:col-start-7">
@@ -196,7 +196,7 @@ export default async function AreaPage({ params }: { params: Promise<{ town: str
             <LogoMark colour="navy" className="size-10" />
             <div>
               <h2 className="text-2xl font-semibold">Clean in {town.name}? Clean for Ping.</h2>
-              <p className="mt-4 text-lg text-navy/85">Self-employed, your own areas and hours, regular homes that stay with you.</p>
+              <p className="mt-4 text-lg text-navy/85">Self-employed, your own areas and hours, blocks of regular cleans that are yours.</p>
               <ButtonLink href={CLEANERS_LINK.href} variant="ink" size="lg" className="mt-8">
                 Find out more
               </ButtonLink>

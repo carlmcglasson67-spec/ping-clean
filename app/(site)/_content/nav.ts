@@ -7,7 +7,7 @@ export type NavLink = { href: Route; label: string; note?: string };
 export const CLEANING_LINKS: NavLink[] = [
   { href: "/#how", label: "How it works", note: "Five steps from postcode to a clean home" },
   { href: "/#included", label: "What’s included", note: "The room-by-room checklist on every visit" },
-  { href: "/#promises", label: "Why Ping", note: "Same cleaner, checked, proof, pay after" },
+  { href: "/#promises", label: "Why Ping", note: "One cleaner per block, checked, proof, pay after" },
   { href: "/faq", label: "Questions", note: "Price, access, cancelling and more" },
 ];
 

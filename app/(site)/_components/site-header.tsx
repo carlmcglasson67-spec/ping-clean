@@ -139,7 +139,7 @@ export function SiteHeader() {
           <div className="relative col-span-4 flex flex-col justify-between overflow-hidden rounded-lg signal-waves p-9 text-on-navy">
             <LogoMark className="size-10" />
             <div className="mt-16">
-              <p className="font-display text-2xl font-semibold leading-tight">The same cleaner. Every visit. Proof every time.</p>
+              <p className="font-display text-2xl font-semibold leading-tight">One cleaner for your whole block. Proof every visit.</p>
               <p className="mt-4 text-on-navy-2">One fixed hourly rate, a checklist on every clean, and your card charged only once it&rsquo;s done.</p>
             </div>
           </div>

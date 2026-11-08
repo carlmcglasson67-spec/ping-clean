@@ -10,13 +10,13 @@ import { CLEANER_STEPS, TIERS } from "../_content/how";
 export const metadata: Metadata = {
   title: "Clean for Ping",
   description:
-    "Self-employed cleaning work in West Cumbria. Choose your areas and hours, take on regular homes that stay with you, and get paid after every clean.",
+    "Self-employed cleaning work in West Cumbria. Choose your areas and hours, take on blocks of regular cleans, and get paid after every clean.",
   alternates: { canonical: "/clean-for-ping" },
 };
 
 const BENEFITS = [
   { title: "Your areas, your hours", body: "You’re self-employed. Pick the postcode districts you’ll travel to and the days you work. Ping never sets your hours or makes you take a job." },
-  { title: "Regulars that stay yours", body: "You take on a home as a regular arrangement, not a one-off. Same house, same day, a customer who gets to know you." },
+  { title: "Blocks that stay yours", body: "You take on a block of up to 8 cleans, not a one-off. Same house, same day, and when the customer rebooks you get first refusal." },
   { title: "You see the pay first", body: "Every job on your board shows exactly what you’ll earn before you take it on. No haggling with customers over price." },
   { title: "No chasing money", body: "Customers pay through Ping. Your earnings go straight to your bank once each clean clears." },
 ];
@@ -70,7 +70,7 @@ export default function CleanForPingPage() {
                 own work.
               </h1>
               <p className="mt-8 max-w-xl text-xl text-navy/85">
-                Self-employed cleaning in West Cumbria, with regular homes that stay with you and pay that lands in your bank after every clean.
+                Self-employed cleaning in West Cumbria, with blocks of regular cleans that are yours and pay that lands in your bank after every clean.
               </p>
               <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-4">
                 {/* /signup arrives with #19. */}
@@ -164,7 +164,7 @@ export default function CleanForPingPage() {
                 <div className="absolute inset-x-6 top-1/2 -translate-y-1/2 rounded-lg bg-card p-6 text-navy shadow-lift ring-1 ring-line/70 sm:inset-x-10">
                   <p className="text-sm font-semibold uppercase tracking-[0.14em] text-teal-ink">New regular near you</p>
                   <p className="mt-3 font-display text-2xl font-semibold">Workington CA14</p>
-                  <p className="mt-1 text-base text-navy-2">3 bedrooms · Every week · Thursdays</p>
+                  <p className="mt-1 text-base text-navy-2">3 bedrooms · 8 cleans · Every week · Thursdays</p>
                   <div className="mt-5 flex items-center justify-between gap-4 border-t border-line pt-4">
                     <span className="text-base font-semibold text-navy-2">You see your earnings here</span>
                     <span className="inline-flex min-h-11 items-center rounded-full bg-teal px-4 text-base font-semibold">Take it on</span>

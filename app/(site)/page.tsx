@@ -12,7 +12,7 @@ import { getPricing } from "./_lib/pricing";
 import { AREA_LINKS, CLEANERS_LINK, FAQ_LINK } from "./_content/nav";
 
 const STATS = [
-  { value: "1", label: "cleaner for your home", note: "The same person every visit, not whoever is free." },
+  { value: "1", label: "cleaner for your block", note: "One person for every clean you book, not whoever is free." },
   { value: "4", label: "checks before any job", note: "DBS, insurance, photo ID and right to work." },
   { value: String(STANDARD_CLEAN_COUNT), label: "ticks on every clean", note: "A room-by-room checklist, with photos to prove it." },
   { value: "0", label: "charges before the clean", note: "Your card is saved at booking and charged only once it’s done." },
@@ -20,7 +20,7 @@ const STATS = [
 
 
 const PROMISES = [
-  { title: "The same cleaner, every visit", body: "Your regular clean is held by one cleaner, so they learn your home and you never explain it twice." },
+  { title: "Your cleaner for the whole block", body: "One cleaner takes on every clean you book, so they learn your home. Rebook and they get first refusal." },
   { title: "Checked before they start", body: "Every Ping cleaner is DBS checked, insured and has their right to work verified before they see a single job." },
   { title: "Proof on every visit", body: "A room-by-room checklist and before and after photos on every clean, scored by our team." },
   { title: "Pay after, not before", body: "A fixed price agreed up front. Your card is charged only once the clean is finished." },
@@ -49,7 +49,7 @@ export default async function Home() {
           </div>
           <div className="rise flex flex-col [animation-delay:80ms] lg:col-span-5 lg:pt-2">
             <p className="max-w-[34rem] text-xl text-on-navy-2">
-              Regular home cleaning across West Cumbria. The same vetted, insured cleaner every visit, a proper checklist, photos when they&rsquo;re done, and your card charged only afterwards.
+              Book up to 8 cleans with one vetted, insured cleaner. A proper checklist and photos every visit. No contract; rebook any time.
             </p>
             <div className="mt-10 flex flex-wrap gap-3">
               <ButtonLink href="/#price" size="lg" variant="signal">
@@ -254,7 +254,7 @@ export default async function Home() {
               <ul className="grid gap-5 text-lg sm:grid-cols-2">
                 {[
                   ["Your areas, your hours", "Self-employed, so you choose where and when. Ping never sets your hours."],
-                  ["Regulars that stay yours", "Take on a home as a regular clean and it stays with you, week after week."],
+                  ["Blocks that stay yours", "Take on a block of up to 8 cleans and every one is yours. When the customer rebooks, you get first refusal."],
                   ["Paid for every clean", "Straight to your bank account once each clean clears. No chasing customers for money."],
                   ["The best get first pick", "Great scores move you up, and Top cleaners see new jobs before anyone else."],
                 ].map(([t, b]) => (
@@ -307,7 +307,7 @@ export default async function Home() {
             Get your <span className="text-brand-gradient-navy">weekends back.</span>
           </h2>
           <div className="relative grid gap-6 lg:col-span-4">
-            <p className="text-lg text-on-navy-2">One cleaner who knows your home, a checklist on every visit, and nothing to pay until it&rsquo;s done.</p>
+            <p className="text-lg text-on-navy-2">One cleaner for your whole block, a checklist on every visit, and nothing to pay until each clean is done.</p>
             <div className="flex flex-wrap gap-3">
               <ButtonLink href="/price" size="lg" variant="signal">
                 Get your price
