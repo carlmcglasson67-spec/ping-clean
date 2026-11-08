@@ -269,3 +269,20 @@ Track A will likely need the same for checkout; worth merging this first.
 - `visit_unfinished` and `visit_no_show` alerts say "settle it by hand", and there's no function to do it
   (complete, cancel or confirm a no-show, with a reason). It decides charging, so it belongs with Phase 5.
   The console resolves the alert only, for now.
+
+### C-8. CSV export breaks mobile numbers (lib/interest/csv.ts). **Fix before the first send.**
+- **What:** `csvCell` prefixes any value starting with `+` with an apostrophe, so every mobile exports as
+  `'+447700900123`, and an SMS tool would import the apostrophe as part of the number. Mobiles are already
+  validated as `^\+447[0-9]{9}$` by `private.normalise_uk_mobile`, so `interestCsv` can write the phone
+  column as-is when it matches exactly that shape (or as `447…` without the plus), and keep defusing
+  everything else. Extend `lib/interest/interest.test.ts`. Found by the console's e2e export check (#29).
+
+### C-9. Fake Supabase storage keeps the multipart body as the file (tests/e2e/fake-supabase.mjs)
+- **What:** storage-js uploads a Blob inside multipart FormData. The fake stores the whole multipart body,
+  so signed photo links return bytes no browser can decode, and photos show as broken in e2e screenshots
+  (QC queue, the cleaner's visit page). Parse the multipart part on upload. Real Supabase is unaffected.
+
+### Next for Track C (not built yet)
+- **Reports** (brief item 5): visits, revenue, Ping fees, cleaner league. Waits for Phase 5 money so the
+  numbers are real.
+- Wiring the approvals decision panel once C-1 lands (small follow-up PR).
