@@ -127,6 +127,126 @@ describe("register_interest: only the server can call it (review BLOCK 1)", () =
     expect(r).toEqual({ reply: "thanks", same: true });
   });
 
+  it("never re-enrols an opted-out contact from another district, by email or by mobile (final check A)", async () => {
+    for (const contact of [{ email: "jo.bloggs@example.com", phone: null }, { email: null, phone: "07700 900321" }]) {
+      const r = await server(async (q) => {
+        const reply = await register(q, { ...contact, postcode: "LA9 4AA" }); // a different district
+        const again = await register(q, { ...contact, email: contact.email?.toUpperCase() ?? null, postcode: "CA26 1AA" });
+        await q.rows(`reset role`);
+        return { reply, again, rows: await q.count("public.interest_signups") };
+      }, async (su) => {
+        await seedReg(su, contact);
+        await su.rows(`update public.interest_signups set unsubscribed_at = now() - interval '1 day'`);
+      });
+      expect({ contact, ...r }).toEqual({ contact, reply: "thanks", again: "thanks", rows: 1 });
+    }
+  });
+
+  it("keeps an opted-out contact off the list after the purge deletes their row, via a hash-only suppression list (final check A)", async () => {
+    const r = await server(async (q) => {
+      const reply = await register(q, { postcode: "CA25 5AB" });
+      const other = await register(q, { email: "someone.else@example.com" });
+      await q.rows(`reset role`);
+      const left = (await q.rows<{ email: string }>(`select email from public.interest_signups`)).map((x) => x.email);
+      const supp = await q.rows<{ cols: string[]; n: number; len: number }>(
+        `select (select array_agg(column_name::text order by ordinal_position) from information_schema.columns
+                  where table_schema = 'private' and table_name = 'interest_suppressions') as cols,
+                count(*)::int as n, max(octet_length(contact_hash))::int as len from private.interest_suppressions`);
+      return { reply, other, left, supp: supp[0] };
+    }, async (su) => {
+      await seedReg(su);
+      await seedReg(su, { email: null, phone: "07700900321" }); // expires normally, never opted out
+      await su.rows(`update public.interest_signups set unsubscribed_at = now() - interval '40 days' where email is not null`);
+      await su.rows(`update public.interest_signups set delete_after = now() - interval '1 day' where phone is not null`);
+      expect((await su.rows<{ n: number }>(`select private.purge_interest() as n`))[0]!.n).toBe(2);
+      expect(await su.count("public.interest_signups")).toBe(0);
+    });
+    // Only the opted-out contact is suppressed; one 32-byte hash, nothing else stored.
+    expect(r).toEqual({ reply: "thanks", other: "thanks", left: ["someone.else@example.com"],
+      supp: { cols: ["contact_hash"], n: 1, len: 32 } });
+  });
+
+  it("matches opt-outs on a canonical form, so gmail dots, +tags and googlemail can't slip past (last check)", async () => {
+    const variants = ["jobloggs@gmail.com", "jo.bloggs+ping@gmail.com", "Jo.Bloggs@googlemail.com", "j.o.b.l.o.g.g.s+x@googlemail.com"];
+    for (const via of ["unsubscribed row", "suppression list"] as const) {
+      const r = await server(async (q) => {
+        for (const email of variants) await register(q, { email, postcode: "LA9 4AA" });
+        await register(q, { email: "jo+news@example.com" });   // + removed elsewhere too: blocked
+        await register(q, { email: "j.o@example.com" });       // dots matter outside gmail: a different person
+        await q.rows(`reset role`);
+        return (await q.rows<{ email: string }>(`select email from public.interest_signups where unsubscribed_at is null order by email`)).map((x) => x.email);
+      }, async (su) => {
+        await seedReg(su, { email: "jo.bloggs@gmail.com" });
+        await seedReg(su, { email: "jo@example.com" });
+        await su.rows(`update public.interest_signups set unsubscribed_at = now() - interval '40 days'`);
+        if (via === "suppression list") {
+          await su.rows(`select private.purge_interest()`);
+          expect(await su.count("public.interest_signups")).toBe(0);
+        }
+      });
+      expect({ via, stored: r }).toEqual({ via, stored: ["j.o@example.com"] }); // stored as typed
+    }
+  });
+
+  it("doesn't let one +tag-only address's opt-out block another's (sign-off item 1)", async () => {
+    const r = await server(async (q) => {
+      for (const email of ["+zzz@example.com", "+@example.com", "+abc+more@example.com"]) await register(q, { email });
+      await register(q, { email: "+abc@example.com", postcode: "LA9 4AA" }); // the opted-out one itself: still blocked
+      await q.rows(`reset role`);
+      return (await q.rows<{ email: string }>(`select email from public.interest_signups where unsubscribed_at is null order by email`)).map((x) => x.email);
+    }, async (su) => {
+      await seedReg(su, { email: "+abc@example.com" });
+      await su.rows(`update public.interest_signups set unsubscribed_at = now() - interval '40 days'`);
+      await su.rows(`select private.purge_interest()`);
+    });
+    // "+abc+more" canonicalises to "+abc+more" (nothing left before the first +), not "+abc": a different address.
+    expect(r).toEqual(["+@example.com", "+abc+more@example.com", "+zzz@example.com"]);
+  });
+
+  it("treats a trailing dot on the domain as the same address (sign-off item 2)", async () => {
+    const r = await server(async (q) => {
+      await register(q, { email: "J.O@Gmail.com." });
+      await q.rows(`reset role`);
+      return q.rows(`select email from public.interest_signups`);
+    }, async (su) => {
+      await seedReg(su, { email: "jo@gmail.com" });
+      await su.rows(`update public.interest_signups set unsubscribed_at = now()`);
+    });
+    expect(r).toEqual([{ email: "jo@gmail.com" }]); // only the opted-out row: nothing new stored
+    expect(await server(async (q) => { await register(q, { email: "Jo@Example.com." }); await q.rows(`reset role`);
+      return q.rows(`select email from public.interest_signups`); })).toEqual([{ email: "jo@example.com" }]);
+  });
+
+  it("keeps every contact an admin deletes on request on the suppression list, opted out or not (last check 1)", async () => {
+    const r = await setupThen(async (su) => {
+      await seedReg(su);                                                  // still subscribed
+      await seedReg(su, { email: null, phone: "07700 900321" });
+      await su.rows(`update public.interest_signups set unsubscribed_at = now() where phone is not null`); // opted out
+    }, U.admin, async (q) => {
+      const ids = (await q.rows<{ id: string }>(`select id from public.admin_list_interest()`)).map((x) => x.id);
+      const deleted = (await q.rows<{ n: number }>(`select public.admin_delete_interest($1::uuid[]) as n`, [ids]))[0]!.n;
+      await q.rows(`reset role`);
+      const hashes = await q.count("private.interest_suppressions");
+      await q.rows(`set local role service_role`);
+      const replies = [await register(q), await register(q, { email: null, phone: "+447700900321", postcode: "LA9 4AA" })];
+      await q.rows(`reset role`);
+      return { deleted, hashes, replies, left: await q.count("public.interest_signups") };
+    });
+    expect(r).toEqual({ deleted: 2, hashes: 2, replies: ["thanks", "thanks"], left: 0 });
+  });
+
+  it("lets nobody read or write the suppression list directly", async () => {
+    for (const who of [...NOT_ADMIN, "admin"] as const) {
+      const r = await asWho(who, async () => {}, async (q) => ({
+        read: await q.attempt(`select * from private.interest_suppressions`),
+        write: await q.attempt(`insert into private.interest_suppressions values (sha256('x'))`),
+        check: await q.attempt(`select private.interest_opted_out('a@b.co', null)`),
+      }));
+      expect({ who, ...r }).toEqual({ who, read: DENIED, write: DENIED, check: DENIED });
+    }
+    expect(await server((q) => q.attempt(`select * from private.interest_suppressions`))).toBe(DENIED);
+  });
+
   it.each([
     ["no postcode", { postcode: "" }, "PC030"],
     ["not a postcode", { postcode: "Workington" }, "PC030"],
@@ -264,6 +384,14 @@ describe("nobody touches the table directly, admins included (review 3)", () => 
     const logged = JSON.stringify(r.audit);
     for (const secret of ["jo.bloggs", "sam@example", "7700900321", "CA25 5AB", "LA9 4AA"]) expect(logged).not.toContain(secret);
     expect(r.audit[3]!.detail.phone).toBe("changed"); // that it went, not what it was
+  });
+
+  it("refuses 'mark' with neither told nor not told, rather than quietly changing nothing (final check note 1)", async () => {
+    const r = await setupThen(async (su) => { await seedReg(su); }, U.admin, async (q) => {
+      const ids = (await q.rows<{ id: string }>(`select id from public.admin_list_interest()`)).map((x) => x.id);
+      return q.attempt(`select public.admin_mark_interest_notified($1::uuid[], null)`, [ids]);
+    });
+    expect(r).toBe("22004");
   });
 
   it("lets an admin change the retention period", async () => {
