@@ -86,6 +86,7 @@ export default async function jobsFlows({ page, BASE, check, dir, sql, settle, s
     await page.reload();
     await settle(page);
     await card(BLOCK2).getByRole("button", { name: "End block" }).click();
+    await card(BLOCK2).getByText(/cleans still booked from today on are cancelled/).waitFor();
     assert.ok(await card(BLOCK2).getByRole("button", { name: "End the block" }).isDisabled());
     await card(BLOCK2).getByLabel(/Why is the Whitehaven CA28 block ending/).fill("!!");
     await card(BLOCK2).getByRole("button", { name: "End the block" }).click();
