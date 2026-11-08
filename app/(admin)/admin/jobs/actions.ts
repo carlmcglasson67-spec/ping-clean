@@ -42,7 +42,7 @@ export async function endBlock(raw: unknown): Promise<ActionResult> {
   if (!p.success) return { ok: false, message: p.error.issues.find((i) => i.path[0] === "reason")?.message ?? NOT_SAVED };
   const supabase = await createClient();
   const { error } = await supabase.rpc("admin_end_block", { p_series: p.data.seriesId, p_reason: p.data.reason });
-  return error ? { ok: false, message: adminErrorMessage(error) } : done("Block ended. Cleans still booked from today were removed.");
+  return error ? { ok: false, message: adminErrorMessage(error) } : done("Block ended. Cleans still booked from today were cancelled.");
 }
 
 /** Marks an alert dealt with. Only an open one: two of the team can't both resolve it. */

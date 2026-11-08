@@ -91,7 +91,7 @@ export function BlockActions({ seriesId, held, cleaners, summary }: { seriesId: 
           <label htmlFor={reasonId} className="text-sm font-semibold">Why is {summary} ending? Kept on the block.</label>
           <textarea id={reasonId} rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)}
             className="w-full rounded-md bg-card px-4 py-3 text-base ring-1 ring-inset ring-line focus:outline-none focus:ring-2 focus:ring-blue" />
-          <p className="text-sm text-navy-2">Offers are withdrawn and cleans still booked from today on are removed. The cleaner loses the address. This can&rsquo;t be undone: the customer books again for more.</p>
+          <p className="text-sm text-navy-2">Offers are withdrawn and cleans still booked from today on are cancelled. The cleaner loses the address. This can&rsquo;t be undone: the customer books again for more.</p>
           <Row>
             <Button variant="danger" pending={pending} disabled={!reason.trim()} onClick={() => run(() => endBlock({ seriesId, reason }), () => setMode(null))}>End the block</Button>
             <Button variant="ghost" disabled={pending} onClick={() => open(null)}>Cancel</Button>
