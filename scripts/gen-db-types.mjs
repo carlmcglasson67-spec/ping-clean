@@ -147,6 +147,14 @@ out += `${ind(2)}};
         Args: { p_series: string };
         Returns: undefined;
       };
+      stripe_begin_event: {
+        Args: { p_event_id: string; p_type: string; p_account: string | null };
+        Returns: "process" | "done";
+      };
+      stripe_finish_event: {
+        Args: { p_event_id: string; p_error: string | null };
+        Returns: undefined;
+      };
       my_saved_card: {
         Args: Record<PropertyKey, never>;
         Returns: { brand: string | null; last4: string | null; exp_month: number | null; exp_year: number | null }[];
