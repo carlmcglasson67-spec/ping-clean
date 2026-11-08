@@ -1,5 +1,6 @@
 import type { Route } from "next";
 import type { Enums } from "@/lib/db/types";
+import { pathOf, safeNext } from "./next";
 
 export type Role = Enums<"user_role">;
 
@@ -34,13 +35,25 @@ export function canEnter(role: Role, area: Role): boolean {
 }
 
 /**
- * Where to send someone after sign-in. Honour ?next= only if it is a same-site path
- * inside their own area, so a crafted link can't bounce them anywhere else.
+ * The few pages outside a role's own app that it may be sent to after signing in or up.
+ * A customer becomes a cleaner applicant at /work/apply (shared request B1), so that one
+ * path, exactly, is allowed for customers. Nothing else crosses areas.
+ */
+const CROSS_AREA: Partial<Record<Role, readonly string[]>> = {
+  customer: ["/work/apply"],
+};
+
+/**
+ * Where to send someone after sign-in or sign-up. ?next= is honoured only if it passes
+ * the allowlist (lib/auth/next.ts) and is inside their own area, or is one of the exact
+ * cross-area pages above. Anything else goes to their home.
  */
 export function postLoginPath(role: Role, next: string | null | undefined): Route {
   const home = homeFor(role);
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return home;
-  const area = areaForPath(next);
-  // Validated above: a same-site path inside the user's own area.
-  return (area === role ? next : home) as Route;
+  const safe = safeNext(next);
+  if (!safe) return home;
+  const path = pathOf(safe);
+  if (areaForPath(path) === role) return safe as Route;
+  if (CROSS_AREA[role]?.includes(path)) return safe as Route;
+  return home;
 }

@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
+import { authFlows } from "./auth.flows.mjs";
 import { startFakeSupabase } from "./fake-supabase.mjs";
 
 const PORT = 3200;
@@ -19,6 +20,7 @@ const env = {
   NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
   NEXT_PUBLIC_SUPABASE_ANON_KEY: "e2e-anon-key-not-a-real-key-000000",
   NEXT_PUBLIC_SITE_URL: BASE,
+  RESET_PASS_SECRET: "e2e-reset-pass-secret-not-a-real-one-0000",
   PING_DIST_DIR: ".next-e2e",
 };
 
@@ -76,7 +78,7 @@ async function check(name, fn) {
 
 console.log("e2e: building app against the test database…");
 run("npx", ["next", "build"]);
-const fake = await startFakeSupabase(54321);
+const fake = await startFakeSupabase(54321, { siteUrl: BASE }); // the project's fixed Site URL
 // detached: its own process group, so we can stop npx *and* the Next server under it.
 const app = spawn("npx", ["next", "start", "-p", String(PORT), "-H", "127.0.0.1"], { env, stdio: ["ignore", "pipe", "pipe"], detached: true });
 const stopApp = () => { try { process.kill(-app.pid, "SIGTERM"); } catch {} };
@@ -184,6 +186,8 @@ try {
     });
     await ctx.close();
   }
+
+  await authFlows({ browser, BASE, check, shots: process.env.SIGNUP_SHOT_DIR ?? SHOTS });
 } finally {
   await browser.close();
   stopApp();

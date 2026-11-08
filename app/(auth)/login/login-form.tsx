@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { Button, Field } from "@/components/ui";
+import { Button, Field, PasswordField } from "@/components/ui";
+import { Notice } from "../_components/auth-frame";
 import { signIn, type LoginState } from "./actions";
 
 export function LoginForm({ next }: { next?: string }) {
@@ -12,9 +13,7 @@ export function LoginForm({ next }: { next?: string }) {
       {next ? <input type="hidden" name="next" value={next} /> : null}
 
       {state.error ? (
-        <div role="alert" className="rounded-md bg-bad-soft px-5 py-4 text-base font-medium text-bad ring-1 ring-inset ring-bad/20">
-          {state.error}
-        </div>
+        <Notice>{state.error}</Notice>
       ) : null}
 
       <Field
@@ -29,14 +28,7 @@ export function LoginForm({ next }: { next?: string }) {
         defaultValue={state.email}
         error={state.fieldErrors?.email}
       />
-      <Field
-        label="Password"
-        name="password"
-        type="password"
-        autoComplete="current-password"
-        required
-        error={state.fieldErrors?.password}
-      />
+      <PasswordField label="Password" autoComplete="current-password" error={state.fieldErrors?.password} />
 
       <Button type="submit" size="lg" pending={pending} className="w-full">
         {pending ? "Signing in…" : "Sign in"}

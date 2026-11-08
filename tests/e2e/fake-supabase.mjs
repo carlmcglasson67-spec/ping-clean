@@ -45,16 +45,27 @@ async function userJson(id) {
   return u && { id: u.id, aud: "authenticated", role: "authenticated", email: u.email, user_metadata: u.raw_user_meta_data ?? {}, app_metadata: { provider: "email" }, created_at: u.created_at };
 }
 
-async function session(userId) {
+// How each session was signed in, as GoTrue's `amr` claim: "password" for a sign-in, and
+// "otp" for EVERY email link verified with a token hash (reset, sign-up, magic link…),
+// exactly as GoTrue does (internal/api/verify.go, verifyPost:
+// `a.issueRefreshToken(r, w.Header(), tx, user, models.OTP, grantParams)`).
+// Kept per refresh token with the session id, so a refreshed session keeps its id, method
+// and time, as in GoTrue.
+const sessions = new Map();
+async function session(userId, method = "password", kept = null) {
   const user = await userJson(userId);
   const iat = Math.floor(Date.now() / 1000);
   const exp = iat + 3600;
+  const info = kept ?? { amr: [{ method, timestamp: iat }], sid: randomUUID() };
+  const refresh = `rt.${userId}.${randomUUID()}`;
+  sessions.set(refresh, info);
   return {
-    access_token: signJwt({ sub: userId, role: "authenticated", aud: "authenticated", email: user.email, iat, exp, session_id: randomUUID() }),
+    access_token: signJwt({ sub: userId, role: "authenticated", aud: "authenticated", email: user.email, iat, exp,
+      session_id: info.sid, aal: "aal1", amr: info.amr }),
     token_type: "bearer",
     expires_in: 3600,
     expires_at: exp,
-    refresh_token: `rt.${userId}`,
+    refresh_token: refresh,
     user,
   };
 }
@@ -78,9 +89,33 @@ async function asUser(claims, fn) {
   }
 }
 
-function buildSelect(table, params) {
-  const values = [];
-  const cols = (params.get("select") ?? "*").split(",").map((c) => (c.trim() === "*" ? "*" : ident(c.trim()))).join(", ");
+// ---------------- email (test only)
+// Sign-up, resend and recovery "send" their links here instead of by email. The links are
+// built the way Ping's Supabase email templates build them: {{ .RedirectTo }}&token_hash=…&type=…
+const outbox = []; // { email, type, link }
+const tokens = new Map(); // token_hash -> { userId, type }
+const config = { confirm: true }; // Supabase "Confirm email" setting
+// The links Ping's email templates produce. They're built from the Site URL alone, never
+// from RedirectTo (see the PR's template steps), so a redirect mismatch can't break them:
+//   {{ .SiteURL }}/auth/confirm?flow=signup&token_hash={{ .TokenHash }}&type=email
+//   {{ .SiteURL }}/auth/confirm?flow=reset&token_hash={{ .TokenHash }}&type=recovery
+// The Site URL is fixed, as it is in the Supabase project's settings, and never taken from
+// the request's redirect address: if the app ever ran on a different host from the Site
+// URL, these links would point elsewhere and the e2e checks would fail.
+let SITE_URL = "http://127.0.0.1:3200";
+function mail(email, type, userId) {
+  const hash = randomUUID().replace(/-/g, "");
+  tokens.set(hash, { userId, type });
+  const site = SITE_URL;
+  const link = type === "signup"
+    ? `${site}/auth/confirm?flow=signup&token_hash=${hash}&type=email`
+    : `${site}/auth/confirm?flow=reset&token_hash=${hash}&type=recovery`;
+  outbox.push({ email, type, link });
+}
+const userByEmail = async (email) =>
+  (await pool.query(`select id, email_confirmed_at from auth.users where email = $1`, [String(email ?? "").toLowerCase()])).rows[0];
+
+function buildWhere(params, values) {
   const where = [];
   const ops = { eq: "=", neq: "<>", gt: ">", gte: ">=", lt: "<", lte: "<=" };
   for (const [k, v] of params) {
@@ -99,6 +134,13 @@ function buildSelect(table, params) {
       where.push(`${ident(k)} ${ops[op]} $${values.length}`);
     } else throw Object.assign(new Error(`unsupported filter ${op}`), { status: 400 });
   }
+  return where;
+}
+
+function buildSelect(table, params) {
+  const values = [];
+  const cols = (params.get("select") ?? "*").split(",").map((c) => (c.trim() === "*" ? "*" : ident(c.trim()))).join(", ");
+  const where = buildWhere(params, values);
   let sql = `select ${cols} from public.${ident(table)}`;
   if (where.length) sql += ` where ${where.join(" and ")}`;
   const order = params.get("order");
@@ -124,7 +166,8 @@ const readBody = (req) => new Promise((r) => {
   req.on("end", () => r(d ? JSON.parse(d) : {}));
 });
 
-export function startFakeSupabase(port = 54321) {
+export function startFakeSupabase(port = 54321, { siteUrl } = {}) {
+  if (siteUrl) SITE_URL = siteUrl;
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
     const bearer = (req.headers.authorization ?? "").replace(/^Bearer /, "");
@@ -138,18 +181,82 @@ export function startFakeSupabase(port = 54321) {
           [String(email).toLowerCase(), String(password)],
         );
         if (!rows[0]) return send(res, 400, { code: 400, error_code: "invalid_credentials", msg: "Invalid login credentials" });
+        const u = await userByEmail(email);
+        if (!u.email_confirmed_at) return send(res, 400, { code: 400, error_code: "email_not_confirmed", msg: "Email not confirmed" });
         return send(res, 200, await session(rows[0].id));
+      }
+      if (url.pathname === "/auth/v1/signup" && req.method === "POST") {
+        const { email, password, data } = await readBody(req);
+        const redirectTo = url.searchParams.get("redirect_to");
+        const existing = await userByEmail(email);
+        if (existing) {
+          // Real GoTrue: with confirmation on, an existing address gets a look-alike success.
+          if (config.confirm) return send(res, 200, { id: randomUUID(), aud: "authenticated", role: "authenticated", email, identities: [], user_metadata: {}, app_metadata: {} });
+          return send(res, 422, { code: 422, error_code: "user_already_exists", msg: "User already registered" });
+        }
+        const id = randomUUID();
+        await pool.query(
+          `insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, confirmation_token, recovery_token, email_change_token_new, email_change)
+           values ('00000000-0000-0000-0000-000000000000', $1, 'authenticated', 'authenticated', $2, extensions.crypt($3, extensions.gen_salt('bf')), $4,
+                   '{"provider":"email","providers":["email"]}', $5, '', '', '', '')`,
+          [id, String(email).toLowerCase(), String(password), config.confirm ? null : new Date(), JSON.stringify(data ?? {})],
+        );
+        if (!config.confirm) return send(res, 200, await session(id));
+        mail(String(email).toLowerCase(), "signup", id, redirectTo);
+        return send(res, 200, await userJson(id));
+      }
+      if (url.pathname === "/auth/v1/resend" && req.method === "POST") {
+        const { email, type } = await readBody(req);
+        const u = await userByEmail(email);
+        if (u && !u.email_confirmed_at && type === "signup") mail(String(email).toLowerCase(), "signup", u.id, url.searchParams.get("redirect_to"));
+        return send(res, 200, {});
+      }
+      if (url.pathname === "/auth/v1/recover" && req.method === "POST") {
+        const { email } = await readBody(req);
+        const u = await userByEmail(email);
+        if (u) mail(String(email).toLowerCase(), "recovery", u.id, url.searchParams.get("redirect_to"));
+        return send(res, 200, {}); // same answer whether or not the address has an account
+      }
+      if (url.pathname === "/auth/v1/verify" && req.method === "POST") {
+        const { token_hash, type } = await readBody(req);
+        const t = tokens.get(String(token_hash));
+        const want = type === "email" || type === "signup" ? "signup" : type;
+        if (!t || t.type !== want) return send(res, 403, { code: 403, error_code: "otp_expired", msg: "Email link is invalid or has expired" });
+        tokens.delete(String(token_hash)); // links work once
+        if (t.type === "signup") await pool.query(`update auth.users set email_confirmed_at = now() where id = $1`, [t.userId]);
+        return send(res, 200, await session(t.userId, "otp")); // every type, as GoTrue
+      }
+      if (url.pathname === "/auth/v1/user" && req.method === "PUT") {
+        if (!claims) return send(res, 401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" });
+        const { password, data } = await readBody(req);
+        if (password) {
+          const same = await pool.query(`select 1 from auth.users where id = $1 and encrypted_password = extensions.crypt($2, encrypted_password)`, [claims.sub, String(password)]);
+          if (same.rows[0]) return send(res, 422, { code: 422, error_code: "same_password", msg: "New password should be different from the old password." });
+          await pool.query(`update auth.users set encrypted_password = extensions.crypt($2, extensions.gen_salt('bf')) where id = $1`, [claims.sub, String(password)]);
+        }
+        if (data) await pool.query(`update auth.users set raw_user_meta_data = raw_user_meta_data || $2::jsonb where id = $1`, [claims.sub, JSON.stringify(data)]);
+        return send(res, 200, await userJson(claims.sub));
       }
       if (url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "refresh_token") {
         const { refresh_token } = await readBody(req);
-        const id = String(refresh_token).replace(/^rt\./, "");
-        return send(res, 200, await session(id));
+        const id = String(refresh_token).split(".")[1];
+        return send(res, 200, await session(id, "password", sessions.get(String(refresh_token))));
       }
       if (url.pathname === "/auth/v1/user") {
         if (!claims) return send(res, 401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" });
         return send(res, 200, await userJson(claims.sub));
       }
       if (url.pathname === "/auth/v1/logout") return send(res, 204);
+
+      // ---------------- test-only controls
+      if (url.pathname === "/__test/mail") {
+        const found = outbox.filter((m) => m.email === url.searchParams.get("email") && (!url.searchParams.get("type") || m.type === url.searchParams.get("type")));
+        return send(res, found.length ? 200 : 404, found.at(-1) ?? { message: "no mail" });
+      }
+      if (url.pathname === "/__test/config" && req.method === "POST") {
+        Object.assign(config, await readBody(req));
+        return send(res, 200, config);
+      }
 
       // ---------------- rest
       const rpc = url.pathname.match(/^\/rest\/v1\/rpc\/([a-z_]+)$/);
@@ -165,6 +272,17 @@ export function startFakeSupabase(port = 54321) {
         const range = `0-${Math.max(rows.length - 1, 0)}/${wantsCount ? rows.length : "*"}`;
         if (req.method === "HEAD") return send(res, 200, undefined, { "content-range": range });
         return send(res, 200, rows, { "content-range": range });
+      }
+      if (table && req.method === "PATCH") {
+        // Update as the signed-in user: RLS and column grants decide, as on Supabase.
+        const body = await readBody(req);
+        const values = [];
+        const sets = Object.entries(body).map(([k, v]) => { values.push(v); return `${ident(k)} = $${values.length}`; });
+        if (!sets.length) return send(res, 400, { message: "nothing to update" });
+        const where = buildWhere(url.searchParams, values);
+        const sql = `update public.${ident(table[1])} set ${sets.join(", ")}${where.length ? ` where ${where.join(" and ")}` : ""} returning *`;
+        const rows = await asUser(claims, (c) => c.query(sql, values)).then((r) => r.rows);
+        return /return=representation/.test(String(req.headers.prefer ?? "")) ? send(res, 200, rows) : send(res, 204);
       }
       return send(res, 404, { message: `fake-supabase: ${req.method} ${url.pathname} not supported` });
     } catch (e) {

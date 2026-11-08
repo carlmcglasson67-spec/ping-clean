@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { PingMark, Wordmark } from "@/components/ui";
-import { getSession } from "@/lib/auth/session";
+import { safeNext } from "@/lib/auth/next";
 import { postLoginPath } from "@/lib/auth/roles";
+import { getSession } from "@/lib/auth/session";
 import { hasSupabaseEnv } from "@/lib/env";
+import { AuthFrame, FormIntro, Notice } from "../_components/auth-frame";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = {
@@ -11,55 +13,51 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
-  const { next } = await searchParams;
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; link?: string }> }) {
+  const params = await searchParams;
+  const next = safeNext(params.next) ?? undefined;
   if (hasSupabaseEnv()) {
     const session = await getSession();
     if (session) redirect(postLoginPath(session.role, next));
   }
+  const signupHref = `/signup${next ? `?next=${encodeURIComponent(next)}` : ""}`;
 
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[1.15fr_1fr]">
-      {/* Statement panel: ink, grain, the signal ring. Hidden on small phones to keep sign-in one screen. */}
-      <section className="grain relative hidden overflow-hidden bg-ink p-12 text-paper lg:flex lg:flex-col xl:p-16">
-        <Wordmark tone="paper" />
-        <div className="relative mt-auto max-w-[36rem] pt-24">
-          <p className="mb-6 text-sm font-semibold uppercase tracking-[0.16em] text-signal">One login, three apps</p>
-          <h1 className="text-[clamp(3rem,1rem+4.2vw,6rem)] font-semibold leading-[0.95]">
-            Same cleaner.
-            <br />
-            Every week.
-            <br />
-            <span className="text-signal">Sorted.</span>
-          </h1>
-          <p className="mt-8 max-w-md text-lg text-paper/70">
-            Customers manage their cleans. Cleaners see their day. The Ping team keeps every visit on track.
-          </p>
+    <AuthFrame
+      eyebrow="One login, three apps"
+      statement={
+        <>
+          Same cleaner.
+          <br />
+          Your whole block.
+          <br />
+          <span className="text-brand-gradient-navy">Sorted.</span>
+        </>
+      }
+      lede="Customers manage their cleans. Cleaners see their day. The Ping team keeps every visit on track."
+    >
+      <FormIntro title="Sign in to Ping">
+        Customers, cleaners and the Ping team all sign in here. We&rsquo;ll take you to the right place.
+      </FormIntro>
+      {params.link === "expired" ? (
+        <div className="mb-6">
+          <Notice>That link has expired or has already been used. Sign in below, or ask for a new link.</Notice>
         </div>
-        <svg aria-hidden viewBox="0 0 600 600" className="pointer-events-none absolute -right-40 -top-40 size-[44rem] text-paper/[0.07]">
-          {[80, 150, 220, 290].map((r) => (
-            <circle key={r} cx="300" cy="300" r={r} fill="none" stroke="currentColor" strokeWidth="1.5" />
-          ))}
-          <circle cx="300" cy="300" r="22" className="fill-signal" fillOpacity="0.9" />
-        </svg>
-      </section>
-
-      <section className="flex flex-col px-6 pb-10 pt-8 sm:px-12 lg:px-16 xl:px-24">
-        <div className="lg:hidden">
-          <Wordmark />
-        </div>
-        <div className="my-auto w-full max-w-[28rem] py-12">
-          <div className="mb-10 grid gap-4">
-            <PingMark pulse className="text-ink" />
-            <h2 className="text-2xl font-semibold">Sign in to Ping</h2>
-            <p className="text-ink-2">Customers, cleaners and the Ping team all sign in here. We&rsquo;ll take you to the right place.</p>
-          </div>
-          <LoginForm next={next} />
-          <p className="mt-10 border-t border-line pt-6 text-sm text-ink-3">
-            Forgotten your password, or need an account? Call the Ping office and we&rsquo;ll get you in.
-          </p>
-        </div>
-      </section>
-    </div>
+      ) : null}
+      <LoginForm next={next} />
+      <div className="mt-10 grid gap-3 border-t border-line pt-6 text-base">
+        <p className="text-navy-2">
+          New to Ping?{" "}
+          <Link href={signupHref as "/signup"} className="font-semibold text-blue underline-offset-4 hover:underline">
+            Create an account
+          </Link>
+        </p>
+        <p className="text-navy-2">
+          <Link href="/forgot-password" className="font-semibold text-blue underline-offset-4 hover:underline">
+            Forgotten your password?
+          </Link>
+        </p>
+      </div>
+    </AuthFrame>
   );
 }
