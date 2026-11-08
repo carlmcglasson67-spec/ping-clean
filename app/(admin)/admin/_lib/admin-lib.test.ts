@@ -14,6 +14,12 @@ describe("admin error wording", () => {
     expect(adminErrorMessage({ code: "XX000" })).toBe("Something went wrong. Please try again.");
     expect(adminErrorMessage(null)).toBe("Something went wrong. Please try again.");
   });
+  it("names the settings rule a save broke, by constraint name only", () => {
+    const err = (name: string) => ({ code: "23514", message: `new row for relation "settings" violates check constraint "${name}"` });
+    expect(adminErrorMessage(err("settings_late_cancel_share_follows_split"))).toMatch(/only applies with a fixed share/);
+    expect(adminErrorMessage(err("settings_late_cancel_share"))).toMatch(/needs the cleaner's share/);
+    expect(adminErrorMessage(err("some_other_check"))).toBe("Something went wrong. Please try again.");
+  });
 });
 
 describe("alerts", () => {

@@ -36,7 +36,7 @@ export default async function settingsFlows({ page, BASE, check, dir, sql, settl
 
   await check("a value that isn't clean pounds and pence is refused before review", async () => {
     await price().fill("22.505");
-    await page.getByText("Type pounds and pence, like 18.50.").waitFor();
+    await page.getByText("Enter pounds and pence.").waitFor();
     assert.ok(await review().isDisabled());
     await price().fill("22.50");
   });

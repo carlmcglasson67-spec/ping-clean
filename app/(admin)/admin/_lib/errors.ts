@@ -17,7 +17,7 @@ const ADMIN_WORDING: Record<string, string> = {
   "42501": "Only the Ping team can do that. Sign in again with your admin account.",
 };
 
-export function adminErrorMessage(error: { code?: string | null } | null | undefined): string {
+export function adminErrorMessage(error: { code?: string | null; message?: string | null } | null | undefined): string {
   const code = error?.code;
   if (code && code in ADMIN_WORDING) return ADMIN_WORDING[code]!;
   return pingErrorMessage(error);

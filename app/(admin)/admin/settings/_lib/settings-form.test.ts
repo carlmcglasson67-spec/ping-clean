@@ -1,17 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { bpsToText, changes, parseSettings, penceToText, toValues, unsetRequired, type SettingsRow, type Values } from "./settings-form";
+import { bpsToText, changes, FIELDS, isShown, parseSettings, penceToText, toValues, unsetRequired, type SettingsRow, type Values } from "./settings-form";
 
 const empty: SettingsRow = {
   id: true, price_per_hour_pence: null, min_booking_minutes: null, commission_type: null, commission_value: null,
   top_window_minutes: null, approved_window_minutes: null, unclaimed_alert_minutes: null, cancel_notice_hours: null,
   late_cancel_fee_pence: null, late_cancel_cleaner_share_bps: null, dispute_window_hours: null, launch_districts: [],
   updated_at: "2026-11-08T10:00:00+00:00", rebook_first_refusal_minutes: null, interest_retention_months: 6,
+  // The money settings (payments PR 2). Only the late-cancel split is on this screen so far.
+  late_cancel_split: null, payment_retry_hours: null, failed_payment_pauses_block: null, couldnt_do_rule: null,
+  no_access_rule: null, card_expiry_notice_days: null, late_cancel_when_unclaimed: null,
 };
 
 const full: Values = {
   price_per_hour_pence: "22.50", min_booking_minutes: "2.5", commission_type: "percent", commission_value: "12.5",
   top_window_minutes: "120", approved_window_minutes: "240", unclaimed_alert_minutes: "720", cancel_notice_hours: "24",
-  late_cancel_fee_pence: "15", late_cancel_cleaner_share_bps: "50", dispute_window_hours: "48",
+  late_cancel_fee_pence: "15", late_cancel_split: "fixed_share", late_cancel_cleaner_share_bps: "50", dispute_window_hours: "48",
   launch_districts: "ca14, CA28 ca14", rebook_first_refusal_minutes: "", interest_retention_months: "6",
 };
 
@@ -103,5 +106,32 @@ describe("settings form: round trip and review", () => {
     if (!a.ok || !b.ok) throw new Error("parse");
     const c = changes({ ...empty, ...a.data, commission_value: 1250 }, b.data);
     expect(c.find((x) => x.key === "commission_value")).toMatchObject({ from: "12.5% of the price", to: "£12.50 per hour cleaned" });
+  });
+});
+
+describe("settings form: the late-cancel split", () => {
+  it("keeps a fixed share only with a fixed split, and asks for one when it's missing", () => {
+    expect(parseSettings({ ...full, late_cancel_split: "same_as_clean" })).toMatchObject({
+      ok: true, data: { late_cancel_split: "same_as_clean", late_cancel_cleaner_share_bps: null } });
+    expect(parseSettings({ ...full, late_cancel_split: "" })).toMatchObject({
+      ok: true, data: { late_cancel_split: null, late_cancel_cleaner_share_bps: null } });
+    const r = parseSettings({ ...full, late_cancel_split: "fixed_share", late_cancel_cleaner_share_bps: "" });
+    expect(r.ok).toBe(false);
+    expect(r.errors.late_cancel_cleaner_share_bps).toMatch(/cleaner's share/);
+    expect(parseSettings({ ...full, late_cancel_split: "half" }).errors.late_cancel_split).toBeTruthy();
+  });
+
+  it("shows the share box only for a fixed split", () => {
+    const share = FIELDS.find((f) => f.key === "late_cancel_cleaner_share_bps")!;
+    expect(isShown(share, { late_cancel_split: "fixed_share" })).toBe(true);
+    expect(isShown(share, { late_cancel_split: "same_as_clean" })).toBe(false);
+    expect(isShown(share, {})).toBe(false);
+  });
+
+  it("never suggests an amount in its hints", () => {
+    for (const k of ["price_per_hour_pence", "late_cancel_fee_pence"] as const) {
+      expect(parseSettings({ ...full, [k]: "abc" }).errors[k]).not.toMatch(/\d/);
+    }
+    expect(parseSettings({ ...full, commission_type: "per_hour", commission_value: "abc" }).errors.commission_value).not.toMatch(/\d/);
   });
 });

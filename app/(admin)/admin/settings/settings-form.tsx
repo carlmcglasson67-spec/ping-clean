@@ -7,7 +7,7 @@ import { cn } from "@/components/ui/cn";
 import { formatDuration, formatPence, splitVisitPrice } from "@/lib/money";
 import { NOT_SAVED } from "../_lib/errors";
 import { saveSettings, type SaveResult } from "./actions";
-import { bpsToText, changes, GROUPS, parseSettings, unsetRequired, type Field, type SettingKey, type SettingsRow, type Values } from "./_lib/settings-form";
+import { bpsToText, changes, CHOICES, GROUPS, isChoice, isShown, parseSettings, unsetRequired, type Field, type SettingKey, type SettingsRow, type Values } from "./_lib/settings-form";
 
 /**
  * Edit, review, confirm. Typing changes nothing; "Review changes" lists every change as
@@ -46,6 +46,8 @@ export function SettingsForm({ current, initial, lastChanged }: { current: Setti
       const next = { ...old, [key]: v };
       // The value means something else under the other type, so it must be typed again.
       if (key === "commission_type" && v !== old.commission_type) next.commission_value = "";
+      // A share only goes with a fixed split; any other split clears it.
+      if (key === "late_cancel_split" && v !== "fixed_share") next.late_cancel_cleaner_share_bps = "";
       return next;
     });
   };
@@ -86,7 +88,7 @@ export function SettingsForm({ current, initial, lastChanged }: { current: Setti
               <p className="max-w-2xl text-navy-2">{g.lede}</p>
             </div>
             <div className="grid gap-x-8 gap-y-6 md:grid-cols-2">
-              {g.fields.map((f) => (
+              {g.fields.filter((f) => isShown(f, values)).map((f) => (
                 <SettingInput key={f.key} field={f} value={values[f.key] ?? ""} error={errors[f.key]} disabled={reviewing || pending}
                   commissionType={values.commission_type ?? ""} onChange={(v) => update(f.key, v)} />
               ))}
@@ -160,12 +162,12 @@ function SettingInput({ field, value, error, disabled, commissionType, onChange 
   const err = `${id}-err`;
   const describedBy = error ? `${hint} ${err}` : hint;
 
-  if (field.unit === "commission_type") {
+  if (isChoice(field.unit)) {
     return (
       <fieldset className="grid gap-2" aria-describedby={describedBy}>
         <legend className="mb-2 text-sm font-semibold">{field.label}</legend>
         <div className="flex flex-wrap gap-2">
-          {([["percent", "A percentage"], ["per_hour", "Per hour"], ["", "Not set"]] as const).map(([v, label]) => (
+          {CHOICES[field.unit].map(([v, label]) => (
             <label key={v} className={cn("inline-flex min-h-12 cursor-pointer items-center gap-2.5 rounded-full px-5 ring-1 ring-inset", value === v ? "bg-navy text-on-navy ring-navy" : "bg-card ring-line hover:ring-navy-3", "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue", disabled && "pointer-events-none opacity-60")}>
               <input type="radio" name={field.key} value={v} checked={value === v} disabled={disabled} onChange={() => onChange(v)} className="sr-only" />
               {label}
@@ -249,9 +251,13 @@ function Example({ data, errors }: { data: ReturnType<typeof parseSettings>["dat
               <dd className="text-lg font-semibold tabular" data-testid="example-fee">{formatPence(split.pingFeePence)}</dd>
             </div>
           </dl>
-          {data.late_cancel_fee_pence != null && data.late_cancel_cleaner_share_bps != null ? (
+          {data.late_cancel_fee_pence != null && data.late_cancel_split === "fixed_share" && data.late_cancel_cleaner_share_bps != null ? (
             <p className="rounded-md bg-mist/70 px-4 py-3 text-sm text-navy-2">
               A late cancellation costs the customer {formatPence(data.late_cancel_fee_pence)}, and the cleaner gets {bpsToText(data.late_cancel_cleaner_share_bps)}% of it.
+            </p>
+          ) : data.late_cancel_fee_pence != null && data.late_cancel_split === "same_as_clean" ? (
+            <p className="rounded-md bg-mist/70 px-4 py-3 text-sm text-navy-2">
+              A late cancellation costs the customer {formatPence(data.late_cancel_fee_pence)}, split between the cleaner and Ping like a clean.
             </p>
           ) : null}
         </>

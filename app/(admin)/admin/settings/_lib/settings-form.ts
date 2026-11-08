@@ -14,7 +14,16 @@ export type SettingKey = Exclude<keyof SettingsRow, "id" | "updated_at">;
 export type Values = Partial<Record<SettingKey, string>>;
 type Parsed = SettingsRow[SettingKey];
 
-type Unit = "pounds" | "half_hours" | "minutes" | "hours" | "percent" | "months" | "districts" | "commission_type" | "commission_value";
+type Unit = "pounds" | "half_hours" | "minutes" | "hours" | "percent" | "months" | "districts" | "commission_type" | "commission_value"
+  | "late_cancel_split";
+
+/** Fields picked from a short list, with the values the database's check allows ("" = not set). */
+export const CHOICES = {
+  commission_type: [["percent", "A percentage"], ["per_hour", "Per hour"], ["", "Not set"]],
+  late_cancel_split: [["same_as_clean", "Same split as a clean"], ["fixed_share", "A fixed share"], ["", "Not set"]],
+} as const satisfies Partial<Record<Unit, readonly (readonly [string, string])[]>>;
+type ChoiceUnit = keyof typeof CHOICES;
+export const isChoice = (u: Unit): u is ChoiceUnit => u in CHOICES;
 
 export type Field = {
   key: SettingKey;
@@ -78,7 +87,9 @@ export const GROUPS: Group[] = [
         explain: "A customer who cancels with less notice than this pays the late fee." },
       { key: "late_cancel_fee_pence", label: "Late cancellation fee", unit: "pounds",
         explain: "Charged to the customer for a late cancellation." },
-      { key: "late_cancel_cleaner_share_bps", label: "Cleaner's share of that fee", unit: "percent", suffix: "%",
+      { key: "late_cancel_split", label: "Cleaner's share of that fee", unit: "late_cancel_split",
+        explain: "The same split as a normal clean (the cleaner keeps what they'd earn, Ping keeps its commission), or a fixed share you set." },
+      { key: "late_cancel_cleaner_share_bps", label: "Fixed share for the cleaner", unit: "percent", suffix: "% of the fee",
         explain: "The part of the late fee that goes to the cleaner who lost the work." },
       { key: "dispute_window_hours", label: "Hold a cleaner's pay for", unit: "hours", required: true, suffix: "hours after the clean", max: 720,
         explain: "Time for the customer to raise a problem before the cleaner is paid." },
@@ -99,6 +110,11 @@ export const GROUPS: Group[] = [
 
 export const FIELDS: Field[] = GROUPS.flatMap((g) => g.fields);
 const FIELD = new Map(FIELDS.map((f) => [f.key, f]));
+
+/** Whether a field applies, given the other values: the fixed share only with a fixed split. */
+export function isShown(f: Field, values: Values): boolean {
+  return f.key !== "late_cancel_cleaner_share_bps" || values.late_cancel_split === "fixed_share";
+}
 
 /** A field's upper limit as people say it: "7 days", "30 days". */
 export function limitInWords(f: Field): string {
@@ -182,8 +198,18 @@ export function parseSettings(values: Values): ParseResult {
   if (commissionType !== "" && commissionType !== "percent" && commissionType !== "per_hour") errors.commission_type = "Choose percentage or per hour.";
   set("commission_type", commissionType === "percent" || commissionType === "per_hour" ? commissionType : null);
 
+  const split = text("late_cancel_split");
+  if (split !== "" && split !== "same_as_clean" && split !== "fixed_share") errors.late_cancel_split = "Choose the same split as a clean, or a fixed share.";
+  set("late_cancel_split", split === "same_as_clean" || split === "fixed_share" ? split : null);
+
   for (const f of FIELDS) {
-    if (f.unit === "commission_type") continue;
+    if (f.unit === "commission_type" || f.unit === "late_cancel_split") continue;
+    // A fixed share only means something with a fixed split; otherwise it's cleared (the
+    // database refuses a share alongside "same split as a clean").
+    if (f.key === "late_cancel_cleaner_share_bps" && data.late_cancel_split !== "fixed_share") {
+      set(f.key, null);
+      continue;
+    }
     const t = text(f.key);
     if (t === "") {
       set(f.key, (f.unit === "districts" ? [] : null) as never);
@@ -194,7 +220,7 @@ export function parseSettings(values: Values): ParseResult {
     switch (f.unit) {
       case "pounds":
         v = pounds(t);
-        if (v === null) err = "Type pounds and pence, like 18.50.";
+        if (v === null) err = "Enter pounds and pence.";
         else if (f.key === "price_per_hour_pence" && v === 0) err = "The price has to be more than £0.";
         break;
       case "half_hours": {
@@ -235,7 +261,7 @@ export function parseSettings(values: Values): ParseResult {
           else if (v >= 10_000) err = "At 100% the cleaner would earn nothing.";
         } else {
           v = pounds(t);
-          if (v === null) err = "Type pounds and pence an hour, like 5.00.";
+          if (v === null) err = "Enter pounds and pence an hour.";
         }
         break;
     }
@@ -243,6 +269,10 @@ export function parseSettings(values: Values): ParseResult {
     else set(f.key, v as never);
   }
 
+  // A fixed split needs its share.
+  if (data.late_cancel_split === "fixed_share" && data.late_cancel_cleaner_share_bps == null && !errors.late_cancel_cleaner_share_bps) {
+    errors.late_cancel_cleaner_share_bps = "Type the cleaner's share, or choose the same split as a clean.";
+  }
   // Both halves of the commission, or neither.
   if (data.commission_type && (data.commission_value === null || data.commission_value === undefined) && !errors.commission_value) {
     errors.commission_value = "Type the commission, or clear the type too.";
@@ -281,6 +311,8 @@ export function describe(key: SettingKey, v: Parsed, commissionType: SettingsRow
       return (v as string[]).join(", ");
     case "commission_type":
       return v === "percent" ? "A percentage of the price" : "A fixed amount per hour";
+    case "late_cancel_split":
+      return v === "same_as_clean" ? "The same split as a clean" : "A fixed share";
     case "commission_value":
       return commissionType === "percent" ? `${bpsToText(n)}% of the price` : `${formatPence(n)} per hour cleaned`;
   }
