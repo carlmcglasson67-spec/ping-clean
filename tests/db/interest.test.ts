@@ -217,6 +217,42 @@ describe("register_interest: only the server can call it (review BLOCK 1)", () =
       return q.rows(`select email from public.interest_signups`); })).toEqual([{ email: "jo@example.com" }]);
   });
 
+  it("tidies stored trailing-dot emails safely: merges duplicates, keeps opt-outs, never aborts (#31 review)", async () => {
+    const r = await as("superuser", async (q) => {
+      // Rows as they could have been stored before the fix (the old check allowed a trailing dot).
+      await q.rows(`alter table public.interest_signups drop constraint interest_signups_email_check`);
+      const add = (email: string, postcode: string, unsub = false) => q.rows(
+        `insert into public.interest_signups (postcode, email, consent_text_version, source, delete_after, unsubscribed_at)
+         values ($1, $2, 'v1', 'holding_page', now() + interval '6 months', ${unsub ? "now() - interval '1 day'" : "null"})`, [postcode, email]);
+      await add("a@example.com.", "CA25 5AB"); await add("a@example.com", "CA25 6ZZ");            // 1. dotted + clean, same district
+      await add("b@example.com.", "CA25 5AB", true); await add("b@example.com", "CA25 6ZZ");      // 2. dotted unsubscribed + clean
+      await add("c@example.com.", "CA25 5AB"); await add("c@example.com..", "CA25 6ZZ");          // 3. x. and x.. in one district
+      await add("d@example.com.", "CA25 5AB");                                                     // a lone dotted row
+      await add("e@example.com.", "CA25 5AB"); await add("e@example.com", "LA9 4AA");             // different districts
+      const groups = (await q.rows<{ n: number }>(`select private.tidy_trailing_dot_emails() as n`))[0]!.n;
+      const rows = await q.rows<{ email: string; district: string; unsub: boolean }>(
+        `select email, postcode_district as district, unsubscribed_at is not null as unsub from public.interest_signups order by email, district`);
+      // The real check goes back on and holds for every row left.
+      const check = await q.attempt(`alter table public.interest_signups add constraint interest_signups_email_check
+                                       check (private.normalise_email(email) is not distinct from email)`);
+      await q.rows(`set local role service_role`);
+      await register(q, { email: "b@example.com", postcode: "LA9 4AA" }); // the opt-out holds, in another district too
+      await q.rows(`reset role`);
+      return { groups, rows, check, bRows: await q.count(`public.interest_signups where email = 'b@example.com'`),
+               hashes: await q.count(`private.interest_suppressions`) };
+    });
+    expect(r.groups).toBe(5); // a, b, c, d and e in CA25; e in LA9 had no dot
+    expect(r.rows).toEqual([
+      { email: "a@example.com", district: "CA25", unsub: false },
+      { email: "b@example.com", district: "CA25", unsub: true },
+      { email: "c@example.com", district: "CA25", unsub: false },
+      { email: "d@example.com", district: "CA25", unsub: false },
+      { email: "e@example.com", district: "CA25", unsub: false },
+      { email: "e@example.com", district: "LA9", unsub: false },
+    ]);
+    expect(r).toMatchObject({ check: "ok", bRows: 1, hashes: 1 });
+  });
+
   it("keeps every contact an admin deletes on request on the suppression list, opted out or not (last check 1)", async () => {
     const r = await setupThen(async (su) => {
       await seedReg(su);                                                  // still subscribed

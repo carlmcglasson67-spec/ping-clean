@@ -21,14 +21,8 @@ language sql immutable set search_path = '' as $$
   from (select regexp_replace(lower(btrim(coalesce(p, ''))), '\.+$', '') as t) x
 $$;
 
--- Rows stored before this change with a trailing dot are tidied to the new form (none in
--- production yet: the form isn't live). A tidy that would duplicate an existing row for the
--- same area is left to the purge rather than merged by guesswork.
-update public.interest_signups i set email = regexp_replace(i.email, '\.+$', '')
-where i.email ~ '\.$'
-  and not exists (select 1 from public.interest_signups o
-                  where o.kind = i.kind and o.postcode_district = i.postcode_district
-                    and o.email = regexp_replace(i.email, '\.+$', '') and o.id <> i.id);
+-- Rows already stored with a trailing dot are tidied further down, once the suppression
+-- list exists (private.tidy_trailing_dot_emails).
 
 -- ---------------------------------------------------------------- suppression list
 -- Someone who unsubscribed, or asked for their details to be deleted, must never be put
@@ -77,6 +71,53 @@ language sql stable security definer set search_path = '' as $$
                  where i.unsubscribed_at is not null
                    and private.contact_canonical(i.email, i.phone) = private.contact_canonical(p_email, p_phone))
 $$;
+
+-- ---------------------------------------------------------------- tidying trailing dots
+-- Rows stored before this change with a trailing dot on the domain ("x@example.com.") would
+-- break the email check, so they're tidied to the new form. None exist in production yet
+-- (the form isn't live), but it's done safely anyway, per group of rows that become the same
+-- address in the same area (kind, district):
+--   * one row survives: the one already in the clean form, or else the earliest;
+--   * if ANY row in the group had opted out, the contact's hash goes on the suppression list
+--     and the survivor keeps the opt-out (and "told", if any row was told);
+--   * the other rows are deleted (audited, contacts redacted), then the survivor is tidied.
+-- Kept as a function so the tests can run it on seeded rows; nobody else can call it.
+create function private.tidy_trailing_dot_emails() returns integer
+language plpgsql volatile security definer set search_path = '' as $$
+declare
+  g record;
+  keep uuid;
+  n integer := 0;
+  v_actor text := current_setting('app.actor', true);
+begin
+  perform set_config('app.actor', 'migration:tidy-emails', true);
+  for g in
+    select i.kind, i.postcode_district, regexp_replace(i.email, '\.+$', '') as clean,
+           array_agg(i.id order by (i.email = regexp_replace(i.email, '\.+$', '')) desc, i.created_at, i.id) as ids,
+           min(i.unsubscribed_at) as unsub, max(i.notified_at) as told
+    from public.interest_signups i
+    where i.email is not null
+    group by 1, 2, 3
+    having bool_or(i.email ~ '\.$')
+  loop
+    keep := g.ids[1];
+    if g.unsub is not null then
+      insert into private.interest_suppressions (contact_hash)
+      values (private.contact_hash(g.clean, null)) on conflict do nothing;
+    end if;
+    delete from public.interest_signups where id = any (g.ids[2:]);
+    update public.interest_signups
+       set email = g.clean,
+           unsubscribed_at = coalesce(unsubscribed_at, g.unsub),
+           notified_at = coalesce(notified_at, g.told)
+     where id = keep;
+    n := n + 1;
+  end loop;
+  perform set_config('app.actor', coalesce(v_actor, ''), true);
+  return n;
+end $$;
+revoke all on function private.tidy_trailing_dot_emails() from public, anon, authenticated;
+select private.tidy_trailing_dot_emails();
 
 -- ---------------------------------------------------------------- register_interest
 create or replace function public.register_interest(
