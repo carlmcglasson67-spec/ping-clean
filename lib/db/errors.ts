@@ -42,10 +42,25 @@ export type PingErrorCode = keyof typeof PING_ERRORS;
 
 const FALLBACK = "Something went wrong. Please try again.";
 
+/**
+ * Check constraints a person can run into (an admin saving settings), by constraint name.
+ * Postgres reports these as 23514 with the name in the message; only the name is matched,
+ * and the database's own text is never shown.
+ */
+export const CHECK_MESSAGES: Record<string, string> = {
+  settings_late_cancel_share: "A fixed share needs the cleaner's share of the late fee.",
+  settings_late_cancel_share_follows_split:
+    "The cleaner's share only applies with a fixed share. Clear it, or choose a fixed share.",
+};
+
 /** Plain words for an error from a Supabase RPC call. Never shows raw database text. */
-export function pingErrorMessage(error: { code?: string | null } | null | undefined): string {
+export function pingErrorMessage(error: { code?: string | null; message?: string | null } | null | undefined): string {
   const code = error?.code;
   if (code && code in PING_ERRORS) return PING_ERRORS[code as PingErrorCode];
+  if (code === "23514") {
+    const name = /check constraint "([a-z0-9_]+)"/.exec(error?.message ?? "")?.[1];
+    if (name && name in CHECK_MESSAGES) return CHECK_MESSAGES[name]!;
+  }
   if (code === "42501") return "You don't have access to do that.";
   return FALLBACK;
 }
