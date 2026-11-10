@@ -20,6 +20,7 @@ export async function applyAsCleaner(): Promise<ApplyState> {
   if (session.role !== "customer") return { error: "Ping team accounts can't apply to clean. Use a separate login." };
 
   const supabase = await createClient();
+  // Returns only the new status ("applicant"); nothing else about the cleaner row.
   const { error } = await supabase.rpc("apply_as_cleaner");
   if (error) {
     return {

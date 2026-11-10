@@ -142,11 +142,21 @@ describe("receiveStripeWebhook", () => {
   });
 
   it("acknowledges a replay without running anything again", async () => {
-    rpc.mockResolvedValueOnce({ data: "done", error: null });
+    rpc.mockResolvedValueOnce({ data: "duplicate", error: null });
     const handler = vi.fn(async () => {});
     HANDLERS.platform["payment_intent.succeeded"] = handler;
     const res = await receiveStripeWebhook(post(event()), "platform");
     expect(await res.json()).toEqual({ received: true, duplicate: true });
+    expect(handler).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers 409 without running anything while another copy holds the event, so Stripe retries", async () => {
+    rpc.mockResolvedValueOnce({ data: "busy", error: null });
+    const handler = vi.fn(async () => {});
+    HANDLERS.platform["payment_intent.succeeded"] = handler;
+    const res = await receiveStripeWebhook(post(event()), "platform");
+    expect(res.status).toBe(409);
     expect(handler).not.toHaveBeenCalled();
     expect(rpc).toHaveBeenCalledTimes(1);
   });

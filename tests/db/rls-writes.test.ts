@@ -80,8 +80,11 @@ describe("apply_as_cleaner", () => {
       await su.rows(`insert into auth.users (id, email) values ($1, 'new.cleaner@ping.test')`, [id]);
       await su.rows(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: id, role: "authenticated" })]);
       await su.rows(`set local role authenticated`);
-      const [c] = await su.rows<{ status: string; tier: string }>(`select status, tier from public.apply_as_cleaner()`);
-      expect(c).toEqual({ status: "applicant", tier: "new" });
+      // Only the new status comes back: never the row (it holds the Stripe account id).
+      const [c] = await su.rows<{ status: string }>(`select public.apply_as_cleaner() as status`);
+      expect(c).toEqual({ status: "applicant" });
+      expect(await su.attempt(`select tier from public.cleaners where id = $1`, [id])).toBe("ok");
+      expect(await su.attempt(`select stripe_account_id from public.apply_as_cleaner()`)).toBe("42703");
       expect(await su.count("public.job_offers")).toBe(0);
       expect(await su.count("public.checklist_templates")).toBe(0);
     });

@@ -496,7 +496,7 @@ export type Database = {
           paid_at: string | null;
           created_at: string;
           updated_at: string;
-          payment_id: string | null;
+          payment_id: string;
           batch_id: string | null;
           held_reason: string | null;
         };
@@ -512,7 +512,7 @@ export type Database = {
           paid_at?: string | null;
           created_at?: string;
           updated_at?: string;
-          payment_id?: string | null;
+          payment_id: string;
           batch_id?: string | null;
           held_reason?: string | null;
         };
@@ -528,7 +528,7 @@ export type Database = {
           paid_at?: string | null;
           created_at?: string;
           updated_at?: string;
-          payment_id?: string | null;
+          payment_id?: string;
           batch_id?: string | null;
           held_reason?: string | null;
         };
@@ -1031,7 +1031,7 @@ export type Database = {
       };
       apply_as_cleaner: {
         Args: Record<PropertyKey, never>;
-        Returns: Database["public"]["Tables"]["cleaners"]["Row"];
+        Returns: Database["public"]["Enums"]["cleaner_status"];
       };
       job_board: {
         Args: Record<PropertyKey, never>;
@@ -1098,7 +1098,7 @@ export type Database = {
       };
       stripe_begin_event: {
         Args: { p_event_id: string; p_type: string; p_account: string | null };
-        Returns: "process" | "done";
+        Returns: "process" | "busy" | "duplicate";
       };
       stripe_finish_event: {
         Args: { p_event_id: string; p_error: string | null };
