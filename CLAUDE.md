@@ -22,6 +22,8 @@ https://claude.ai/artifact/1WEp7QQgrj5dGn1wzooEWz (summary in intent/v1/spec.md)
   a series, never a single visit.
 - Background work (visit generation, tiered offer release, unclaimed alerts) runs in
   supabase/functions/ on cron, never in the Next.js app.
+- Stripe webhooks are request handlers in app/api/stripe/ (signature-checked, recorded once:
+  lib/stripe/receive.ts), not background work.
 - Planning files for each change live in intent/<change>/ (intent.md, spec.md, plan.md).
 
 ## Rules
