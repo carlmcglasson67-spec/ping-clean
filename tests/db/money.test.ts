@@ -29,12 +29,13 @@ describe("money constraints", () => {
   });
   it("allows only one live charge per visit", async () => {
     expect(await as("superuser", (q) => q.attempt(
-      `insert into public.payments (visit_id, customer_id, amount_pence, application_fee_pence, idempotency_key) values ($1, $2, 5000, 1250, 'dupe')`,
+      `insert into public.payments (visit_id, customer_id, amount_pence, application_fee_pence, cleaner_amount_pence, idempotency_key) values ($1, $2, 5000, 1250, 3750, 'dupe')`,
       [IDS.visitDone, U.anna]))).toBe("23505");
   });
   it("allows only one live payout per visit", async () => {
     expect(await as("superuser", (q) => q.attempt(
-      `insert into public.payouts (visit_id, cleaner_id, amount_pence, available_after, idempotency_key) values ($1, $2, 3750, now(), 'dupe')`,
+      `insert into public.payouts (visit_id, cleaner_id, payment_id, amount_pence, available_after, idempotency_key)
+       values ($1, $2, '00000000-0000-4000-f000-000000000001', 3750, now(), 'dupe')`,
       [IDS.visitDone, U.tara]))).toBe("23505");
   });
   it("stores money as integers only", async () => {

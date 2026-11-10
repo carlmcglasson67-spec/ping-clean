@@ -945,13 +945,13 @@ describe("final review: admin_end_block", () => {
     }
   });
 
-  it("ends the block with the reason, removes cleans still to come, settles its alerts, audits it, and locks the address", async () => {
+  it("ends the block with the reason, cancels cleans still to come, settles its alerts, audits it, and locks the address", async () => {
     const r = await setupThen(async (su) => {
       await su.rows(`insert into public.engine_alerts (kind, series_id, message) values ('block_stalled', $1, 'x')`, [IDS.annaSeries]);
     }, U.admin, async (q) => {
       await q.rows(END, [IDS.annaSeries, "Customer moving house"]);
       const [s] = await q.rows(`select status, end_reason from public.series where id = $1`, [IDS.annaSeries]);
-      const visits = await q.rows<{ id: string }>(`select id from public.visits where series_id = $1 order by scheduled_date`, [IDS.annaSeries]);
+      const visits = await q.rows<{ id: string }>(`select id from public.visits where series_id = $1 and status <> 'cancelled' order by scheduled_date`, [IDS.annaSeries]);
       const [alert] = await q.rows(`select resolved_by from public.engine_alerts where series_id = $1`, [IDS.annaSeries]);
       const [audit] = await q.rows<{ actor_id: string; detail: { status: unknown } }>(
         `select actor_id, detail from public.audit_log where entity = 'series' and entity_id = $1 order by id desc limit 1`, [IDS.annaSeries]);
@@ -960,7 +960,7 @@ describe("final review: admin_end_block", () => {
       return { s, visits: visits.map((v) => v.id), alert, audit, again, taraSees: await q.count("public.properties") };
     });
     expect(r.s).toEqual({ status: "ended", end_reason: "Customer moving house" });
-    expect(r.visits).toEqual([IDS.visitDone]); // today's and next week's booked cleans removed; history kept
+    expect(r.visits).toEqual([IDS.visitDone]); // today's and next week's booked cleans cancelled; history kept
     expect(r.alert).toEqual({ resolved_by: U.admin });
     expect(r.audit).toMatchObject({ actor_id: U.admin, detail: { status: { from: "claimed", to: "ended" } } });
     expect(r.again).toBe("PC005");

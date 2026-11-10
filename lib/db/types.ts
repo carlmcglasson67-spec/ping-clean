@@ -168,6 +168,11 @@ export type Database = {
           approved_by: string | null;
           created_at: string;
           updated_at: string;
+          stripe_charges_enabled: boolean;
+          stripe_payouts_enabled: boolean;
+          stripe_details_submitted: boolean;
+          stripe_requirements_due: boolean;
+          stripe_status_at: string | null;
         };
         Insert: {
           id: string;
@@ -186,6 +191,11 @@ export type Database = {
           approved_by?: string | null;
           created_at?: string;
           updated_at?: string;
+          stripe_charges_enabled?: boolean;
+          stripe_payouts_enabled?: boolean;
+          stripe_details_submitted?: boolean;
+          stripe_requirements_due?: boolean;
+          stripe_status_at?: string | null;
         };
         Update: {
           id?: string;
@@ -204,6 +214,11 @@ export type Database = {
           approved_by?: string | null;
           created_at?: string;
           updated_at?: string;
+          stripe_charges_enabled?: boolean;
+          stripe_payouts_enabled?: boolean;
+          stripe_details_submitted?: boolean;
+          stripe_requirements_due?: boolean;
+          stripe_status_at?: string | null;
         };
         Relationships: [];
       };
@@ -372,6 +387,14 @@ export type Database = {
           failure_reason: string | null;
           created_at: string;
           updated_at: string;
+          cleaner_amount_pence: number;
+          cleaner_account_id: string | null;
+          stripe_charge_id: string | null;
+          attempts: number;
+          next_retry_at: string | null;
+          last_error_code: string | null;
+          disputed_at: string | null;
+          dispute_status: string | null;
         };
         Insert: {
           id?: string;
@@ -387,6 +410,14 @@ export type Database = {
           failure_reason?: string | null;
           created_at?: string;
           updated_at?: string;
+          cleaner_amount_pence: number;
+          cleaner_account_id?: string | null;
+          stripe_charge_id?: string | null;
+          attempts?: number;
+          next_retry_at?: string | null;
+          last_error_code?: string | null;
+          disputed_at?: string | null;
+          dispute_status?: string | null;
         };
         Update: {
           id?: string;
@@ -402,6 +433,53 @@ export type Database = {
           failure_reason?: string | null;
           created_at?: string;
           updated_at?: string;
+          cleaner_amount_pence?: number;
+          cleaner_account_id?: string | null;
+          stripe_charge_id?: string | null;
+          attempts?: number;
+          next_retry_at?: string | null;
+          last_error_code?: string | null;
+          disputed_at?: string | null;
+          dispute_status?: string | null;
+        };
+        Relationships: [];
+      };
+      payout_batches: {
+        Row: {
+          id: string;
+          cleaner_id: string;
+          amount_pence: number;
+          status: string;
+          stripe_payout_id: string | null;
+          idempotency_key: string;
+          arrival_date: string | null;
+          failure_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          cleaner_id: string;
+          amount_pence: number;
+          status?: string;
+          stripe_payout_id?: string | null;
+          idempotency_key: string;
+          arrival_date?: string | null;
+          failure_reason?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          cleaner_id?: string;
+          amount_pence?: number;
+          status?: string;
+          stripe_payout_id?: string | null;
+          idempotency_key?: string;
+          arrival_date?: string | null;
+          failure_reason?: string | null;
+          created_at?: string;
+          updated_at?: string;
         };
         Relationships: [];
       };
@@ -413,11 +491,14 @@ export type Database = {
           amount_pence: number;
           status: Database["public"]["Enums"]["payout_status"];
           available_after: string;
-          stripe_transfer_id: string | null;
+          stripe_payout_id: string | null;
           idempotency_key: string;
           paid_at: string | null;
           created_at: string;
           updated_at: string;
+          payment_id: string;
+          batch_id: string | null;
+          held_reason: string | null;
         };
         Insert: {
           id?: string;
@@ -426,11 +507,14 @@ export type Database = {
           amount_pence: number;
           status?: Database["public"]["Enums"]["payout_status"];
           available_after: string;
-          stripe_transfer_id?: string | null;
+          stripe_payout_id?: string | null;
           idempotency_key: string;
           paid_at?: string | null;
           created_at?: string;
           updated_at?: string;
+          payment_id: string;
+          batch_id?: string | null;
+          held_reason?: string | null;
         };
         Update: {
           id?: string;
@@ -439,11 +523,14 @@ export type Database = {
           amount_pence?: number;
           status?: Database["public"]["Enums"]["payout_status"];
           available_after?: string;
-          stripe_transfer_id?: string | null;
+          stripe_payout_id?: string | null;
           idempotency_key?: string;
           paid_at?: string | null;
           created_at?: string;
           updated_at?: string;
+          payment_id?: string;
+          batch_id?: string | null;
+          held_reason?: string | null;
         };
         Relationships: [];
       };
@@ -529,6 +616,57 @@ export type Database = {
           pets?: string | null;
           access_notes?: string | null;
           key_code?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      refunds: {
+        Row: {
+          id: string;
+          payment_id: string;
+          amount_pence: number;
+          cleaner_part_pence: number;
+          ping_part_pence: number;
+          reason: string;
+          note: string | null;
+          requested_by: string | null;
+          status: string;
+          stripe_refund_id: string | null;
+          idempotency_key: string;
+          failure_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          payment_id: string;
+          amount_pence: number;
+          cleaner_part_pence: number;
+          ping_part_pence: number;
+          reason: string;
+          note?: string | null;
+          requested_by?: string | null;
+          status?: string;
+          stripe_refund_id?: string | null;
+          idempotency_key: string;
+          failure_reason?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          payment_id?: string;
+          amount_pence?: number;
+          cleaner_part_pence?: number;
+          ping_part_pence?: number;
+          reason?: string;
+          note?: string | null;
+          requested_by?: string | null;
+          status?: string;
+          stripe_refund_id?: string | null;
+          idempotency_key?: string;
+          failure_reason?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -654,19 +792,16 @@ export type Database = {
       series_billing: {
         Row: {
           series_id: string;
-          stripe_customer_id: string | null;
           stripe_payment_method_id: string | null;
           updated_at: string;
         };
         Insert: {
           series_id: string;
-          stripe_customer_id?: string | null;
           stripe_payment_method_id?: string | null;
           updated_at?: string;
         };
         Update: {
           series_id?: string;
-          stripe_customer_id?: string | null;
           stripe_payment_method_id?: string | null;
           updated_at?: string;
         };
@@ -690,6 +825,13 @@ export type Database = {
           updated_at: string;
           rebook_first_refusal_minutes: number | null;
           interest_retention_months: number | null;
+          late_cancel_split: string | null;
+          payment_retry_hours: number[] | null;
+          failed_payment_pauses_block: boolean | null;
+          couldnt_do_rule: string | null;
+          no_access_rule: string | null;
+          card_expiry_notice_days: number | null;
+          late_cancel_when_unclaimed: string | null;
         };
         Insert: {
           id?: boolean;
@@ -708,6 +850,13 @@ export type Database = {
           updated_at?: string;
           rebook_first_refusal_minutes?: number | null;
           interest_retention_months?: number | null;
+          late_cancel_split?: string | null;
+          payment_retry_hours?: number[] | null;
+          failed_payment_pauses_block?: boolean | null;
+          couldnt_do_rule?: string | null;
+          no_access_rule?: string | null;
+          card_expiry_notice_days?: number | null;
+          late_cancel_when_unclaimed?: string | null;
         };
         Update: {
           id?: boolean;
@@ -726,6 +875,13 @@ export type Database = {
           updated_at?: string;
           rebook_first_refusal_minutes?: number | null;
           interest_retention_months?: number | null;
+          late_cancel_split?: string | null;
+          payment_retry_hours?: number[] | null;
+          failed_payment_pauses_block?: boolean | null;
+          couldnt_do_rule?: string | null;
+          no_access_rule?: string | null;
+          card_expiry_notice_days?: number | null;
+          late_cancel_when_unclaimed?: string | null;
         };
         Relationships: [];
       };
@@ -811,6 +967,7 @@ export type Database = {
           created_at: string;
           updated_at: string;
           couldnt_do_count: number;
+          cancel_reason: string | null;
         };
         Insert: {
           id?: string;
@@ -833,6 +990,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           couldnt_do_count?: number;
+          cancel_reason?: string | null;
         };
         Update: {
           id?: string;
@@ -855,6 +1013,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           couldnt_do_count?: number;
+          cancel_reason?: string | null;
         };
         Relationships: [];
       };
@@ -872,7 +1031,7 @@ export type Database = {
       };
       apply_as_cleaner: {
         Args: Record<PropertyKey, never>;
-        Returns: Database["public"]["Tables"]["cleaners"]["Row"];
+        Returns: Database["public"]["Enums"]["cleaner_status"];
       };
       job_board: {
         Args: Record<PropertyKey, never>;
@@ -937,6 +1096,42 @@ export type Database = {
         Args: { p_series: string };
         Returns: undefined;
       };
+      stripe_begin_event: {
+        Args: { p_event_id: string; p_type: string; p_account: string | null };
+        Returns: "process" | "busy" | "duplicate";
+      };
+      stripe_finish_event: {
+        Args: { p_event_id: string; p_error: string | null };
+        Returns: undefined;
+      };
+      stripe_customer_for: {
+        Args: { p_profile: string };
+        Returns: string | null;
+      };
+      stripe_link_customer: {
+        Args: { p_profile: string; p_stripe_customer: string };
+        Returns: string;
+      };
+      stripe_card_saved: {
+        Args: {
+          p_series: string;
+          p_stripe_customer: string;
+          p_payment_method: string;
+          p_brand: string;
+          p_last4: string;
+          p_exp_month: number;
+          p_exp_year: number;
+        };
+        Returns: "saved" | "no_series" | "mismatch";
+      };
+      series_card_saved: {
+        Args: { p_series: string };
+        Returns: boolean;
+      };
+      my_saved_card: {
+        Args: Record<PropertyKey, never>;
+        Returns: { brand: string | null; last4: string | null; exp_month: number | null; exp_year: number | null }[];
+      };
       register_interest: {
         Args: {
           p_postcode: string;
@@ -997,8 +1192,8 @@ export type Database = {
       document_kind: "insurance" | "dbs" | "photo_id" | "right_to_work";
       document_status: "pending" | "verified" | "rejected" | "expired";
       offer_status: "pending" | "open" | "claimed" | "expired" | "withdrawn";
-      payment_status: "pending" | "succeeded" | "failed" | "refunded" | "partially_refunded";
-      payout_status: "pending" | "paid" | "failed" | "cancelled";
+      payment_status: "pending" | "succeeded" | "failed" | "refunded" | "partially_refunded" | "processing" | "requires_action" | "failed_final" | "disputed" | "dispute_lost";
+      payout_status: "pending" | "paid" | "failed" | "cancelled" | "in_batch" | "held";
       photo_kind: "before" | "after";
       series_frequency: "weekly" | "fortnightly" | "four_weekly";
       series_status: "offering" | "unclaimed" | "claimed" | "paused" | "ended";

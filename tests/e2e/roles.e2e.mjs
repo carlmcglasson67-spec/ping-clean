@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
+import { adminFlows } from "./admin.flows.mjs";
 import { authFlows } from "./auth.flows.mjs";
 import { cleanerFlows } from "./cleaner.e2e.mjs";
 import { fakeServiceRoleKey, startFakeSupabase } from "./fake-supabase.mjs";
@@ -83,6 +84,7 @@ async function check(name, fn) {
 console.log("e2e: building app against the test database…");
 run("npx", ["next", "build"]);
 const fake = await startFakeSupabase(54321, { siteUrl: BASE }); // the project's fixed Site URL
+const fakeStripe = await startFakeStripe(12111);
 // detached: its own process group, so we can stop npx *and* the Next server under it.
 const app = spawn("npx", ["next", "start", "-p", String(PORT), "-H", "127.0.0.1"], { env, stdio: ["ignore", "pipe", "pipe"], detached: true });
 const stopApp = () => { try { process.kill(-app.pid, "SIGTERM"); } catch {} };
@@ -195,10 +197,13 @@ try {
   await interestFlows({ browser, BASE, check, shots: process.env.INTEREST_SHOT_DIR ?? SHOTS });
   // Track B's cleaner flows. Last, because they change the seeded jobs and visits.
   await cleanerFlows({ browser, BASE, check, signIn, SHOTS });
+  // Track C's admin console. After Track B's, because it approves, assigns and scores.
+  await adminFlows({ browser, BASE, check, signIn, SHOTS });
 } finally {
   await browser.close();
   stopApp();
   await fake.close();
+  await fakeStripe.stop();
 }
 
 console.log(failures ? `\ne2e: ${failures} check(s) failed` : "\ne2e: all checks passed");

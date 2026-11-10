@@ -8,7 +8,7 @@ afterAll(() => pool.end());
 const TABLES = [
   "profiles", "cleaners", "cleaner_documents", "settings", "properties", "series", "series_billing", "visits",
   "job_offers", "checklist_templates", "checklist_items", "visit_photos", "reviews", "visit_qc",
-  "payments", "payouts", "messages", "audit_log", "engine_alerts", "interest_signups",
+  "payments", "payouts", "refunds", "payout_batches", "messages", "audit_log", "engine_alerts", "interest_signups",
 ] as const;
 
 describe("every table is locked down", () => {
@@ -20,6 +20,31 @@ describe("every table is locked down", () => {
     );
     expect(rows.map((r) => r.tablename).sort()).toEqual([...TABLES].sort());
     expect(rows.filter((r) => !r.rowsecurity)).toEqual([]);
+  });
+
+  it("has row level security on every table in public and private, checked in the database itself", async () => {
+    // Doesn't rely on matching migration text (scripts/check-rls.sh does that too).
+    const rows = await as("superuser", (q) =>
+      q.rows<{ name: string }>(
+        `select n.nspname || '.' || c.relname as name from pg_class c join pg_namespace n on n.oid = c.relnamespace
+          where n.nspname in ('public', 'private') and c.relkind in ('r', 'p') and not c.relrowsecurity order by 1`,
+      ),
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it("has no view, materialized view or foreign table in public or private, unless it's a security_invoker view", async () => {
+    // Views run as their owner by default, which would skip row level security.
+    const rows = await as("superuser", (q) =>
+      q.rows<{ name: string; kind: string }>(
+        `select n.nspname || '.' || c.relname as name, c.relkind::text as kind
+           from pg_class c join pg_namespace n on n.oid = c.relnamespace
+          where n.nspname in ('public', 'private') and c.relkind in ('v', 'm', 'f')
+            and not (c.relkind = 'v' and coalesce(c.reloptions @> array['security_invoker=true'], false))
+          order by 1`,
+      ),
+    );
+    expect(rows).toEqual([]);
   });
 
   it("gives anonymous visitors nothing from any table", async () => {
@@ -41,7 +66,7 @@ const EXPECTED: Record<string, Partial<Record<(typeof TABLES)[number], number>>>
   ben: { profiles: 1, properties: 1, series: 1 },
   tara: {
     profiles: 1, cleaners: 1, cleaner_documents: 2, properties: 1, series: 1, visits: 3, job_offers: 2,
-    checklist_templates: 1, checklist_items: 11, visit_photos: 2, reviews: 1, visit_qc: 1, payouts: 1, messages: 2,
+    checklist_templates: 1, checklist_items: 11, visit_photos: 2, reviews: 1, visit_qc: 1, payouts: 1, payout_batches: 1, messages: 2,
   },
   alex: { profiles: 1, cleaners: 1, checklist_templates: 1 },
   sam: { profiles: 1, cleaners: 1, cleaner_documents: 1 },

@@ -4,7 +4,7 @@
 // (SET ROLE authenticated + request.jwt.claims), so row level security decides what
 // comes back, exactly as on Supabase. Supports only the PostgREST subset Ping uses:
 //   select=cols | col=eq./neq./gt./gte./lt./lte./in.(…) | order=col.asc|desc | limit=n
-//   HEAD + Prefer: count=exact | POST /rpc/<fn> with named args
+//   HEAD + Prefer: count=exact | POST /rpc/<fn> with named args (filters apply to set-returning ones)
 //   PATCH (update) and POST (insert), with Prefer: return=representation|minimal
 //   Storage: upload (owner + size metadata), sign one or many, and fetch-by-signed-URL, gated by the real
 //   storage.objects policies. File bytes live in memory only. CORS like Supabase.
@@ -104,11 +104,11 @@ async function asUser(claims, fn) {
 const selectCols = (params) =>
   (params.get("select") ?? "*").split(",").map((c) => (c.trim() === "*" ? "*" : ident(c.trim()))).join(", ");
 
-function buildSelect(table, params) {
-  const values = [];
+/** A GET's select. `from` defaults to the table; a set-returning RPC passes its call (and its args in `values`). */
+function buildSelect(table, params, from = `public.${ident(table)}`, values = []) {
   const cols = selectCols(params);
   const where = buildWhere(params, values);
-  let sql = `select ${cols} from public.${ident(table)}`;
+  let sql = `select ${cols} from ${from}`;
   if (where.length) sql += ` where ${where.join(" and ")}`;
   const order = params.get("order");
   if (order) {
@@ -407,9 +407,13 @@ export function startFakeSupabase(port = 54321, { siteUrl } = {}) {
           `select p.proretset, t.typtype from pg_proc p join pg_type t on t.oid = p.prorettype where p.proname = $1 and p.pronamespace = 'public'::regnamespace`,
           [fn],
         );
+        // PostgREST: set-returning → array, with the URL's filters, order and limit applied to
+        // the function's rows; composite → object; scalar → the bare value.
+        if (meta[0]?.proretset) {
+          const { sql, values } = buildSelect(null, url.searchParams, `${call} as r`, names.map((n) => args[n]));
+          return send(res, 200, await asUser(claims, (c) => c.query(sql, values)).then((r) => r.rows));
+        }
         const rows = await asUser(claims, (c) => c.query(`select * from ${call}`, names.map((n) => args[n]))).then((r) => r.rows);
-        // PostgREST: set-returning → array; composite → object; scalar → the bare value.
-        if (meta[0]?.proretset) return send(res, 200, rows);
         if (meta[0]?.typtype === "c") return send(res, 200, rows[0] ?? null);
         return send(res, 200, rows[0] ? Object.values(rows[0])[0] : null);
       }

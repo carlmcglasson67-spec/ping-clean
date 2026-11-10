@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blockPositions, isYmd, minutesOf, startOfWeek, step, viewDays, viewTitle } from "./calendar";
+import { blockPositions, liveBlockPositions, isYmd, minutesOf, startOfWeek, step, viewDays, viewTitle } from "./calendar";
 
 // 2026-11-07 is a Saturday.
 describe("calendar", () => {
@@ -49,5 +49,15 @@ describe("calendar", () => {
 
   it("reads times", () => {
     expect(minutesOf("09:30:00")).toBe(570);
+  });
+  it("numbers a block's cleans without the cancelled ones, and takes them off the block size", () => {
+    const live = liveBlockPositions([
+      { id: "a", series_id: "s1", scheduled_date: "2026-11-07", status: "completed" },
+      { id: "b", series_id: "s1", scheduled_date: "2026-11-14", status: "cancelled" },
+      { id: "c", series_id: "s1", scheduled_date: "2026-11-21", status: "scheduled" },
+      { id: "d", series_id: "s1", scheduled_date: "2026-11-28", status: "cancelled" },
+    ], () => 8);
+    expect([live.n("a"), live.n("c")]).toEqual([1, 2]);
+    expect(live.of("s1")).toBe(6);
   });
 });

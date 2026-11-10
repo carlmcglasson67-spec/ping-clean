@@ -7,6 +7,7 @@ import { createClient } from "@/lib/db/server";
 import { TIER, VISIT_STATUS } from "@/lib/labels";
 import { formatDuration, formatPence, formatPenceShort } from "@/lib/money";
 import type { Enums } from "@/lib/db/types";
+import { cleansToDo, todayHeadline } from "../_lib/today";
 import { Application } from "./application";
 
 export default async function WorkHome() {
@@ -41,6 +42,7 @@ export default async function WorkHome() {
       .from("visits")
       .select("id, scheduled_date, window_start, window_end, duration_minutes, status, cleaner_earnings_pence")
       .eq("scheduled_date", today)
+      .neq("status", "cancelled") // a block that ended cancels its cleans, it doesn't delete them
       .order("window_start"),
     supabase
       .from("visits")
@@ -56,13 +58,13 @@ export default async function WorkHome() {
   const failed = todays.error || upcoming.error || offers.error || payouts.error;
   const paidThisMonth = (payouts.data ?? []).filter((p) => p.status === "paid").reduce((sum, p) => sum + p.amount_pence, 0);
   const comingToYou = (payouts.data ?? []).filter((p) => p.status === "pending").reduce((sum, p) => sum + p.amount_pence, 0);
-  const jobs = todays.data ?? [];
+  const jobs = cleansToDo(todays.data ?? []);
 
   return (
     <>
       <PageHeader
         eyebrow={`${TIER[me.tier]} cleaner`}
-        title={`Hi ${firstName(session)}. ${jobs.length === 0 ? "Nothing booked today." : jobs.length === 1 ? "One clean today." : `${jobs.length} cleans today.`}`}
+        title={`Hi ${firstName(session)}. ${todayHeadline(jobs.length)}`}
         lede={
           <>
             You cover {me.areas.length ? me.areas.join(", ") : "no areas yet"}.{" "}

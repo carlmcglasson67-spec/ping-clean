@@ -53,8 +53,11 @@ update public.settings set
   price_per_hour_pence = 2000, min_booking_minutes = 120,
   commission_type = 'percent', commission_value = 2500,
   top_window_minutes = 120, approved_window_minutes = 240, unclaimed_alert_minutes = 720,
-  cancel_notice_hours = 24, late_cancel_fee_pence = 1500, late_cancel_cleaner_share_bps = 5000,
-  dispute_window_hours = 48,
+  -- Carl's numbers (8 Nov 2026): 72-hour dispute window, 24-hour notice, the cleaner's share of a
+  -- late-cancel fee follows the clean's own split (so no separate share). The fee itself isn't
+  -- decided; 1500 is a test placeholder only.
+  cancel_notice_hours = 24, late_cancel_fee_pence = 1500, late_cancel_cleaner_share_bps = null,
+  dispute_window_hours = 72,
   launch_districts = array['CA14', 'CA15', 'CA28', 'CA22', 'CA25', 'CA26']
 where id;
 
@@ -144,12 +147,26 @@ insert into public.reviews (visit_id, customer_id, rating, comment) values
 insert into public.visit_qc (visit_id, score, notes, reviewed_by) values
   ('00000000-0000-4000-e000-000000000001', 9, 'Photos clear, checklist complete. Skirting in hall missed.', '00000000-0000-4000-a000-000000000001');
 
-insert into public.payments (visit_id, customer_id, amount_pence, application_fee_pence, status, stripe_payment_intent_id, idempotency_key) values
-  ('00000000-0000-4000-e000-000000000001', '00000000-0000-4000-a000-000000000002', 5000, 1250, 'succeeded', 'pi_test_seed_0001', 'visit:00000000-0000-4000-e000-000000000001:charge');
+-- Money rows start at the start of their state map and move along it, like the real thing:
+-- charged (pending → processing → succeeded), then Tara's earnings paid in one bank payout.
+insert into public.payments (id, visit_id, customer_id, amount_pence, application_fee_pence, cleaner_amount_pence,
+                             stripe_payment_intent_id, idempotency_key) values
+  ('00000000-0000-4000-f000-000000000001', '00000000-0000-4000-e000-000000000001', '00000000-0000-4000-a000-000000000002',
+   5000, 1250, 3750, 'pi_test_seed_0001', 'visit:00000000-0000-4000-e000-000000000001:charge');
+update public.payments set status = 'processing' where id = '00000000-0000-4000-f000-000000000001';
+update public.payments set status = 'succeeded' where id = '00000000-0000-4000-f000-000000000001';
 
-insert into public.payouts (visit_id, cleaner_id, amount_pence, status, available_after, stripe_transfer_id, idempotency_key, paid_at) values
-  ('00000000-0000-4000-e000-000000000001', '00000000-0000-4000-a000-000000000004', 3750, 'paid',
-     now() - interval '5 days', 'tr_test_seed_0001', 'visit:00000000-0000-4000-e000-000000000001:payout', now() - interval '5 days');
+insert into public.payout_batches (id, cleaner_id, amount_pence, stripe_payout_id, idempotency_key, arrival_date) values
+  ('00000000-0000-4000-f100-000000000001', '00000000-0000-4000-a000-000000000004', 3750, 'po_test_seed_0001',
+   'payout-batch:00000000-0000-4000-f100-000000000001', current_date - 5);
+
+insert into public.payouts (id, visit_id, cleaner_id, payment_id, amount_pence, available_after, idempotency_key) values
+  ('00000000-0000-4000-f200-000000000001', '00000000-0000-4000-e000-000000000001', '00000000-0000-4000-a000-000000000004',
+   '00000000-0000-4000-f000-000000000001', 3750, now() - interval '5 days', 'visit:00000000-0000-4000-e000-000000000001:payout');
+update public.payouts set status = 'in_batch', batch_id = '00000000-0000-4000-f100-000000000001', stripe_payout_id = 'po_test_seed_0001'
+  where id = '00000000-0000-4000-f200-000000000001';
+update public.payout_batches set status = 'paid' where id = '00000000-0000-4000-f100-000000000001';
+update public.payouts set status = 'paid', paid_at = now() - interval '5 days' where id = '00000000-0000-4000-f200-000000000001';
 
 insert into public.messages (series_id, sender_id, body, created_at) values
   ('00000000-0000-4000-c000-000000000001', '00000000-0000-4000-a000-000000000002', 'Hi Tara, could you do the oven door this week? Thank you!', now() - interval '2 days'),

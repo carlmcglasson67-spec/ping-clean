@@ -16,6 +16,7 @@ export const PING_ERRORS = {
   PC013: "Tick every item, or mark it “couldn't do” with a reason.",
   PC014: "Add at least one before and one after photo.",
   PC015: "No checklist has been set up yet. Call the Ping office.",
+  PC016: "That clean has payment records, so it can't be removed. Cancel it instead.",
   // Booking
   PC020: "Booking isn't open yet.",
   PC021: "That home isn't on your account.",
@@ -26,6 +27,16 @@ export const PING_ERRORS = {
   PC026: "That day or time isn't valid.",
   PC027: "You already have cleans booked at this home on those dates.",
   PC028: "That booking was already made with different details. Start the booking again.",
+  // Money (state checks: these mean a bug or a replayed event, never the person's mistake)
+  PC040: "That payment has already moved on. Refresh to see where it stands.",
+  PC041: "That payout has already moved on. Refresh to see where it stands.",
+  PC042: "Refunds can't add up to more than was paid.",
+  PC043: "That payout doesn't match a paid charge for this clean.",
+  PC044: "That charge doesn't match the clean it's for.",
+  PC045: "Payment records are kept for good and can't be removed.",
+  PC046: "That payment record has to start at the beginning.",
+  PC047: "That refund has already moved on. Refresh to see where it stands.",
+  PC048: "That payment can't be refunded.",
   // Register interest
   PC030: "Enter a full UK postcode, like CA14 3XX.",
   PC031: "Enter an email address or a UK mobile number.",
@@ -37,10 +48,25 @@ export type PingErrorCode = keyof typeof PING_ERRORS;
 
 const FALLBACK = "Something went wrong. Please try again.";
 
+/**
+ * Check constraints a person can run into (an admin saving settings), by constraint name.
+ * Postgres reports these as 23514 with the name in the message; only the name is matched,
+ * and the database's own text is never shown.
+ */
+export const CHECK_MESSAGES: Record<string, string> = {
+  settings_late_cancel_share: "A fixed share needs the cleaner's share of the late fee.",
+  settings_late_cancel_share_follows_split:
+    "The cleaner's share only applies with a fixed share. Clear it, or choose a fixed share.",
+};
+
 /** Plain words for an error from a Supabase RPC call. Never shows raw database text. */
-export function pingErrorMessage(error: { code?: string | null } | null | undefined): string {
+export function pingErrorMessage(error: { code?: string | null; message?: string | null } | null | undefined): string {
   const code = error?.code;
   if (code && code in PING_ERRORS) return PING_ERRORS[code as PingErrorCode];
+  if (code === "23514") {
+    const name = /check constraint "([a-z0-9_]+)"/.exec(error?.message ?? "")?.[1];
+    if (name && name in CHECK_MESSAGES) return CHECK_MESSAGES[name]!;
+  }
   if (code === "42501") return "You don't have access to do that.";
   return FALLBACK;
 }
