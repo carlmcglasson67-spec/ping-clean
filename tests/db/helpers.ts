@@ -1,3 +1,4 @@
+import { afterAll, beforeAll } from "vitest";
 import pg from "pg";
 
 // Seeded test logins (see supabase/seed.sql).
@@ -112,3 +113,33 @@ export async function setupThen<T>(setup: (su: Query) => Promise<void>, who: str
 // Postgres error codes the tests expect.
 export const DENIED = "42501"; // insufficient_privilege, also RLS "new row violates policy"
 export const CHECK = "23514"; // check_violation
+
+/**
+ * For test files about the job engine: the seeded customers have a card on file, so their
+ * blocks go out to cleaners (a block with no card is held back; card-before-cleaners.test.ts
+ * covers that). Committed for the file, because some tests use several connections, and
+ * removed afterwards so the seed is as it was. Call once at the top of the file, after the
+ * file's own `afterAll(() => pool.end())`.
+ */
+export function cardsOnFile() {
+  // One connection and one transaction each, so "no triggers" never leaks to another test.
+  const quietly = async (sql: string) => {
+    const c = await pool.connect();
+    try {
+      await c.query("begin");
+      await c.query(`set local session_replication_role = replica`); // no audit rows for test set-up
+      await c.query(sql);
+      await c.query("commit");
+    } catch (e) {
+      await c.query("rollback").catch(() => {});
+      throw e;
+    } finally {
+      c.release();
+    }
+  };
+  beforeAll(() => quietly(
+    `insert into private.customer_billing (customer_id, stripe_customer_id, default_payment_method_id)
+     select id, 'cus_TestOnFile' || right(replace(id::text, '-', ''), 12), 'pm_TestOnFile' || right(replace(id::text, '-', ''), 12)
+       from public.profiles where role = 'customer' on conflict do nothing`));
+  afterAll(() => quietly(`delete from private.customer_billing where stripe_customer_id like 'cus_TestOnFile%'`));
+}

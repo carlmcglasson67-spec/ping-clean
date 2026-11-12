@@ -208,11 +208,12 @@ try {
   await stripeWebhookFlows({ BASE, check, stripe: fakeStripe });
   // Payments 5: Alex sets up how he gets paid (and ends ready, as seeded).
   await cleanerPaymentsFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
+  // Ben saves his card first: a block isn't offered to cleaners until there's a card to charge.
+  await cardAtBookingFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
   // Track B's cleaner flows. Last, because they change the seeded jobs and visits.
   await cleanerFlows({ browser, BASE, check, signIn, SHOTS });
   // Payments 6: the clean Tara just completed is charged (after it, so there is one to charge).
   await chargingFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
-  await cardAtBookingFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
   // Track C's admin console. After Track B's, because it approves, assigns and scores.
   await adminFlows({ browser, BASE, check, signIn, SHOTS });
 } finally {

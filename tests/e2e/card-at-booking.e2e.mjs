@@ -17,6 +17,11 @@ export async function cardAtBookingFlows({ browser, BASE, check, signIn, SHOTS, 
   try {
     const { rows: [{ id: series }] } = await c.query(`select id from public.series where customer_id = $1 and status <> 'ended' order by created_at limit 1`, [BEN]);
 
+    const openTo = async () => (await c.query(`select count(*)::int as n from private.eligible_cleaners($1)`, [series])).rows[0].n;
+    await check("until the card is saved, the block isn't open to any cleaner", async () => {
+      assert.equal(await openTo(), 0);
+    });
+
     await check("a customer with a block and no card is asked for one, on My cleans and on the booking", async () => {
       await signIn(page, "ben.customer");
       await page.waitForURL((u) => u.pathname === "/account");
@@ -53,6 +58,7 @@ export async function cardAtBookingFlows({ browser, BASE, check, signIn, SHOTS, 
         headers: { "content-type": "application/json", "stripe-signature": stripeSignature(raw, TEST_WEBHOOK_SECRET) }, body: raw });
       assert.equal(res.status, 200);
 
+      assert.ok((await openTo()) > 0, "with a card saved the block is open to cleaners");
       await page.goto(`${BASE}/account/booking/${series}`);
       await page.getByRole("heading", { name: "Card saved" }).waitFor();
       const text = await page.locator("main").innerText();

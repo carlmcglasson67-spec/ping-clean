@@ -1,9 +1,10 @@
 // Blocks of 1–8 cleans, booking (book_series), and rebooking with first refusal.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { as, CHECK, DENIED, IDS, pool, setupThen, U, type Query } from "./helpers";
+import { cardsOnFile, as, CHECK, DENIED, IDS, pool, setupThen, U, type Query } from "./helpers";
 
 afterAll(() => pool.end());
+cardsOnFile();
 
 const BOOK = `select public.book_series($1::uuid, $2::public.series_frequency, $3::smallint, $4::time, $5::time,
                                       $6::integer, $7::date, $8::smallint, $9::uuid) as id`;
