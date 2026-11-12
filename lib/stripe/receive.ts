@@ -2,6 +2,7 @@ import "server-only";
 import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/db/admin";
 import { onSetupIntentSucceeded } from "./cards";
+import { onAccountDeauthorized, onAccountUpdated } from "./connect";
 import { webhookSecret } from "./keys";
 import { MAX_WEBHOOK_BYTES, verifyStripeEvent, type Endpoint } from "./webhooks";
 
@@ -15,7 +16,10 @@ export const HANDLERS: Record<Endpoint, Partial<Record<string, Handler>>> = {
   platform: {
     "setup_intent.succeeded": onSetupIntentSucceeded, // PR 4: a card saved at booking
   },
-  connect: {},
+  connect: {
+    "account.updated": onAccountUpdated, // PR 5: can this cleaner be paid yet?
+    "account.application.deauthorized": onAccountDeauthorized,
+  },
 };
 
 const SECRET_NAME = { platform: "STRIPE_WEBHOOK_SECRET", connect: "STRIPE_CONNECT_WEBHOOK_SECRET" } as const;

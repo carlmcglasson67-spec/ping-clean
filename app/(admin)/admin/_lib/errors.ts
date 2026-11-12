@@ -13,6 +13,7 @@ const ADMIN_WORDING: Record<string, string> = {
   PC002: "That job has already been taken or isn't open any more. Refresh to see where it stands.",
   PC004: "That block has no cleans left that could go ahead on its dates, so it can't be given to anyone.",
   PC005: "That block has already ended.",
+  PC006: "That cleaner hasn't finished setting up payments, so they can't be given work yet.",
   "22023": "Say why, in a few words (up to 300 characters).",
   "42501": "Only the Ping team can do that. Sign in again with your admin account.",
 };

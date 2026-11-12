@@ -1124,6 +1124,24 @@ export type Database = {
         };
         Returns: "saved" | "no_series" | "mismatch";
       };
+      stripe_cleaner_account_for: {
+        Args: { p_cleaner: string };
+        Returns: string | null;
+      };
+      stripe_link_cleaner_account: {
+        Args: { p_cleaner: string; p_account: string };
+        Returns: string | null;
+      };
+      stripe_account_status: {
+        Args: {
+          p_account: string;
+          p_charges_enabled: boolean;
+          p_payouts_enabled: boolean;
+          p_details_submitted: boolean;
+          p_requirements_due: boolean;
+        };
+        Returns: "updated" | "unknown_account";
+      };
       series_card_saved: {
         Args: { p_series: string };
         Returns: boolean;

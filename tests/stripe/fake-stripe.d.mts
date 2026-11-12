@@ -16,6 +16,8 @@ export type FakeStripe = {
     customers: Map<string, Record<string, unknown>>;
     setupIntents: Map<string, Record<string, unknown>>;
     paymentMethods: Map<string, Record<string, unknown>>;
+    accounts: Map<string, Record<string, unknown> & { requirements: { currently_due: string[]; past_due: string[] } }>;
+    onboardingOutcome: string;
     requests: { method: string; path: string; idempotencyKey: string | null }[];
   };
 };
