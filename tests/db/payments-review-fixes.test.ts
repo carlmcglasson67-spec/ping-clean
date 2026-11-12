@@ -210,9 +210,18 @@ describe("5 and 6. requests Stripe wouldn't take", () => {
       await su(q);
       const [p] = await pay(q);
       const n = (await q.rows<{ n: number }>(`select count(*)::int as n from public.engine_alerts where visit_id = $1 and kind = 'charge_blocked' and resolved_at is null`, [today]))[0]!.n;
-      return { mid: mid!.attempts, said, again, status: p!.status, attempts: p!.attempts, due: p!.due, series: await seriesStatus(q), alert: n };
+      // Next time it's a different Stripe key, and after three days it stops trying by itself.
+      const newKey = p!.key !== mid!.key && /^payment:[0-9a-f-]+:r\d+$/.test(p!.key);
+      await q.rows(`alter table public.payments disable trigger user`);
+      await q.rows(`update public.payments set status = 'processing', created_at = now() - interval '4 days' where id = $1`, [mid!.id]);
+      await q.rows(`alter table public.payments enable trigger user`);
+      await server(q);
+      await q.rows(`select public.charge_retry_not_sent($1, 'stripe_account_invalid', false)`, [mid!.id]);
+      await su(q);
+      const [old] = await q.rows<{ waits: boolean }>(`select next_retry_at is null as waits from public.payments where id = $1`, [mid!.id]);
+      return { mid: mid!.attempts, said, again, status: p!.status, attempts: p!.attempts, due: p!.due, series: await seriesStatus(q), alert: n, newKey, afterThreeDays: old!.waits };
     });
-    expect(r).toEqual({ mid: 2, said: "returned", again: "ignored", status: "failed", attempts: 1, due: false, series: "claimed", alert: 1 });
+    expect(r).toEqual({ mid: 2, said: "returned", again: "ignored", status: "failed", attempts: 1, due: false, series: "claimed", alert: 1, newKey: true, afterThreeDays: true });
   });
 
   it("after a refused first send the next send has a new Stripe key", async () => {

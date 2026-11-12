@@ -181,6 +181,14 @@ export async function runChargeJob(limit = 10): Promise<ChargeRun> {
           console.warn(`charge job: payment ${row.payment_id} refused by Stripe (${read.error})`);
           continue;
         }
+        if (read.kind === "refused" && row.mode === "retry" && read.error === "stripe_payment_intent_unexpected_state" && row.payment_intent_id) {
+          // Stripe won't confirm it because it has already moved on (most likely it was paid
+          // and the webhook was missed): ask Stripe where it stands and record that.
+          const outcome = await recordChargeResult(db, row.payment_id, readIntent(await getStripe().paymentIntents.retrieve(row.payment_intent_id)), null);
+          if (outcome === "succeeded" || outcome === "already") run.succeeded++;
+          else run.waiting++;
+          continue;
+        }
         if (read.kind === "refused" && row.mode === "retry") {
           // Stripe wouldn't take the retry (not the card): the customer keeps the try, the team is told.
           const noted = await db.rpc("charge_retry_not_sent", { p_payment: row.payment_id, p_error: read.error, p_customer_try: false });
