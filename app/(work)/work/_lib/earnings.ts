@@ -38,12 +38,13 @@ export const EARNING_COPY: Record<EarningStep, { label: string; tone: "ok" | "wa
 
 /** The line under the label: the date that matters for this step, in words. */
 export function earningNote(r: EarningRow, step: EarningStep, day: (ymd: string) => string): string {
+  const on = (ymd: string) => (day(ymd) === "today" ? "today" : `on ${day(ymd)}`);
   switch (step) {
     case "awaiting_payment": return "You're paid once the customer's card has been charged.";
     case "checking": return `Goes to your bank after ${day(r.payout!.available_after.slice(0, 10))}.`;
     case "next_payout": return "Leaves as soon as the money has cleared at Stripe, usually within a few days.";
-    case "sent": return r.batch?.arrival_date ? `Should reach your account on ${day(r.batch.arrival_date)}.` : "On its way to your account.";
-    case "paid": return r.payout?.paid_at ? `Reached your bank on ${day(r.payout.paid_at.slice(0, 10))}.` : "In your bank.";
+    case "sent": return r.batch?.arrival_date ? `Should reach your account ${on(r.batch.arrival_date)}.` : "On its way to your account.";
+    case "paid": return r.payout?.paid_at ? `Reached your bank ${on(r.payout.paid_at.slice(0, 10))}.` : "In your bank.";
     case "bank_refused": return "Check your bank details with Stripe and it's sent again.";
     case "held": return "The Ping office is looking at this one and will be in touch.";
     case "cancelled": return "This clean was refunded in full.";

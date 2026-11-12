@@ -30,6 +30,10 @@ describe("earningNote", () => {
     expect(all.join(" ")).not.toMatch(/£|\d+ ?(hours|%)/);
   });
 
+  it("says today, not on today", () => {
+    expect(earningNote(row(po("paid", { paid_at: "2026-11-12T09:00:00Z" })), "paid", () => "today")).toBe("Reached your bank today.");
+  });
+
   it("never says why a customer hasn't paid", () => {
     expect(earningNote(row(null), "awaiting_payment", day)).not.toMatch(/fail|declin|card was|unpaid|owe/i);
   });
