@@ -57,7 +57,7 @@ export default async function WorkHome() {
   ]);
   const failed = todays.error || upcoming.error || offers.error || payouts.error;
   const paidThisMonth = (payouts.data ?? []).filter((p) => p.status === "paid").reduce((sum, p) => sum + p.amount_pence, 0);
-  const comingToYou = (payouts.data ?? []).filter((p) => p.status === "pending").reduce((sum, p) => sum + p.amount_pence, 0);
+  const comingToYou = (payouts.data ?? []).filter((p) => p.status === "pending" || p.status === "in_batch").reduce((sum, p) => sum + p.amount_pence, 0);
   const jobs = cleansToDo(todays.data ?? []);
 
   return (
@@ -133,6 +133,9 @@ export default async function WorkHome() {
             <Card className="grid grid-cols-2 gap-6">
               <Stat value={formatPenceShort(paidThisMonth)} label="Paid this month" />
               <Stat value={formatPenceShort(comingToYou)} label="On its way" note="Paid after the check period" />
+              <Link href="/work/earnings" className="col-span-2 inline-flex min-h-12 items-center font-semibold text-navy underline decoration-line decoration-2 underline-offset-4 hover:decoration-navy">
+                Your earnings, clean by clean
+              </Link>
             </Card>
             <Card className="grid grid-cols-2 gap-6">
               <Stat value={me.completed_visits} label="Cleans done" />

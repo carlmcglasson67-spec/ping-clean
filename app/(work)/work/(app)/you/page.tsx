@@ -63,6 +63,7 @@ export default async function YouPage() {
       note: pay.title.replace(/\.$/, ""),
       badge: { tone: pay.tone, label: pay.badge },
     });
+    rows.push({ href: "/work/earnings", title: "Your earnings", note: "Where the money for each clean is" });
   }
 
   return (
