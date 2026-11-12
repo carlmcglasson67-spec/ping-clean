@@ -1,9 +1,10 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { as, IDS, pool, setupThen, U, type Query } from "./helpers";
+import { cardsOnFile, as, IDS, pool, setupThen, U, type Query } from "./helpers";
 
 // Payments PR 5: cleaners' payments set-up (C10). A cleaner Stripe can't pay isn't offered
 // work, doesn't see it, can't claim it and can't be assigned it.
 afterAll(() => pool.end());
+cardsOnFile();
 
 const DENIED = "42501";
 const asServer = <T>(fn: (q: Query) => Promise<T>) => as("superuser", async (q) => {
