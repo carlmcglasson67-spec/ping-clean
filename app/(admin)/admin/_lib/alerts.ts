@@ -9,7 +9,11 @@ export type AlertKind =
   | "block_overlap"
   | "block_closed"
   | "release_failed"
-  | "generate_failed";
+  | "generate_failed"
+  | "payment_failed"
+  | "payment_needs_customer"
+  | "charge_held"
+  | "charge_blocked";
 
 export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo: string; urgent: boolean }> = {
   visit_needs_cover: {
@@ -59,6 +63,30 @@ export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo:
     short: "Booking failed",
     todo: "The nightly job couldn't book this block's cleans. Tell the main session.",
     urgent: false,
+  },
+  payment_failed: {
+    label: "Payment failed",
+    short: "Payment failed",
+    todo: "The customer's card couldn't be charged and there are no tries left. Contact the customer, and agree what happens to the rest of the block.",
+    urgent: true,
+  },
+  payment_needs_customer: {
+    label: "Customer must confirm payment",
+    short: "Needs customer",
+    todo: "The customer's bank wants them to confirm this payment. Ask them to confirm it; nothing is retried without them.",
+    urgent: true,
+  },
+  charge_held: {
+    label: "Charge held",
+    short: "Held",
+    todo: "This clean had \"couldn't do\" items, so the customer hasn't been charged. Check it, then charge it or leave it.",
+    urgent: false,
+  },
+  charge_blocked: {
+    label: "Charge can't go ahead",
+    short: "Blocked",
+    todo: "A charge is waiting on something that isn't the customer's fault (often the cleaner's Stripe set-up). Read the message, sort it, and it goes through on its own.",
+    urgent: true,
   },
 };
 

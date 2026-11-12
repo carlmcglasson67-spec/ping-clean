@@ -24,6 +24,9 @@ https://claude.ai/artifact/1WEp7QQgrj5dGn1wzooEWz (summary in intent/v1/spec.md)
   supabase/functions/ on cron, never in the Next.js app.
 - Stripe webhooks are request handlers in app/api/stripe/ (signature-checked, recorded once:
   lib/stripe/receive.ts), not background work.
+- Jobs that must call Stripe (the charge job) are decided and scheduled in the database
+  (pg_cron), which then calls a signed handler in app/api/stripe/ (PING_JOB_SECRET:
+  lib/stripe/charges.ts). The handler takes no input and holds no rules.
 - Planning files for each change live in intent/<change>/ (intent.md, spec.md, plan.md).
 
 ## Rules

@@ -224,7 +224,7 @@ function BlockHead({ s, place, customer, cleaner }: { s: { status: string; block
           {cleaner ? ` · with ${cleaner}` : ""}
         </p>
       </div>
-      {s.status === "unclaimed" ? <Badge tone="bad">Unclaimed</Badge> : s.status === "offering" ? <Badge tone="warn">On offer</Badge> : s.status === "paused" ? <Badge>Paused</Badge> : <Badge tone="ok">Held</Badge>}
+      {s.status === "unclaimed" ? <Badge tone="bad">Unclaimed</Badge> : s.status === "offering" ? <Badge tone="warn">On offer</Badge> : s.status === "paused" ? <Badge tone="warn">On hold, unpaid</Badge> : <Badge tone="ok">Held</Badge>}
     </div>
   );
 }

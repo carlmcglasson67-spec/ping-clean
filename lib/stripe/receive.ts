@@ -2,6 +2,7 @@ import "server-only";
 import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/db/admin";
 import { onSetupIntentSucceeded } from "./cards";
+import { onPaymentIntentEvent } from "./charges";
 import { onAccountDeauthorized, onAccountUpdated } from "./connect";
 import { webhookSecret } from "./keys";
 import { MAX_WEBHOOK_BYTES, verifyStripeEvent, type Endpoint } from "./webhooks";
@@ -15,6 +16,11 @@ export type Handler = (event: Stripe.Event) => Promise<void>;
 export const HANDLERS: Record<Endpoint, Partial<Record<string, Handler>>> = {
   platform: {
     "setup_intent.succeeded": onSetupIntentSucceeded, // PR 4: a card saved at booking
+    // PR 6: what happened to a clean's charge (the source of truth for a payment's status)
+    "payment_intent.succeeded": onPaymentIntentEvent,
+    "payment_intent.payment_failed": onPaymentIntentEvent,
+    "payment_intent.requires_action": onPaymentIntentEvent,
+    "payment_intent.canceled": onPaymentIntentEvent,
   },
   connect: {
     "account.updated": onAccountUpdated, // PR 5: can this cleaner be paid yet?

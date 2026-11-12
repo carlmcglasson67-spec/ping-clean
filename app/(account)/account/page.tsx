@@ -19,7 +19,7 @@ export default async function AccountHome() {
   const today = todayInLondon();
 
   // Row level security limits every query below to this customer's own rows.
-  const [series, visits, properties, payments] = await Promise.all([
+  const [series, visits, properties, payments, unpaid, cards] = await Promise.all([
     supabase
       .from("series")
       .select("id, property_id, frequency, preferred_day, window_start, window_end, duration_minutes, status, starts_on, ends_on, block_size")
@@ -34,11 +34,16 @@ export default async function AccountHome() {
       .limit(6),
     supabase.from("properties").select("id, address_line1, town, postcode"),
     supabase.from("payments").select("id").eq("status", "succeeded"),
+    // Payments waiting on the customer: a failed card, or a bank that wants them to confirm.
+    supabase.from("payments").select("id, amount_pence, status").eq("kind", "visit").in("status", ["requires_action", "failed", "failed_final"]).order("created_at"),
+    supabase.rpc("my_saved_card"),
   ]);
 
   const failed = series.error || visits.error || properties.error || payments.error;
   const propertyById = new Map((properties.data ?? []).map((p) => [p.id, p]));
   const active = series.data ?? [];
+  // A block is booked but there's no card to charge its cleans to yet.
+  const cardless = !cards.error && !cards.data?.[0]?.last4 ? (active[0] ?? null) : null;
   const upcoming = visits.data ?? [];
   const next = upcoming[0];
 
@@ -54,6 +59,35 @@ export default async function AccountHome() {
           </ButtonLink>
         }
       />
+
+      {cardless ? (
+        <section aria-label="Save your card" className="mb-8 grid gap-5 rounded-xl bg-warn-soft p-7 ring-1 ring-warn/25 sm:grid-cols-[1fr_auto] sm:items-center sm:gap-8 sm:p-9">
+          <div className="grid gap-2">
+            <p className="font-display text-2xl font-semibold text-warn">Save your card to finish booking.</p>
+            <p className="text-lg text-navy-2">It takes a minute, and nothing is charged until a clean is finished.</p>
+          </div>
+          <ButtonLink href={`/account/booking/${cardless.id}` as Route} size="lg">
+            Add your card
+          </ButtonLink>
+        </section>
+      ) : null}
+
+      {(unpaid.data ?? []).map((u) => (
+        <section key={u.id} aria-label="A payment needs sorting" className="mb-8 grid gap-5 rounded-xl bg-bad-soft p-7 ring-1 ring-bad/25 sm:grid-cols-[1fr_auto] sm:items-center sm:gap-8 sm:p-9">
+          <div className="grid gap-2">
+            <p className="font-display text-2xl font-semibold text-bad">
+              {u.status === "requires_action" ? "Your bank needs you to confirm a payment." : "A payment didn’t go through."}
+            </p>
+            <p className="text-lg text-navy-2">
+              {formatPence(u.amount_pence)} for a finished clean.{" "}
+              {u.status === "failed_final" ? "Sort it to keep your cleans going." : "It takes a minute to sort."}
+            </p>
+          </div>
+          <ButtonLink href={`/account/pay/${u.id}` as Route} size="lg">
+            {u.status === "requires_action" ? "Confirm payment" : "Sort it now"}
+          </ButtonLink>
+        </section>
+      ))}
 
       {failed ? (
         <ErrorState>We couldn&rsquo;t load your cleans just now. Refresh the page, and if it keeps happening, call the Ping office.</ErrorState>

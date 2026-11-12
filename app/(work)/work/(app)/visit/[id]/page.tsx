@@ -91,6 +91,23 @@ export default async function VisitPage({ params }: { params: Promise<{ id: stri
     );
   }
 
+  // On hold (the Ping office is sorting something out with the customer): don't go.
+  if (v.status === "scheduled" && s?.status === "paused") {
+    return (
+      <>
+        {header}
+        <section className="grid gap-3 rounded-lg bg-warn-soft p-7 ring-1 ring-warn/25 sm:p-9 lg:max-w-2xl">
+          <p className="font-display text-3xl font-semibold text-warn">On hold. Don&rsquo;t go.</p>
+          <p className="text-lg text-navy-2">
+            This block is on hold while the Ping office sorts something out with the customer. Cleans on hold aren&rsquo;t going ahead and aren&rsquo;t paid.
+            It will show here again as soon as it&rsquo;s back on. Your other jobs haven&rsquo;t changed.
+          </p>
+          <Link href="/work/today" className={buttonClass("ink", "lg", "w-full sm:w-auto sm:justify-self-start")}>Back to today</Link>
+        </section>
+      </>
+    );
+  }
+
   if (v.status === "scheduled") {
     return (
       <>
