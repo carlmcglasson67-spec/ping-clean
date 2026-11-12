@@ -50,6 +50,12 @@ const result = async (q: Query, batch: string, outcome: string, over: { po?: str
 };
 const sent = async (q: Query, batch: string) => { await server(q); const r = await q.rows<{ r: string }>(`select public.payout_batch_sent($1, $2, current_date + 2) as r`, [batch, PO]); await su(q); return r[0]!.r; };
 const batch = async (q: Query, id: string) => (await q.rows<{ status: string; amount_pence: number; po: string | null }>(`select status, amount_pence, stripe_payout_id as po from public.payout_batches where id = $1`, [id]))[0];
+/** A day later: every bank payout so far was made over 20 hours ago. */
+const nextDay = async (q: Query) => {
+  await q.rows(`alter table public.payout_batches disable trigger user`);
+  await q.rows(`update public.payout_batches set created_at = created_at - interval '21 hours' where cleaner_id = $1`, [U.tara]);
+  await q.rows(`alter table public.payout_batches enable trigger user`);
+};
 const alerts = async (q: Query) => (await q.rows<{ kind: string }>(`select kind from public.engine_alerts where kind like 'payout%' and resolved_at is null`)).map((a) => a.kind);
 
 describe("a paid clean becomes earnings waiting", () => {
@@ -101,6 +107,20 @@ describe("who is due", () => {
       return { inside: inside.length, after: after.map((d) => [d.cleaner_id === U.tara, d.due_pence, /^acct_/.test(d.cleaner_account_id)]) };
     });
     expect(r).toEqual({ inside: 0, after: [[true, 3750, true]] });
+  });
+
+  it("one bank payout a day per cleaner: nobody is due within 20 hours of their last one", async () => {
+    const r = await as("superuser", async (q) => {
+      await paid(q);
+      await past(q);
+      await q.rows(`alter table public.payout_batches disable trigger user`);
+      await q.rows(`update public.payout_batches set created_at = now() - interval '19 hours' where cleaner_id = $1`, [U.tara]);
+      const sameDay = [(await due(q)).length, (await open(q, 5000)).length];
+      await q.rows(`update public.payout_batches set created_at = now() - interval '21 hours' where cleaner_id = $1`, [U.tara]);
+      await q.rows(`alter table public.payout_batches enable trigger user`);
+      return { sameDay, nextDay: (await due(q)).length };
+    });
+    expect(r).toEqual({ sameDay: [0, 0], nextDay: 1 });
   });
 
   it("not while the cleaner's Stripe account can't pay out, or once the payment no longer stands", async () => {
@@ -177,18 +197,20 @@ describe("one bank payout", () => {
       await su(q);
       const quiet = await alerts(q);
       const back = (await row(q))!;
+      const sameDay = (await open(q, 5000)).length; // one request a day per cleaner, refused or not
+      await nextDay(q);
       const [b] = await open(q, 5000);
       await server(q);
       await q.rows(`select public.payout_batch_not_sent($1, 'stripe_account_invalid')`, [b!.batch_id]);
       await su(q);
-      return { first, quiet, back: [back.status, back.batch], newBatch: b!.batch_id !== a!.batch_id, loud: await alerts(q), old: (await batch(q, a!.batch_id))!.status };
+      return { first, quiet, back: [back.status, back.batch], sameDay, newBatch: b!.batch_id !== a!.batch_id, loud: await alerts(q), old: (await batch(q, a!.batch_id))!.status };
     });
-    expect(r).toEqual({ first: "returned", quiet: [], back: ["pending", false], newBatch: true, loud: ["payout_failed"], old: "failed" });
+    expect(r).toEqual({ first: "returned", quiet: [], back: ["pending", false], sameDay: 0, newBatch: true, loud: ["payout_failed"], old: "failed" });
   });
 });
 
 describe("a bank that says no", () => {
-  it("marks the cleans failed and tells the team; tried again only after Stripe reports the account changed", async () => {
+  it("marks the cleans failed and tells the team; tried again a day later, only once Stripe reports the account changed", async () => {
     const r = await as("superuser", async (q) => {
       await paid(q);
       await past(q);
@@ -196,13 +218,54 @@ describe("a bank that says no", () => {
       await sent(q, b!.batch_id);
       const said = await result(q, b!.batch_id, "failed", { error: "account_closed" });
       const failed = (await row(q))!.status;
-      const before = (await due(q)).length;
-      await q.rows(`update public.cleaners set stripe_status_at = clock_timestamp() + interval '1 second' where id = $1`, [U.tara]);
-      const after = (await due(q)).length;
+      await nextDay(q);
+      const unchanged = (await due(q)).length;
+      // Stripe's own notice of the refusal, minutes later: not a reason to try the same bank again.
+      await q.rows(`update public.cleaners set stripe_status_at = now() + interval '5 minutes' where id = $1`, [U.tara]);
+      const justTheNotice = (await due(q)).length;
+      // Later, the cleaner fixes their details and Stripe says so.
+      await q.rows(`update public.cleaners set stripe_status_at = now() + interval '2 hours' where id = $1`, [U.tara]);
+      const fixed = (await due(q)).length;
       const [again] = await open(q, 5000);
-      return { said, failed, alerts: await alerts(q), before, after, retried: again!.amount_pence, row: (await row(q))!.status };
+      const r2 = (await row(q))!;
+      return { said, failed, alerts: await alerts(q), unchanged, justTheNotice, fixed, retried: again!.amount_pence, row: [r2.status, r2.po] };
     });
-    expect(r).toEqual({ said: "failed", failed: "failed", alerts: ["payout_failed"], before: 0, after: 1, retried: 3750, row: "in_batch" });
+    expect(r).toEqual({ said: "failed", failed: "failed", alerts: ["payout_failed"], unchanged: 0, justTheNotice: 0, fixed: 1, retried: 3750, row: ["in_batch", null] });
+  });
+
+  it("stops trying by itself after three refusals in a week: the team sorts it out", async () => {
+    const r = await as("superuser", async (q) => {
+      await paid(q);
+      await past(q);
+      const tries: number[] = [];
+      for (let i = 0; i < 4; i++) {
+        await q.rows(`update public.cleaners set stripe_status_at = now() + interval '2 hours' where id = $1`, [U.tara]);
+        const [b] = await open(q, 5000);
+        tries.push(b ? 1 : 0);
+        if (!b) break;
+        await server(q);
+        await q.rows(`select public.payout_batch_sent($1, $2, current_date + 2)`, [b.batch_id, `po_TestRefused000${i}`]);
+        await su(q);
+        await result(q, b.batch_id, "failed", { po: `po_TestRefused000${i}`, error: "account_closed" });
+        await nextDay(q);
+      }
+      return { tries, row: (await row(q))!.status };
+    });
+    expect(r).toEqual({ tries: [1, 1, 1, 0], row: "failed" });
+  });
+
+  it("a payout Stripe reports for a request Ping recorded as refused is an alarm, and nothing is recorded", async () => {
+    const r = await as("superuser", async (q) => {
+      await paid(q);
+      await past(q);
+      const [b] = await open(q, 5000);
+      await server(q);
+      await q.rows(`select public.payout_batch_not_sent($1, 'stripe_balance_insufficient')`, [b!.batch_id]);
+      await su(q);
+      const said = [await result(q, b!.batch_id, "paid"), await result(q, b!.batch_id, "in_transit")];
+      return { said, batch: await batch(q, b!.batch_id), row: (await row(q))!.status, alerts: await alerts(q) };
+    });
+    expect(r).toEqual({ said: ["mismatch", "mismatch"], batch: { status: "failed", amount_pence: 3750, po: null }, row: "pending", alerts: ["payout_stuck"] });
   });
 
   it("a payout sent back after it showed as paid: the team is told, the cleans stay as they were", async () => {

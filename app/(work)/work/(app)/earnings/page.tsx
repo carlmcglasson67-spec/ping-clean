@@ -65,7 +65,7 @@ export default async function EarningsPage() {
           title="Nothing earned yet"
           action={<Link href="/work/jobs" className={buttonClass("primary", "lg")}>See new jobs</Link>}
         >
-          Each clean you finish shows here, with where its money is, from the customer&rsquo;s card to your bank.
+          Each clean you finish shows here, with where its money is on the way to your bank.
         </EmptyState>
       </>
     );
@@ -92,7 +92,7 @@ export default async function EarningsPage() {
                 <dd className="font-display text-2xl font-semibold text-white tabular" data-total="paid">{formatPence(totals.paidThisMonth)}</dd>
               </div>
               <div className="grid gap-1">
-                <dt className="text-sm text-on-navy/75">Waiting on customers</dt>
+                <dt className="text-sm text-on-navy/75">Being processed</dt>
                 <dd className="font-display text-2xl font-semibold text-white tabular" data-total="awaiting">{formatPence(totals.awaitingPayment)}</dd>
               </div>
             </dl>
@@ -101,7 +101,7 @@ export default async function EarningsPage() {
           {totals.refused > 0 ? (
             <section aria-label="Your bank details need checking" className="grid gap-4 rounded-lg bg-bad-soft p-6 ring-1 ring-bad/20 sm:p-7">
               <p className="text-lg font-semibold text-bad">Your bank didn&rsquo;t accept {formatPence(totals.refused)}.</p>
-              <p className="text-navy-2">It&rsquo;s safe in your Stripe account. Check your bank details and it&rsquo;s sent again the next morning.</p>
+              <p className="text-navy-2">It&rsquo;s safe in your Stripe account. Check your bank details and it&rsquo;s sent again within a day.</p>
               <Link href="/work/payments" className={buttonClass("ink", "lg", "w-full sm:w-auto sm:justify-self-start")}>Check my bank details</Link>
             </section>
           ) : null}

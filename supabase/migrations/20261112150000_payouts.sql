@@ -10,6 +10,8 @@
 --   stripe_payout_result(…)         server (job and webhook): what Stripe said about a bank payout
 --   private.kick_payout_job()       cron, hourly: calls the job when there's something to do
 --
+-- Cleans already paid before this migration get their payout row here too (the backfill below).
+--
 -- No browser ever writes a money row. Every move goes along the payout and batch state maps,
 -- is safe to repeat, and is audited. Cleaners are paid only from what was collected: a payout
 -- row exists only for a succeeded payment, and only goes to the bank while it still stands
@@ -67,10 +69,27 @@ create trigger payments_make_payout after update of status on public.payments
   for each row when (new.status = 'succeeded' and old.status is distinct from 'succeeded')
   execute function private.payout_for_payment();
 
+-- Cleans paid before this trigger existed: the same row, once. (None outside the seed today.)
+insert into public.payouts (visit_id, cleaner_id, payment_id, amount_pence, available_after, idempotency_key)
+select v.id, v.cleaner_id, p.id, p.cleaner_amount_pence,
+       coalesce(v.completed_at, now()) + st.dispute_window_hours * interval '1 hour', 'payout:' || p.id
+from public.payments p
+join public.visits v on v.id = p.visit_id
+cross join (select dispute_window_hours from public.settings limit 1) st
+where p.kind = 'visit' and p.status = 'succeeded' and p.cleaner_amount_pence > 0
+  and v.status = 'completed' and v.cleaner_id is not null and st.dispute_window_hours is not null
+  and not exists (select 1 from public.payouts po where po.visit_id = v.id)
+on conflict do nothing;
+
 -- ---------------------------------------------------------------- who is due
 -- Earnings past their check period, for a payment that still stands, for a cleaner whose
--- Stripe account can pay out. "Failed" earnings (the bank said no) are due again only once
--- Stripe has told Ping something about the account since (the cleaner fixed their details).
+-- Stripe account can pay out.
+-- "Failed" earnings (the bank said no) are due again only once Stripe has told Ping about the
+-- account at least an hour after the refusal (Stripe's own notice of the refusal arrives
+-- within minutes and changes nothing), and at most three times in a week: after that the
+-- team sorts it out with the cleaner.
+-- One bank payout a day per cleaner: nobody is due within 20 hours of their last one, so a
+-- request Stripe keeps refusing is tried once a day, not once an hour.
 create function private.payout_rows_due(p_cleaner uuid) returns setof public.payouts
 language sql stable security definer set search_path = '' as $$
   select po.* from public.payouts po
@@ -80,7 +99,12 @@ language sql stable security definer set search_path = '' as $$
     and pay.status = 'succeeded'
     and c.stripe_account_id is not null and c.stripe_payouts_enabled
     and ((po.status = 'pending' and po.available_after <= now())
-      or (po.status = 'failed' and c.stripe_status_at > po.updated_at))
+      or (po.status = 'failed' and c.stripe_status_at > po.updated_at + interval '1 hour'
+          and (select count(*) from public.payout_batches f
+               where f.cleaner_id = po.cleaner_id and f.status = 'failed' and f.stripe_payout_id is not null
+                 and f.created_at > now() - interval '7 days') < 3))
+    and not exists (select 1 from public.payout_batches recent
+                    where recent.cleaner_id = po.cleaner_id and recent.created_at > now() - interval '20 hours')
 $$;
 
 create function public.payout_due_cleaners()
@@ -131,7 +155,7 @@ begin
 
   insert into public.payout_batches (id, cleaner_id, amount_pence, idempotency_key)
   values (bid, p_cleaner, total, 'payout-batch:' || bid);
-  update public.payouts set status = 'pending', held_reason = null where id = any (ids) and status = 'failed';
+  update public.payouts set status = 'pending', held_reason = null, batch_id = null, stripe_payout_id = null where id = any (ids) and status = 'failed';
   update public.payouts set status = 'in_batch', batch_id = bid where id = any (ids);
 
   batch_id := bid; cleaner_account_id := c.stripe_account_id; amount_pence := total;
@@ -184,7 +208,7 @@ begin
   -- Money that hasn't cleared yet is normal and waits quietly; anything else, the team hears.
   if p_error is distinct from 'stripe_balance_insufficient' then
     perform private.payout_alert('payout_failed', b.id,
-      'Stripe wouldn''t take a bank payout request (' || left(coalesce(p_error, 'unknown'), 80) || '). Their earnings are still waiting and will be tried again tomorrow.');
+      'Stripe wouldn''t take a bank payout request (' || left(coalesce(p_error, 'unknown'), 80) || '). Their earnings are still waiting and are tried again in a day.');
   end if;
   return 'returned';
 end $$;
@@ -239,6 +263,14 @@ begin
       'Stripe reported a bank payout that doesn''t match Ping''s record (payout, account or amount). Nothing was recorded. Check Stripe, then tell the main session.');
     return 'mismatch';
   end if;
+  if b.status = 'failed' and b.stripe_payout_id is null then
+    -- Ping recorded that Stripe refused this request and put the earnings back to waiting, yet
+    -- Stripe now reports a payout for it. Nothing is recorded and a person must look, because
+    -- those earnings may be sent again.
+    perform private.payout_alert('payout_stuck', b.id,
+      'Stripe reports a bank payout that Ping had recorded as refused. Those earnings may be paid twice. Check their Stripe account now and tell the main session.');
+    return 'mismatch';
+  end if;
   if b.stripe_payout_id is null then
     update public.payout_batches set stripe_payout_id = p_stripe_payout, sent_at = coalesce(sent_at, now()) where id = b.id;
     update public.payouts set stripe_payout_id = p_stripe_payout where batch_id = b.id;
@@ -276,8 +308,8 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- the cron kick
--- Hourly. New bank payouts are only started in the 6 o'clock hour (London): once a day, as
--- Carl chose (C14). The other hours only chase answers Stripe hasn't given yet.
+-- Hourly. Each cleaner gets at most one bank payout a day (C14: private.payout_rows_due);
+-- the other runs only chase answers Stripe hasn't given yet.
 -- Uses the charge job's Vault secrets: the same site, the same shared secret.
 create function private.payouts_due() returns boolean
 language sql stable security definer set search_path = '' as $$
@@ -286,8 +318,7 @@ language sql stable security definer set search_path = '' as $$
       where b.status = 'created'
         and ((b.stripe_payout_id is null and b.created_at < now() - interval '10 minutes')
           or (b.stripe_payout_id is not null and b.sent_at < now() - interval '30 minutes')))
-    or (extract(hour from now() at time zone 'Europe/London') = 6
-        and exists (select 1 from private.payout_rows_due(null)))
+    or exists (select 1 from private.payout_rows_due(null))
 $$;
 
 create function private.kick_payout_job() returns text

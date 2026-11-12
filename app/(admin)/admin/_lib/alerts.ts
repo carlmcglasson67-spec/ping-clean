@@ -13,7 +13,9 @@ export type AlertKind =
   | "payment_failed"
   | "payment_needs_customer"
   | "charge_held"
-  | "charge_blocked";
+  | "charge_blocked"
+  | "payout_failed"
+  | "payout_stuck";
 
 export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo: string; urgent: boolean }> = {
   visit_needs_cover: {
@@ -86,6 +88,18 @@ export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo:
     label: "Charge can't go ahead",
     short: "Blocked",
     todo: "A charge is waiting on something that isn't the customer's fault (often the cleaner's Stripe set-up). Read the message, sort it, and it goes through on its own.",
+    urgent: true,
+  },
+  payout_failed: {
+    label: "Cleaner's bank payout failed",
+    short: "Payout failed",
+    todo: "A cleaner's bank didn't accept their pay, or Stripe wouldn't send it. Ask the cleaner to check their bank details under Getting paid; it's sent again once they have.",
+    urgent: true,
+  },
+  payout_stuck: {
+    label: "Cleaner's bank payout needs checking",
+    short: "Payout stuck",
+    todo: "A bank payout didn't match Ping's record or never reached Stripe. Don't pay the cleaner by hand. Check their Stripe account and tell the main session.",
     urgent: true,
   },
 };

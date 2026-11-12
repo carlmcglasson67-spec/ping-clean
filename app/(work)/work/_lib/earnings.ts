@@ -1,6 +1,7 @@
 // What a cleaner is told about the money for each finished clean. Pure, so it's tested.
-// A clean has a payout row only once the customer's payment has gone through (cleaners are
-// paid from what's collected); the bank payout it went in gives the arrival date.
+// A clean has a payout row only once its payment has gone through (cleaners are paid from
+// what's collected); the bank payout it went in gives the arrival date. Nothing here says
+// anything about the customer or their card: that's theirs, not the cleaner's.
 
 export type EarningRow = {
   visitId: string;
@@ -26,7 +27,7 @@ export function earningStep(r: EarningRow, now: Date = new Date()): EarningStep 
 }
 
 export const EARNING_COPY: Record<EarningStep, { label: string; tone: "ok" | "warn" | "bad" | "neutral" | "teal" }> = {
-  awaiting_payment: { label: "Waiting for the customer's payment", tone: "neutral" },
+  awaiting_payment: { label: "Being processed", tone: "neutral" },
   checking: { label: "In its check period", tone: "neutral" },
   next_payout: { label: "In your next bank payout", tone: "teal" },
   sent: { label: "Sent to your bank", tone: "teal" },
@@ -40,14 +41,14 @@ export const EARNING_COPY: Record<EarningStep, { label: string; tone: "ok" | "wa
 export function earningNote(r: EarningRow, step: EarningStep, day: (ymd: string) => string): string {
   const on = (ymd: string) => (day(ymd) === "today" ? "today" : `on ${day(ymd)}`);
   switch (step) {
-    case "awaiting_payment": return "You're paid once the customer's card has been charged.";
+    case "awaiting_payment": return "This clean's payment is going through. Your earnings show here as soon as it has.";
     case "checking": return `Goes to your bank after ${day(r.payout!.available_after.slice(0, 10))}.`;
     case "next_payout": return "Leaves as soon as the money has cleared at Stripe, usually within a few days.";
     case "sent": return r.batch?.arrival_date ? `Should reach your account ${on(r.batch.arrival_date)}.` : "On its way to your account.";
     case "paid": return r.payout?.paid_at ? `Reached your bank ${on(r.payout.paid_at.slice(0, 10))}.` : "In your bank.";
-    case "bank_refused": return "Check your bank details with Stripe and it's sent again.";
+    case "bank_refused": return "Check your bank details with Stripe and it's sent again within a day.";
     case "held": return "The Ping office is looking at this one and will be in touch.";
-    case "cancelled": return "This clean was refunded in full.";
+    case "cancelled": return "The Ping office will have been in touch about this one.";
   }
 }
 

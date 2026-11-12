@@ -34,8 +34,9 @@ describe("earningNote", () => {
     expect(earningNote(row(po("paid", { paid_at: "2026-11-12T09:00:00Z" })), "paid", () => "today")).toBe("Reached your bank today.");
   });
 
-  it("never says why a customer hasn't paid", () => {
-    expect(earningNote(row(null), "awaiting_payment", day)).not.toMatch(/fail|declin|card was|unpaid|owe/i);
+  it("says nothing about the customer or their card, for any step", () => {
+    const all = (Object.keys(EARNING_COPY) as (keyof typeof EARNING_COPY)[]).map((s) => EARNING_COPY[s].label + " " + earningNote(row(po("pending"), { status: "created", arrival_date: null }), s, day));
+    expect(all.join(" ")).not.toMatch(/customer|card|fail|declin|unpaid|owe|refund/i);
   });
 });
 
