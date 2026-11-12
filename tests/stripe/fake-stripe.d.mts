@@ -19,7 +19,9 @@ export type FakeStripe = {
     accounts: Map<string, Record<string, unknown> & { requirements: { currently_due: string[]; past_due: string[] } }>;
     paymentIntents: Map<string, Record<string, unknown> & { id: string; status: string; amount: number; metadata: Record<string, string> }>;
     onboardingOutcome: string;
-    requests: { method: string; path: string; idempotencyKey: string | null }[];
+    payouts: Map<string, Record<string, unknown> & { id: string; amount: number; status: string; metadata: Record<string, string>; __account: string }>;
+    balances: Map<string, number>;
+    requests: { method: string; path: string; idempotencyKey: string | null; account?: string }[];
   };
 };
 export declare function startFakeStripe(port?: number): Promise<FakeStripe>;

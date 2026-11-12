@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/db/admin";
 import { onSetupIntentSucceeded } from "./cards";
 import { onPaymentIntentEvent } from "./charges";
 import { onAccountDeauthorized, onAccountUpdated } from "./connect";
+import { onPayoutEvent } from "./payouts";
 import { webhookSecret } from "./keys";
 import { MAX_WEBHOOK_BYTES, verifyStripeEvent, type Endpoint } from "./webhooks";
 
@@ -25,6 +26,9 @@ export const HANDLERS: Record<Endpoint, Partial<Record<string, Handler>>> = {
   connect: {
     "account.updated": onAccountUpdated, // PR 5: can this cleaner be paid yet?
     "account.application.deauthorized": onAccountDeauthorized,
+    "payout.paid": onPayoutEvent, // PR 9: the cleaner's bank payout arrived, or didn't
+    "payout.failed": onPayoutEvent,
+    "payout.canceled": onPayoutEvent,
   },
 };
 

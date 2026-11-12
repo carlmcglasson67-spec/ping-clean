@@ -276,6 +276,45 @@ out += `${ind(2)}};
         };
         Returns: "succeeded" | "requires_action" | "failed" | "already" | "ignored" | "unknown" | "mismatch";
       };
+      payout_due_cleaners: {
+        Args: Record<string, never>;
+        Returns: { cleaner_id: string; cleaner_account_id: string; due_pence: number }[];
+      };
+      payout_batch_open: {
+        Args: { p_cleaner: string; p_available_pence: number };
+        Returns: { batch_id: string; cleaner_account_id: string; amount_pence: number; idempotency_key: string }[];
+      };
+      payout_batch_sent: {
+        Args: { p_batch: string; p_stripe_payout: string; p_arrival: string | null };
+        Returns: "sent" | "already" | "mismatch" | "unknown";
+      };
+      payout_batch_not_sent: {
+        Args: { p_batch: string; p_error: string };
+        Returns: "returned" | "ignored" | "unknown";
+      };
+      payout_batches_open: {
+        Args: Record<string, never>;
+        Returns: {
+          batch_id: string;
+          mode: "send" | "check";
+          cleaner_account_id: string;
+          amount_pence: number;
+          idempotency_key: string;
+          stripe_payout_id: string | null;
+        }[];
+      };
+      stripe_payout_result: {
+        Args: {
+          p_batch: string;
+          p_stripe_payout: string;
+          p_account: string;
+          p_outcome: "paid" | "failed" | "in_transit";
+          p_amount: number;
+          p_arrival: string | null;
+          p_error: string | null;
+        };
+        Returns: "paid" | "failed" | "already" | "ignored" | "unknown" | "mismatch";
+      };
       series_card_saved: {
         Args: { p_series: string };
         Returns: boolean;
