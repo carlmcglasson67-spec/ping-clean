@@ -2,12 +2,12 @@
 
 // Card saving at booking (A-4): the Server Action Track A's card step calls.
 //
-//   const r = await startCardSetup(seriesId);
-//   if (r.ok) → <Elements stripe={loadStripe(r.publishableKey)} options={{ clientSecret: r.clientSecret }}>
-//              <PaymentElement /> … stripe.confirmSetup({ elements, confirmParams: { return_url } })
+//   const r = await startCardSetup(seriesId);        → Stripe's card form (account/_components/card-form)
+//   await confirmCardSetup(setupIntent.id);          → the server asks Stripe, then stores the card
 //
-// The card is saved only when Stripe's setup_intent.succeeded webhook arrives
-// (lib/stripe/cards.ts), never because the browser says so. Nothing is charged.
+// The card is saved only on Stripe's say-so: the setup_intent.succeeded webhook, or the
+// server fetching the SetupIntent from Stripe itself. Never because the browser says so.
+// Nothing is charged.
 import { getSession } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/db/admin";
 import { createClient } from "@/lib/db/server";
@@ -15,6 +15,7 @@ import { hasSupabaseEnv } from "@/lib/env";
 import { createSetupIntent, ensureStripeCustomer } from "./cards";
 import { createSetupLink, ensureCleanerAccount, syncAccountStatus } from "./connect";
 import { publishableKey, secretKeyProblem } from "./keys";
+import { confirmCardChange } from "./pay";
 
 export type CardSetup =
   | { ok: true; clientSecret: string; publishableKey: string }
@@ -46,6 +47,18 @@ export async function startCardSetup(seriesId: string): Promise<CardSetup> {
     console.error("card setup: couldn't start"); // no ids or personal data in logs
     return { ok: false, error: TRY_AGAIN };
   }
+}
+
+/**
+ * The card form says the card is saved. The server fetches that SetupIntent from Stripe
+ * itself, checks it belongs to this customer, and stores the card now, so the page can say
+ * "Card saved" without waiting for the webhook (which records the same thing again).
+ */
+export async function confirmCardSetup(setupIntentId: string): Promise<{ ok: boolean }> {
+  if (typeof setupIntentId !== "string" || secretKeyProblem(process.env.STRIPE_SECRET_KEY) || !hasSupabaseEnv()) return { ok: false };
+  const session = await getSession();
+  if (!session || session.role !== "customer") return { ok: false };
+  return { ok: await confirmCardChange(setupIntentId, session.userId) };
 }
 
 // ---------------------------------------------------------------- cleaners: payments set-up

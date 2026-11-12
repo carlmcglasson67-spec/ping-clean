@@ -10,6 +10,8 @@ import { authFlows } from "./auth.flows.mjs";
 import { cleanerFlows } from "./cleaner.e2e.mjs";
 import { cleanerPaymentsFlows } from "./cleaner-payments.e2e.mjs";
 import { fakeServiceRoleKey, startFakeSupabase } from "./fake-supabase.mjs";
+import { cardAtBookingFlows } from "./card-at-booking.e2e.mjs";
+import { chargingFlows, TEST_JOB_SECRET } from "./charging.e2e.mjs";
 import { stripeWebhookFlows } from "./stripe-webhooks.e2e.mjs";
 import { startFakeStripe, TEST_CONNECT_WEBHOOK_SECRET, TEST_PUBLISHABLE_KEY, TEST_SECRET_KEY, TEST_WEBHOOK_SECRET } from "../stripe/fake-stripe.mjs";
 
@@ -35,6 +37,7 @@ const env = {
   STRIPE_SECRET_KEY: TEST_SECRET_KEY,
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: TEST_PUBLISHABLE_KEY,
   STRIPE_API_BASE: "http://127.0.0.1:12111",
+  PING_JOB_SECRET: TEST_JOB_SECRET, // the charge job (payments PR 6)
 };
 
 // Anna's regular clean falls on today's weekday (see seed.sql), in London time.
@@ -207,6 +210,9 @@ try {
   await cleanerPaymentsFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
   // Track B's cleaner flows. Last, because they change the seeded jobs and visits.
   await cleanerFlows({ browser, BASE, check, signIn, SHOTS });
+  // Payments 6: the clean Tara just completed is charged (after it, so there is one to charge).
+  await chargingFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
+  await cardAtBookingFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
   // Track C's admin console. After Track B's, because it approves, assigns and scores.
   await adminFlows({ browser, BASE, check, signIn, SHOTS });
 } finally {

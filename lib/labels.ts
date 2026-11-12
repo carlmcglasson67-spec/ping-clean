@@ -22,7 +22,7 @@ export const SERIES_STATUS: Record<Enums<"series_status">, { label: string; tone
   offering: { label: "Finding your cleaner", tone: "warn" },
   unclaimed: { label: "Finding your cleaner", tone: "warn" },
   claimed: { label: "Cleaner confirmed", tone: "ok" },
-  paused: { label: "Paused", tone: "neutral" },
+  paused: { label: "On hold", tone: "warn" },
   ended: { label: "Ended", tone: "neutral" },
 };
 

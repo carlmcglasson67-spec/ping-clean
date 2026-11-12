@@ -63,7 +63,7 @@ describe("start_visit", () => {
     expect(await setupThen(async (su) => { await su.rows(`update public.visits set status = 'cancelled', cancelled_at = now() where id = $1`, [today]); },
       U.tara, (q) => q.attempt(START, [today]))).toBe("PC012");
     expect(await setupThen(async (su) => { await su.rows(`update public.series set status = 'paused' where id = $1`, [IDS.annaSeries]); },
-      U.tara, (q) => q.attempt(START, [today]))).toBe("PC012");
+      U.tara, (q) => q.attempt(START, [today]))).toBe("PC017"); // on hold: a clear "don't go"
   });
 
   it("refuses a suspended cleaner, and one whose job went back on the board", async () => {

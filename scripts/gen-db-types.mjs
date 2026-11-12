@@ -193,6 +193,85 @@ out += `${ind(2)}};
         };
         Returns: "updated" | "unknown_account";
       };
+      admin_charge_visit: {
+        Args: { p_visit: string };
+        Returns: string;
+      };
+      charge_claim: {
+        Args: { p_limit?: number };
+        Returns: {
+          payment_id: string;
+          mode: "create" | "retry" | "check";
+          visit_id: string;
+          amount_pence: number;
+          application_fee_pence: number;
+          stripe_customer_id: string | null;
+          payment_method_id: string | null;
+          cleaner_account_id: string | null;
+          payment_intent_id: string | null;
+          attempt: number;
+          idempotency_key: string;
+        }[];
+      };
+      customer_pay_begin: {
+        Args: { p_payment: string; p_customer: string };
+        Returns: {
+          problem: "not_found" | "already_paid" | "in_progress" | "no_card" | "not_ready" | "too_many" | null;
+          payment_id: string;
+          mode: "create" | "retry" | "check";
+          visit_id: string;
+          amount_pence: number;
+          application_fee_pence: number;
+          stripe_customer_id: string | null;
+          payment_method_id: string | null;
+          cleaner_account_id: string | null;
+          payment_intent_id: string | null;
+          attempt: number;
+          idempotency_key: string;
+        }[];
+      };
+      customer_payment_intent: {
+        Args: { p_payment: string; p_customer: string };
+        Returns: string | null;
+      };
+      customer_card_series: {
+        Args: { p_payment: string; p_customer: string };
+        Returns: string | null;
+      };
+      notices_claim: {
+        Args: { p_limit?: number };
+        Returns: {
+          notice_id: string;
+          kind: "payment_failed" | "payment_needs_confirming" | "block_on_hold" | "block_ended_unpaid";
+          email: string | null;
+          full_name: string | null;
+          payment_id: string | null;
+          amount_pence: number | null;
+          clean_date: string | null;
+        }[];
+      };
+      notice_sent: {
+        Args: { p_notice: string; p_error: string | null };
+        Returns: undefined;
+      };
+      charge_not_sent: {
+        Args: { p_payment: string; p_error: string };
+        Returns: "failed" | "ignored" | "unknown";
+      };
+      stripe_payment_result: {
+        Args: {
+          p_payment: string;
+          p_intent: string;
+          p_outcome: "succeeded" | "requires_action" | "failed" | "processing";
+          p_amount: number;
+          p_fee: number | null;
+          p_destination: string | null;
+          p_charge: string | null;
+          p_error: string | null;
+          p_event_at: string | null;
+        };
+        Returns: "succeeded" | "requires_action" | "failed" | "already" | "ignored" | "unknown" | "mismatch";
+      };
       series_card_saved: {
         Args: { p_series: string };
         Returns: boolean;
