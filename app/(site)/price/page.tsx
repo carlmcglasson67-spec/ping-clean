@@ -4,6 +4,7 @@ import { FaqList } from "../_components/faq-list";
 import { InstantPrice } from "../_components/instant-price";
 import { STANDARD_CLEAN_COUNT } from "../_content/checklist";
 import { FAQ } from "../_content/faq";
+import { interestFormSetup } from "@/lib/interest/server";
 import { getPricing } from "../_lib/pricing";
 
 export const metadata: Metadata = {
@@ -23,7 +24,7 @@ const HOW_PRICED = [
 ];
 
 export default async function PricePage() {
-  const pricing = await getPricing();
+  const [pricing, interest] = await Promise.all([getPricing(), interestFormSetup()]);
   const priceFaq = FAQ.find((g) => g.id === "booking")?.items ?? [];
 
   return (
@@ -44,7 +45,7 @@ export default async function PricePage() {
             </p>
           </div>
           <div className="rise mt-12 [animation-delay:200ms] lg:mt-16">
-            <InstantPrice pricing={pricing} />
+            <InstantPrice pricing={pricing} interest={interest} />
           </div>
         </div>
       </section>

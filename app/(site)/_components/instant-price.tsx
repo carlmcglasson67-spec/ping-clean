@@ -8,6 +8,7 @@ import { formatDuration, formatPence, formatPenceShort } from "@/lib/money";
 import { parsePostcode } from "../_lib/postcode";
 import type { PricingState } from "../_lib/pricing-shape";
 import { clampMinutes, MAX_MINUTES, quotePence, STEP_MINUTES } from "../_lib/quote";
+import { RegisterInterest, type InterestSetup } from "./register-interest";
 
 type Open = Extract<PricingState, { status: "open" }>;
 
@@ -17,12 +18,21 @@ type Open = Extract<PricingState, { status: "open" }>;
  * Everything here is display. The postcode never leaves the browser, and checkout
  * recalculates the price on the server from the settings table before anything is saved.
  */
-export function InstantPrice({ pricing, tone = "card" }: { pricing: PricingState; tone?: "card" | "ink" }) {
-  if (pricing.status === "open") return <OpenPrice pricing={pricing} tone={tone} />;
-  return <NotOpen status={pricing.status} tone={tone} />;
+export function InstantPrice({
+  pricing,
+  tone = "card",
+  interest,
+}: {
+  pricing: PricingState;
+  tone?: "card" | "ink";
+  /** From interestFormSetup(): shows "Tell me when booking opens near me" where it fits. */
+  interest?: InterestSetup;
+}) {
+  if (pricing.status === "open") return <OpenPrice pricing={pricing} tone={tone} interest={interest} />;
+  return <NotOpen status={pricing.status} tone={tone} interest={interest} />;
 }
 
-function OpenPrice({ pricing, tone }: { pricing: Open; tone: "card" | "ink" }) {
+function OpenPrice({ pricing, tone, interest }: { pricing: Open; tone: "card" | "ink"; interest?: InterestSetup }) {
   const ids = { postcode: useId(), hint: useId(), hours: useId(), result: useId() };
   const [raw, setRaw] = useState("");
   const [touched, setTouched] = useState(false);
@@ -105,14 +115,18 @@ function OpenPrice({ pricing, tone }: { pricing: Open; tone: "card" | "ink" }) {
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal">Not in {parsed.district} yet</p>
             <p className="font-display text-3xl font-semibold">We&rsquo;re not booking there yet.</p>
             <p className="text-lg text-on-navy-2">
-              Ping opens a postcode when there are enough vetted local cleaners to look after it properly. We&rsquo;re growing across West Cumbria first.
+              Ping opens a postcode when there are enough vetted local cleaners to look after it properly.
+              {interest?.retentionMonths ? " Leave your details and we\u2019ll tell you when we open near you." : " We\u2019re growing across West Cumbria first."}
             </p>
+            {interest?.retentionMonths ? (
+              <RegisterInterest source="instant_price" setup={interest} initialPostcode={parsed.kind === "full" ? parsed.postcode : ""} className="mt-2" />
+            ) : null}
             <Link href="/areas" className="inline-flex min-h-12 w-fit items-center gap-2 font-semibold text-teal hover:text-on-navy">
               See where we clean <span aria-hidden>&rarr;</span>
             </Link>
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-4 border-t border-line-navy pt-6">
+        <div className={cn("flex flex-wrap items-center gap-x-6 gap-y-4 border-t border-line-navy pt-6", !covered && (parsed.kind === "full" || parsed.kind === "district") && "hidden")}>
           {(parsed.kind !== "full" && parsed.kind !== "district") || covered ? (
           <ButtonLink
             href={`/book?${new URLSearchParams({ ...(parsed.kind === "full" ? { postcode: parsed.postcode } : {}), minutes: String(minutes) })}` as Route}
@@ -168,8 +182,9 @@ function StepButton({ label, disabled, onClick, children }: { label: string; dis
 }
 
 /** Prices not set yet, or the database couldn't be reached. Never a made-up number. */
-function NotOpen({ status, tone }: { status: "soon" | "unavailable"; tone: "card" | "ink" }) {
+function NotOpen({ status, tone, interest }: { status: "soon" | "unavailable"; tone: "card" | "ink"; interest?: InterestSetup }) {
   const soon = status === "soon";
+  const form = soon && interest?.retentionMonths ? interest : null;
   return (
     <div className={cn("signal-waves relative grid gap-10 overflow-hidden rounded-xl p-8 text-on-navy sm:p-12 lg:grid-cols-12 lg:items-end lg:p-16", tone === "ink" && "ring-1 ring-line-navy")}>
       <svg aria-hidden viewBox="0 0 600 600" className="pointer-events-none absolute -bottom-72 -right-56 size-[40rem] text-on-navy/[0.07]">
@@ -177,10 +192,18 @@ function NotOpen({ status, tone }: { status: "soon" | "unavailable"; tone: "card
           <circle key={r} cx="300" cy="300" r={r} fill="none" stroke="currentColor" strokeWidth="1.5" />
         ))}
       </svg>
-      <div className="relative grid gap-5 lg:col-span-7">
+      <div className={cn("relative grid gap-5", form ? "content-start lg:col-span-6 lg:self-start" : "lg:col-span-7")}>
         <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal">Instant price</p>
         <p className="font-display text-3xl font-semibold">{soon ? "Booking opens soon." : "Prices didn’t load."}</p>
+        {form ? (
+          <p className="mt-2 max-w-xl text-lg text-on-navy-2">
+            We&rsquo;re setting our prices and signing up local cleaners now. Leave your postcode and we&rsquo;ll send you one message when booking opens near you.
+          </p>
+        ) : null}
       </div>
+      {form ? (
+        <RegisterInterest source="holding_page" setup={form} className="relative lg:col-span-5 lg:col-start-8" />
+      ) : (
       <div className="relative grid gap-6 lg:col-span-5">
         <p className="text-lg text-on-navy-2">
           {soon
@@ -191,6 +214,7 @@ function NotOpen({ status, tone }: { status: "soon" | "unavailable"; tone: "card
           How Ping works <span aria-hidden>&rarr;</span>
         </Link>
       </div>
+      )}
     </div>
   );
 }

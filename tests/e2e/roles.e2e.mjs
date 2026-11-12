@@ -12,6 +12,7 @@ import { cleanerPaymentsFlows } from "./cleaner-payments.e2e.mjs";
 import { fakeServiceRoleKey, startFakeSupabase } from "./fake-supabase.mjs";
 import { cardAtBookingFlows } from "./card-at-booking.e2e.mjs";
 import { chargingFlows, TEST_JOB_SECRET } from "./charging.e2e.mjs";
+import { interestFlows } from "./interest.e2e.mjs";
 import { stripeWebhookFlows } from "./stripe-webhooks.e2e.mjs";
 import { startFakeStripe, TEST_CONNECT_WEBHOOK_SECRET, TEST_PUBLISHABLE_KEY, TEST_SECRET_KEY, TEST_WEBHOOK_SECRET } from "../stripe/fake-stripe.mjs";
 
@@ -31,6 +32,9 @@ const env = {
   PING_DIST_DIR: ".next-e2e",
   // Register interest writes through the service-role client (lib/db/admin.ts).
   SUPABASE_SERVICE_ROLE_KEY: fakeServiceRoleKey(),
+  // The built app runs as a preview, not production: with no Turnstile keys, production refuses
+  // every register-interest post (fail closed, lib/interest/turnstile.ts); a preview skips the check.
+  VERCEL_ENV: "preview",
   // Stripe (payments PRs 3–4): TEST-shaped keys for the local fake Stripe only; Stripe is never reached.
   STRIPE_WEBHOOK_SECRET: TEST_WEBHOOK_SECRET,
   STRIPE_CONNECT_WEBHOOK_SECRET: TEST_CONNECT_WEBHOOK_SECRET,
@@ -206,6 +210,7 @@ try {
 
   await authFlows({ browser, BASE, check, shots: process.env.SIGNUP_SHOT_DIR ?? SHOTS });
   await stripeWebhookFlows({ BASE, check, stripe: fakeStripe });
+  await interestFlows({ browser, BASE, check, shots: process.env.INTEREST_SHOT_DIR ?? SHOTS });
   // Payments 5: Alex sets up how he gets paid (and ends ready, as seeded).
   await cleanerPaymentsFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
   // Track B's cleaner flows. Last, because they change the seeded jobs and visits.
