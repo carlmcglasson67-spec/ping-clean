@@ -7,7 +7,7 @@ import { Button, Spinner } from "@/components/ui";
 import { checkPaymentAction, confirmCardChangeAction, payNowAction, startCardChangeAction, type PayView } from "./actions";
 
 // Stripe's card fields are only fetched when someone asks to change their card.
-const CardForm = dynamic(() => import("./card-form").then((m) => m.CardForm), {
+const CardForm = dynamic(() => import("../../_components/card-form").then((m) => m.CardForm), {
   ssr: false,
   loading: () => (
     <p className="flex items-center gap-3 text-navy-2">

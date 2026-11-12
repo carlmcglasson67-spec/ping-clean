@@ -25,7 +25,7 @@ export function CardForm({
   clientSecret: string;
   publishableKey: string;
   onSaved: (setupIntentId: string) => Promise<boolean>;
-  onCancel: () => void;
+  onCancel?: () => void; // omit where there is no card to fall back to (first card at booking)
 }) {
   const stripe = useMemo<Promise<Stripe | null>>(() => loadStripe(publishableKey), [publishableKey]);
   const appearance = useMemo(
@@ -50,7 +50,7 @@ export function CardForm({
   );
 }
 
-function Fields({ onSaved, onCancel }: { onSaved: (id: string) => Promise<boolean>; onCancel: () => void }) {
+function Fields({ onSaved, onCancel }: { onSaved: (id: string) => Promise<boolean>; onCancel?: () => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const [busy, setBusy] = useState(false);
@@ -92,9 +92,11 @@ function Fields({ onSaved, onCancel }: { onSaved: (id: string) => Promise<boolea
         <Button type="submit" size="lg" pending={busy} disabled={!stripe}>
           Save this card
         </Button>
-        <Button type="button" size="lg" variant="ghost" onClick={onCancel} disabled={busy}>
-          Keep my current card
-        </Button>
+        {onCancel ? (
+          <Button type="button" size="lg" variant="ghost" onClick={onCancel} disabled={busy}>
+            Keep my current card
+          </Button>
+        ) : null}
       </div>
       <p className="text-base text-navy-3">Your card details go straight to Stripe, our payment provider. Ping never sees or stores the number.</p>
     </form>

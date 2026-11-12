@@ -8,16 +8,22 @@ import { FREQUENCY, SERIES_STATUS } from "@/lib/labels";
 import { formatDuration, formatPence, formatPenceShort } from "@/lib/money";
 import { blockTotalPence, firstCleanDate } from "../../../../(site)/_lib/checkout";
 import { quotePence } from "../../../../(site)/_lib/quote";
+import { SaveCard } from "./save-card";
 
 export const metadata: Metadata = { title: "Your booking", robots: { index: false } };
 
-const NEXT_STEPS = [
-  { title: "We find your cleaner", body: "Your cleans go first to our highest-rated cleaners near you, then to every vetted cleaner who covers your area." },
-  { title: "You see who’s coming", body: "As soon as a cleaner takes on your block, their name and your dates appear in My cleans." },
-  // A-4: becomes "Card saved" once Stripe card saving is switched on.
-  { title: "Your card, before the first clean", body: "We’ll ask you to save a card before your first clean. Nothing is charged until a clean is finished." },
-  { title: "Pay after each clean", body: "One clean at a time, only once it’s done, with photos and the checklist to show for it." },
-];
+const BRANDS: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "American Express", maestro: "Maestro" };
+
+function nextSteps(card: string | null) {
+  return [
+    card
+      ? { title: "Card saved", body: `${card}. Nothing is charged until a clean is finished.` }
+      : { title: "Save your card", body: "It takes a minute, and nothing is charged until a clean is finished." },
+    { title: "We find your cleaner", body: "Your cleans go first to our highest-rated cleaners near you, then to every vetted cleaner who covers your area." },
+    { title: "You see who’s coming", body: "As soon as a cleaner takes on your block, their name and your dates appear in My cleans." },
+    { title: "Pay after each clean", body: "One clean at a time, only once it’s done, with photos and the checklist to show for it." },
+  ];
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -35,7 +41,12 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
     .maybeSingle();
   if (error) return <ErrorState>We couldn&rsquo;t load your booking just now. Refresh the page to try again.</ErrorState>;
   if (!s) notFound();
-  const { data: home } = await supabase.from("properties").select("address_line1, town, postcode").eq("id", s.property_id).maybeSingle();
+  const [{ data: home }, { data: cards }] = await Promise.all([
+    supabase.from("properties").select("address_line1, town, postcode").eq("id", s.property_id).maybeSingle(),
+    supabase.rpc("my_saved_card"), // one card per customer, used for every block
+  ]);
+  const saved = cards?.[0]?.last4 ? `${BRANDS[cards[0].brand ?? ""] ?? "Card"} ending ${cards[0].last4}` : null;
+  const needsCard = !saved && s.status !== "ended";
 
   const status = SERIES_STATUS[s.status];
   const perClean = quotePence(s.price_per_hour_pence, s.duration_minutes);
@@ -87,13 +98,23 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
         </div>
       </section>
 
-      <section aria-labelledby="next-title" className="lg:col-span-5">
+      <section aria-labelledby="next-title" className={`grid content-start gap-6 lg:col-span-5 ${needsCard ? "max-lg:order-first" : ""}`}>
+        {needsCard ? (
+          <Card className="grid gap-6 p-8 ring-2 ring-blue sm:p-10">
+            <div className="grid gap-3">
+              <Badge tone="warn" className="justify-self-start">One more step</Badge>
+              <h2 className="text-2xl font-semibold">Save your card to finish booking.</h2>
+              <p className="text-lg text-navy-2">Each clean is charged to it only once that clean is finished. Nothing is taken today.</p>
+            </div>
+            <SaveCard seriesId={s.id} />
+          </Card>
+        ) : null}
         <Card className="p-8 sm:p-10">
           <h2 id="next-title" className="text-2xl font-semibold">
             What happens next
           </h2>
           <ol className="mt-6 grid">
-            {NEXT_STEPS.map((n, i) => (
+            {nextSteps(saved).map((n, i) => (
               <li key={n.title} className="grid grid-cols-[3rem_1fr] gap-x-3 border-t border-line py-6 first:border-t-0 first:pt-0">
                 <span className="font-display text-2xl font-semibold text-teal-ink tabular" aria-hidden>
                   {String(i + 1).padStart(2, "0")}

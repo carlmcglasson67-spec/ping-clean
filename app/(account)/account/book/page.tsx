@@ -29,7 +29,13 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
 
   const supabase = await createClient();
   // RLS: only this customer's homes come back.
-  const homes = await supabase.from("properties").select("id, address_line1, town, postcode, bedrooms, bathrooms").order("created_at");
+  const [homes, cards] = await Promise.all([
+    supabase.from("properties").select("id, address_line1, town, postcode, bedrooms, bathrooms").order("created_at"),
+    supabase.rpc("my_saved_card"),
+  ]);
+  const card = cards.data?.[0];
+  const brands: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "American Express", maestro: "Maestro" };
+  const savedCard = card?.last4 ? `${brands[card.brand ?? ""] ?? "Card"} ending ${card.last4}` : null;
   if (homes.error) {
     return (
       <>
@@ -56,6 +62,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
         initialPostcode={parsed.kind === "full" ? parsed.postcode : ""}
         initialMinutes={minutes}
         earliestStart={tomorrow}
+        savedCard={savedCard}
       />
     </>
   );

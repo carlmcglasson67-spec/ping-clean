@@ -26,12 +26,14 @@ export function CheckoutForm({
   initialPostcode,
   initialMinutes,
   earliestStart,
+  savedCard,
 }: {
   pricing: Open;
   homes: Home[];
   initialPostcode: string;
   initialMinutes: number;
   earliestStart: string;
+  savedCard: string | null; // e.g. "Visa ending 4242"
 }) {
   const [state, action, pending] = useActionState<BookState, FormData>(confirmBooking, {});
   const [home, setHome] = useState<string>(homes.length ? homes[homes.length - 1]!.id : "new");
@@ -209,10 +211,12 @@ export function CheckoutForm({
           </fieldset>
         </Step>
 
-        {/* 05 Card: A-4. Stripe SetupIntent and the Payment Element go here. */}
+        {/* 05 Card: saved on the next screen, once the booking exists (Stripe's form needs it). */}
         <Step n={5} title="Your card" muted>
           <p className="text-lg text-navy-2">
-            Card saving is switched on just before launch. We&rsquo;ll ask for your card before your first clean, and nothing is ever charged until a clean is finished.
+            {savedCard
+              ? `We’ll use your ${savedCard}. Nothing is charged until a clean is finished.`
+              : "You’ll save your card on the next screen. Nothing is taken today: each clean is charged only once it’s finished."}
           </p>
         </Step>
       </div>
