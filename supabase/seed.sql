@@ -162,7 +162,10 @@ insert into public.payments (id, visit_id, customer_id, amount_pence, applicatio
   ('00000000-0000-4000-f000-000000000001', '00000000-0000-4000-e000-000000000001', '00000000-0000-4000-a000-000000000002',
    5000, 1250, 3750, 'pi_test_seed_0001', 'visit:00000000-0000-4000-e000-000000000001:charge');
 update public.payments set status = 'processing' where id = '00000000-0000-4000-f000-000000000001';
+-- The payout row is written by hand below (a fixed id, already paid), not by the trigger.
+alter table public.payments disable trigger payments_make_payout;
 update public.payments set status = 'succeeded' where id = '00000000-0000-4000-f000-000000000001';
+alter table public.payments enable trigger payments_make_payout;
 
 insert into public.payout_batches (id, cleaner_id, amount_pence, stripe_payout_id, idempotency_key, arrival_date) values
   ('00000000-0000-4000-f100-000000000001', '00000000-0000-4000-a000-000000000004', 3750, 'po_test_seed_0001',
