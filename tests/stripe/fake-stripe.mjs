@@ -6,6 +6,9 @@
 //      PR 4: POST /v1/customers, POST /v1/setup_intents, GET /v1/payment_methods/:id
 //      PR 5: POST /v1/accounts, GET /v1/accounts/:id, POST /v1/account_links (Connect Express).
 //            The link it returns is a page on the fake that "completes" Stripe's form.
+//      PR 6: POST /v1/payment_intents (off-session destination charges), POST …/:id/confirm,
+//            GET …/:id. What the card does is set per payment method with the test control
+//            (behaviour: "ok" | "decline" | "auth"), like Stripe's test cards.
 //    It needs a test-shaped key (Bearer sk_test_…) and honours Idempotency-Key like Stripe:
 //    the same key returns the same response. Test controls under /__test/.
 import { createHmac, randomBytes } from "node:crypto";
@@ -63,6 +66,7 @@ export function startFakeStripe(port = 12111) {
     setupIntents: new Map(),
     paymentMethods: new Map(),
     accounts: new Map(),
+    paymentIntents: new Map(),
     idempotent: new Map(), // key → response body
     onboardingOutcome: "complete",
     requests: [],           // { method, path, idempotencyKey }
@@ -84,6 +88,8 @@ export function startFakeStripe(port = 12111) {
         const b = JSON.parse(raw || "{}");
         const pm = { id: b.id ?? rid("pm"), object: "payment_method", type: "card", customer: b.customer ?? null,
           card: { brand: b.brand ?? "visa", last4: b.last4 ?? "4242", exp_month: b.exp_month ?? 12, exp_year: b.exp_year ?? 2030 } };
+        // What a charge on this card does: "ok", "decline" (no funds) or "auth" (the bank wants the customer).
+        Object.defineProperty(pm, "__behaviour", { value: b.behaviour ?? state.paymentMethods.get(pm.id)?.__behaviour ?? "ok", enumerable: false, writable: true });
         state.paymentMethods.set(pm.id, pm);
         return send(res, 200, pm);
       }
@@ -120,7 +126,7 @@ export function startFakeStripe(port = 12111) {
       }
       if (path === "/__test/requests") return send(res, 200, state.requests);
       if (path === "/__test/reset" && req.method === "POST") {
-        for (const m of [state.customers, state.setupIntents, state.paymentMethods, state.accounts, state.idempotent]) m.clear();
+        for (const m of [state.customers, state.setupIntents, state.paymentMethods, state.accounts, state.paymentIntents, state.idempotent]) m.clear();
         state.requests.length = 0;
         return send(res, 200, {});
       }
@@ -130,8 +136,9 @@ export function startFakeStripe(port = 12111) {
       if (!/^Bearer (sk|rk)_test_/.test(auth)) return error(res, 401, "Invalid API Key provided", "authentication_error");
       const idem = req.headers["idempotency-key"] ? String(req.headers["idempotency-key"]) : null;
       state.requests.push({ method: req.method, path, idempotencyKey: idem });
-      if (req.method === "POST" && idem && state.idempotent.has(idem)) return send(res, 200, state.idempotent.get(idem));
-      const remember = (body) => { if (req.method === "POST" && idem) state.idempotent.set(idem, body); return send(res, 200, body); };
+      // Like Stripe: the same key gets the same answer back, an error included.
+      if (req.method === "POST" && idem && state.idempotent.has(idem)) { const was = state.idempotent.get(idem); return send(res, was.status, was.body); }
+      const remember = (body, status = 200) => { if (req.method === "POST" && idem) state.idempotent.set(idem, { status, body }); return send(res, status, body); };
       const b = req.method === "POST" ? parseForm(raw) : {};
 
       if (path === "/v1/customers" && req.method === "POST") {
@@ -172,6 +179,49 @@ export function startFakeStripe(port = 12111) {
         found.__refresh_url = b.refresh_url;
         return send(res, 200, { object: "account_link", created: Math.floor(Date.now() / 1000), expires_at: Math.floor(Date.now() / 1000) + 300,
           url: `http://127.0.0.1:${port}/__test/onboarding/${found.id}` });
+      }
+      // ---------- PaymentIntents: off-session destination charges, as Ping makes them
+      const attempt = (pi, pmId) => {
+        const card = state.paymentMethods.get(pmId);
+        if (!card) return remember({ error: { type: "invalid_request_error", code: "resource_missing", message: `No such PaymentMethod: '${pmId}'` } }, 400);
+        pi.payment_method = pmId;
+        const behaviour = card.__behaviour ?? "ok";
+        if (behaviour === "ok") {
+          Object.assign(pi, { status: "succeeded", amount_received: pi.amount, latest_charge: rid("ch"), last_payment_error: null });
+          return remember({ ...pi });
+        }
+        const code = behaviour === "auth" ? "authentication_required" : "card_declined";
+        const decline_code = behaviour === "auth" ? "authentication_required" : "insufficient_funds";
+        Object.assign(pi, { status: "requires_payment_method", payment_method: null, latest_charge: rid("ch"),
+          last_payment_error: { type: "card_error", code, decline_code, message: "Your card was declined." } });
+        return remember({ error: { type: "card_error", code, decline_code, message: "Your card was declined.", payment_intent: { ...pi } } }, 402);
+      };
+      if (path === "/v1/payment_intents" && req.method === "POST") {
+        const amount = Number(b.amount), fee = Number(b.application_fee_amount);
+        const dest = b.transfer_data?.destination;
+        if (!Number.isInteger(amount) || amount <= 0 || b.currency !== "gbp") return error(res, 400, "Invalid amount or currency");
+        if (b.confirm !== "true" || b.off_session !== "true" || !b.customer || !b.payment_method) return error(res, 400, "The fake only takes confirmed off-session charges on a saved card");
+        if (!/^acct_[A-Za-z0-9]{6,64}$/.test(dest ?? "") || b.on_behalf_of !== dest) return error(res, 400, "The fake only takes destination charges made on the destination's behalf");
+        if (!Number.isInteger(fee) || fee < 0 || fee > amount) return error(res, 400, "Invalid application_fee_amount");
+        const id = rid("pi");
+        const pi = { id, object: "payment_intent", amount, amount_received: 0, currency: "gbp", customer: b.customer, payment_method: null,
+          application_fee_amount: fee, on_behalf_of: dest, transfer_data: { destination: dest }, latest_charge: null,
+          last_payment_error: null, status: "requires_confirmation", client_secret: `${id}_secret_${randomBytes(8).toString("hex")}`,
+          metadata: b.metadata ?? {}, created: Math.floor(Date.now() / 1000), livemode: false };
+        state.paymentIntents.set(id, pi);
+        return attempt(pi, b.payment_method);
+      }
+      const confirm = path.match(/^\/v1\/payment_intents\/(pi_[A-Za-z0-9_]+)\/confirm$/);
+      if (confirm && req.method === "POST") {
+        const pi = state.paymentIntents.get(confirm[1]);
+        if (!pi) return error(res, 404, `No such payment_intent: '${confirm[1]}'`);
+        if (pi.status === "succeeded") return error(res, 400, "This PaymentIntent has already succeeded");
+        return attempt(pi, b.payment_method ?? pi.payment_method);
+      }
+      const intent = path.match(/^\/v1\/payment_intents\/(pi_[A-Za-z0-9_]+)$/);
+      if (intent && req.method === "GET") {
+        const found = state.paymentIntents.get(intent[1]);
+        return found ? send(res, 200, found) : error(res, 404, `No such payment_intent: '${intent[1]}'`);
       }
       const pm = path.match(/^\/v1\/payment_methods\/([A-Za-z0-9_]+)$/);
       if (pm && req.method === "GET") {
