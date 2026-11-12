@@ -117,6 +117,7 @@ async function send(row: Claimed): Promise<Stripe.PaymentIntent> {
       currency: "gbp",
       customer: row.stripe_customer_id,
       payment_method: row.payment_method_id,
+      allowed_payment_method_types: ["card"], // cards only, so Stripe never needs a page to send the customer back to
       off_session: true, // the customer isn't there: the clean has just finished
       confirm: true,
       on_behalf_of: row.cleaner_account_id, // the cleaner is the seller
