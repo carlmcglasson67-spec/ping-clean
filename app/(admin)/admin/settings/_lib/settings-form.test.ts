@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { bpsToText, changes, FIELDS, isShown, parseSettings, penceToText, toValues, unsetRequired, type SettingsRow, type Values } from "./settings-form";
 
 const empty: SettingsRow = {
-  id: true, price_per_hour_pence: null, min_booking_minutes: null, commission_type: null, commission_value: null,
+  id: true, payment_pause_days: null, price_per_hour_pence: null, min_booking_minutes: null, commission_type: null, commission_value: null,
   top_window_minutes: null, approved_window_minutes: null, unclaimed_alert_minutes: null, cancel_notice_hours: null,
   late_cancel_fee_pence: null, late_cancel_cleaner_share_bps: null, dispute_window_hours: null, launch_districts: [],
   updated_at: "2026-11-08T10:00:00+00:00", rebook_first_refusal_minutes: null, interest_retention_months: 6,

@@ -835,6 +835,7 @@ export type Database = {
           no_access_rule: string | null;
           card_expiry_notice_days: number | null;
           late_cancel_when_unclaimed: string | null;
+          payment_pause_days: number | null;
         };
         Insert: {
           id?: boolean;
@@ -860,6 +861,7 @@ export type Database = {
           no_access_rule?: string | null;
           card_expiry_notice_days?: number | null;
           late_cancel_when_unclaimed?: string | null;
+          payment_pause_days?: number | null;
         };
         Update: {
           id?: boolean;
@@ -885,6 +887,7 @@ export type Database = {
           no_access_rule?: string | null;
           card_expiry_notice_days?: number | null;
           late_cancel_when_unclaimed?: string | null;
+          payment_pause_days?: number | null;
         };
         Relationships: [];
       };
@@ -1164,6 +1167,22 @@ export type Database = {
           attempt: number;
           idempotency_key: string;
         }[];
+      };
+      notices_claim: {
+        Args: { p_limit?: number };
+        Returns: {
+          notice_id: string;
+          kind: "payment_failed" | "payment_needs_confirming" | "block_on_hold" | "block_ended_unpaid";
+          email: string | null;
+          full_name: string | null;
+          payment_id: string | null;
+          amount_pence: number | null;
+          clean_date: string | null;
+        }[];
+      };
+      notice_sent: {
+        Args: { p_notice: string; p_error: string | null };
+        Returns: undefined;
       };
       charge_not_sent: {
         Args: { p_payment: string; p_error: string };

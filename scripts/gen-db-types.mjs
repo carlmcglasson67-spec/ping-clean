@@ -213,6 +213,22 @@ out += `${ind(2)}};
           idempotency_key: string;
         }[];
       };
+      notices_claim: {
+        Args: { p_limit?: number };
+        Returns: {
+          notice_id: string;
+          kind: "payment_failed" | "payment_needs_confirming" | "block_on_hold" | "block_ended_unpaid";
+          email: string | null;
+          full_name: string | null;
+          payment_id: string | null;
+          amount_pence: number | null;
+          clean_date: string | null;
+        }[];
+      };
+      notice_sent: {
+        Args: { p_notice: string; p_error: string | null };
+        Returns: undefined;
+      };
       charge_not_sent: {
         Args: { p_payment: string; p_error: string };
         Returns: "failed" | "ignored" | "unknown";
