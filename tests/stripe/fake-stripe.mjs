@@ -4,6 +4,8 @@
 //    (https://docs.stripe.com/webhooks/signature: "t=<unix>,v1=<HMAC-SHA256(secret, `${t}.${body}`)>").
 //  * A small fake Stripe API for the calls Ping makes, grown PR by PR:
 //      PR 4: POST /v1/customers, POST /v1/setup_intents, GET /v1/payment_methods/:id
+//      PR 5: POST /v1/accounts, GET /v1/accounts/:id, POST /v1/account_links (Connect Express).
+//            The link it returns is a page on the fake that "completes" Stripe's form.
 //    It needs a test-shaped key (Bearer sk_test_…) and honours Idempotency-Key like Stripe:
 //    the same key returns the same response. Test controls under /__test/.
 import { createHmac, randomBytes } from "node:crypto";
@@ -60,7 +62,9 @@ export function startFakeStripe(port = 12111) {
     customers: new Map(),
     setupIntents: new Map(),
     paymentMethods: new Map(),
+    accounts: new Map(),
     idempotent: new Map(), // key → response body
+    onboardingOutcome: "complete",
     requests: [],           // { method, path, idempotencyKey }
   };
   const send = (res, status, body) => {
@@ -83,9 +87,40 @@ export function startFakeStripe(port = 12111) {
         state.paymentMethods.set(pm.id, pm);
         return send(res, 200, pm);
       }
+      // Set what an account can do, as Stripe's checks would: { charges_enabled, payouts_enabled, … }.
+      const setAcct = path.match(/^\/__test\/accounts\/(acct_[A-Za-z0-9]+)$/);
+      if (setAcct && req.method === "POST") {
+        const acct = state.accounts.get(setAcct[1]);
+        if (!acct) return error(res, 404, "No such account");
+        const b = JSON.parse(raw || "{}");
+        const { currently_due, past_due, ...flags } = b;
+        Object.assign(acct, flags);
+        if (currently_due) acct.requirements.currently_due = currently_due;
+        if (past_due) acct.requirements.past_due = past_due;
+        return send(res, 200, acct);
+      }
+      // Stands in for Stripe's hosted form: opening the link "finishes" set-up (unless
+      // ?outcome=pending or =abandon), then sends the cleaner back like Stripe does.
+      const form = path.match(/^\/__test\/onboarding\/(acct_[A-Za-z0-9]+)$/);
+      if (form && req.method === "GET") {
+        const acct = state.accounts.get(form[1]);
+        if (!acct) return error(res, 404, "No such account");
+        const outcome = url.searchParams.get("outcome") ?? state.onboardingOutcome;
+        if (outcome !== "abandon") {
+          acct.details_submitted = true;
+          acct.requirements.currently_due = [];
+          if (outcome !== "pending") { acct.charges_enabled = true; acct.payouts_enabled = true; }
+        }
+        res.writeHead(302, { location: acct.__return_url });
+        return res.end();
+      }
+      if (path === "/__test/onboarding-outcome" && req.method === "POST") {
+        state.onboardingOutcome = JSON.parse(raw || "{}").outcome ?? "complete";
+        return send(res, 200, {});
+      }
       if (path === "/__test/requests") return send(res, 200, state.requests);
       if (path === "/__test/reset" && req.method === "POST") {
-        for (const m of [state.customers, state.setupIntents, state.paymentMethods, state.idempotent]) m.clear();
+        for (const m of [state.customers, state.setupIntents, state.paymentMethods, state.accounts, state.idempotent]) m.clear();
         state.requests.length = 0;
         return send(res, 200, {});
       }
@@ -112,6 +147,31 @@ export function startFakeStripe(port = 12111) {
           payment_method: null, metadata: b.metadata ?? {}, livemode: false };
         state.setupIntents.set(id, si);
         return remember(si);
+      }
+      if (path === "/v1/accounts" && req.method === "POST") {
+        if (b.type !== "express" || b.country !== "GB") return error(res, 400, "The fake only makes GB Express accounts");
+        const a = { id: `acct_test${randomBytes(8).toString("hex")}`, object: "account", type: "express", country: "GB", email: b.email ?? null,
+          default_currency: b.default_currency ?? "gbp", business_type: b.business_type ?? null, business_profile: b.business_profile ?? {},
+          capabilities: Object.fromEntries(Object.keys(b.capabilities ?? {}).map((k) => [k, "inactive"])),
+          charges_enabled: false, payouts_enabled: false, details_submitted: false,
+          requirements: { currently_due: ["individual.first_name", "external_account"], past_due: [], disabled_reason: "requirements.past_due" },
+          settings: b.settings ?? {}, metadata: b.metadata ?? {} };
+        state.accounts.set(a.id, a);
+        return remember(a);
+      }
+      const acct = path.match(/^\/v1\/accounts\/(acct_[A-Za-z0-9]+)$/);
+      if (acct && req.method === "GET") {
+        const found = state.accounts.get(acct[1]);
+        return found ? send(res, 200, found) : error(res, 404, `No such account: '${acct[1]}'`);
+      }
+      if (path === "/v1/account_links" && req.method === "POST") {
+        const found = state.accounts.get(b.account);
+        if (!found) return error(res, 400, "No such account");
+        if (b.type !== "account_onboarding" || !b.return_url || !b.refresh_url) return error(res, 400, "account_onboarding needs return_url and refresh_url");
+        found.__return_url = b.return_url;
+        found.__refresh_url = b.refresh_url;
+        return send(res, 200, { object: "account_link", created: Math.floor(Date.now() / 1000), expires_at: Math.floor(Date.now() / 1000) + 300,
+          url: `http://127.0.0.1:${port}/__test/onboarding/${found.id}` });
       }
       const pm = path.match(/^\/v1\/payment_methods\/([A-Za-z0-9_]+)$/);
       if (pm && req.method === "GET") {

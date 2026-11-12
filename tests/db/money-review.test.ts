@@ -35,7 +35,7 @@ describe("1. a cleaner's Stripe account id", () => {
         rest: (await q.rows(`select status, tier, stripe_payouts_enabled from public.cleaners where id = $1`, [U.tara]))[0],
       };
     });
-    expect(r).toEqual({ acct: DENIED, star: DENIED, rest: { status: "active", tier: "top", stripe_payouts_enabled: false } });
+    expect(r).toEqual({ acct: DENIED, star: DENIED, rest: { status: "active", tier: "top", stripe_payouts_enabled: true } });
     expect(await as("admin", (q) => q.attempt(`select stripe_account_id from public.cleaners`))).toBe(DENIED);
   });
 

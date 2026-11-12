@@ -8,6 +8,7 @@ import { chromium } from "playwright-core";
 import { adminFlows } from "./admin.flows.mjs";
 import { authFlows } from "./auth.flows.mjs";
 import { cleanerFlows } from "./cleaner.e2e.mjs";
+import { cleanerPaymentsFlows } from "./cleaner-payments.e2e.mjs";
 import { fakeServiceRoleKey, startFakeSupabase } from "./fake-supabase.mjs";
 import { stripeWebhookFlows } from "./stripe-webhooks.e2e.mjs";
 import { startFakeStripe, TEST_CONNECT_WEBHOOK_SECRET, TEST_PUBLISHABLE_KEY, TEST_SECRET_KEY, TEST_WEBHOOK_SECRET } from "../stripe/fake-stripe.mjs";
@@ -202,6 +203,8 @@ try {
 
   await authFlows({ browser, BASE, check, shots: process.env.SIGNUP_SHOT_DIR ?? SHOTS });
   await stripeWebhookFlows({ BASE, check, stripe: fakeStripe });
+  // Payments 5: Alex sets up how he gets paid (and ends ready, as seeded).
+  await cleanerPaymentsFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
   // Track B's cleaner flows. Last, because they change the seeded jobs and visits.
   await cleanerFlows({ browser, BASE, check, signIn, SHOTS });
   // Track C's admin console. After Track B's, because it approves, assigns and scores.

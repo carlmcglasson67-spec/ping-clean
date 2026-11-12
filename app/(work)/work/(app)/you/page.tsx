@@ -8,6 +8,7 @@ import { weekdayName } from "@/lib/dates";
 import { slotsByDay } from "../../_lib/availability";
 import { REQUIRED_DOCS } from "../../_lib/documents";
 import { latestByKind } from "../../_lib/latest";
+import { PAYMENTS_COPY, paymentsStep, STRIPE_COLUMNS } from "../../_lib/payments";
 
 export const metadata: Metadata = { title: "You" };
 
@@ -21,7 +22,7 @@ export default async function YouPage() {
   const session = await requireRole("cleaner", "/work/you");
   const supabase = await createClient();
   const [cleaner, profile, docs] = await Promise.all([
-    supabase.from("cleaners").select("status, tier, areas, availability").eq("id", session.userId).maybeSingle(),
+    supabase.from("cleaners").select(`status, tier, areas, availability, ${STRIPE_COLUMNS}`).eq("id", session.userId).maybeSingle(),
     supabase.from("profiles").select("full_name, phone").eq("id", session.userId).maybeSingle(),
     supabase.from("cleaner_documents").select("kind, status, created_at").eq("cleaner_id", session.userId),
   ]);
@@ -54,6 +55,15 @@ export default async function YouPage() {
       badge: cleaner.data?.areas.length ? undefined : { tone: "warn", label: "To do" },
     },
   ];
+  if (cleaner.data?.status === "active") {
+    const pay = PAYMENTS_COPY[paymentsStep(cleaner.data)];
+    rows.push({
+      href: "/work/payments",
+      title: "Getting paid",
+      note: pay.title.replace(/\.$/, ""),
+      badge: { tone: pay.tone, label: pay.badge },
+    });
+  }
 
   return (
     <>
