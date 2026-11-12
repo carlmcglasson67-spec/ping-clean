@@ -46,7 +46,11 @@ export default async function interestFlows({ page, browser, signIn, BASE, check
     assert.match(csv, /"'=cmd@evil\.example"/, "a formula-looking value is defused");
     const [a] = await sql(`select actor_id, detail from public.audit_log where entity = 'interest_signups' and action = 'export' order by id desc limit 1`);
     assert.equal(a.actor_id, ADMIN);
-    assert.deepEqual(a.detail, { district: "all", rows: 3 });
+    // Every row on the list, however many the public form's own flows added before this ran.
+    const [{ n }] = await sql(`select count(*)::int as n from public.interest_signups`);
+    assert.ok(n >= 3, "the three seeded for this flow are there");
+    assert.deepEqual(a.detail, { district: "all", rows: n });
+    assert.equal(csv.trimEnd().split("\r\n").length - 1, n, "one CSV line per row");
   });
 
   await check("the export can't be pulled cross-site or by anyone but an admin", async () => {
