@@ -26,7 +26,7 @@ export type ChargeResult = {
   intentId: string;
   outcome: Outcome;
   amount: number;
-  fee: number | null;
+  fee: number;
   destination: string | null;
   chargeId: string | null;
   error: string | null;
@@ -74,7 +74,7 @@ export function readIntent(pi: Stripe.PaymentIntent): ChargeResult {
     intentId: pi.id,
     outcome,
     amount: pi.amount,
-    fee: pi.application_fee_amount ?? null,
+    fee: pi.application_fee_amount ?? 0, // Stripe leaves it out when there is no fee; the database compares it with the row's
     destination: idOf(pi.transfer_data?.destination as string | { id: string } | null | undefined),
     chargeId: idOf(pi.latest_charge as string | { id: string } | null),
     error,
@@ -179,6 +179,14 @@ export async function runChargeJob(limit = 10): Promise<ChargeRun> {
           if (noted.error) throw new Error("couldn't record the refused charge");
           run.failed++;
           console.warn(`charge job: payment ${row.payment_id} refused by Stripe (${read.error})`);
+          continue;
+        }
+        if (read.kind === "refused" && row.mode === "retry") {
+          // Stripe wouldn't take the retry (not the card): the customer keeps the try, the team is told.
+          const noted = await db.rpc("charge_retry_not_sent", { p_payment: row.payment_id, p_error: read.error, p_customer_try: false });
+          if (noted.error) throw new Error("couldn't record the refused retry");
+          run.errors++;
+          console.warn(`charge job: payment ${row.payment_id} retry refused by Stripe (${read.error})`);
           continue;
         }
         if (read.kind !== "answer") throw e;

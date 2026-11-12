@@ -1216,6 +1216,10 @@ export type Database = {
         Args: { p_payment: string; p_error: string };
         Returns: "failed" | "ignored" | "unknown";
       };
+      charge_retry_not_sent: {
+        Args: { p_payment: string; p_error: string; p_customer_try: boolean };
+        Returns: "returned" | "ignored" | "unknown";
+      };
       stripe_payment_result: {
         Args: {
           p_payment: string;

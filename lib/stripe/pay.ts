@@ -80,6 +80,9 @@ export async function payNow(paymentId: string, customerId: string): Promise<Pay
     if (read.kind === "refused" && row.mode === "create") {
       await db.rpc("charge_not_sent", { p_payment: paymentId, p_error: read.error });
     }
+    if (read.kind === "refused" && row.mode === "retry") {
+      await db.rpc("charge_retry_not_sent", { p_payment: paymentId, p_error: read.error, p_customer_try: true });
+    }
     // Otherwise left as 'processing': the job asks Stripe what happened within 10 minutes.
     console.error(`pay now: payment ${paymentId} couldn't be sent`);
     return { state: "unavailable" };
