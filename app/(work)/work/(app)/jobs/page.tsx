@@ -7,6 +7,7 @@ import { formatDay, formatWindow, todayInLondon, weekdayName } from "@/lib/dates
 import { createClient } from "@/lib/db/server";
 import { formatDuration, formatPence } from "@/lib/money";
 import { firstVisitDate, formatShortDay } from "../../_lib/schedule";
+import { canTakeWork, PAYMENTS_COPY, paymentsStep, STRIPE_COLUMNS } from "../../_lib/payments";
 import { JobCard, type BoardJob } from "./job-card";
 
 export const metadata: Metadata = { title: "New jobs" };
@@ -20,7 +21,7 @@ const RHYTHM = {
 export default async function JobsPage() {
   const session = await requireRole("cleaner", "/work/jobs");
   const supabase = await createClient();
-  const { data: me } = await supabase.from("cleaners").select("status, areas").eq("id", session.userId).maybeSingle();
+  const { data: me } = await supabase.from("cleaners").select(`status, areas, ${STRIPE_COLUMNS}`).eq("id", session.userId).maybeSingle();
 
   const header = (
     <PageHeader
@@ -37,6 +38,26 @@ export default async function JobsPage() {
         <EmptyState title="Jobs appear once you're approved">
           The Ping team switches on your job board when your checks are done.{" "}
           <Link href="/work" className="font-semibold text-navy underline underline-offset-4">See your application</Link>
+        </EmptyState>
+      </>
+    );
+  }
+
+  // No payments set-up, no jobs (C10): the board would be empty anyway, so say why.
+  if (!canTakeWork(me)) {
+    const pay = PAYMENTS_COPY[paymentsStep(me)];
+    return (
+      <>
+        {header}
+        <EmptyState
+          title={pay.title}
+          action={
+            <Link href="/work/payments" className={buttonClass("primary", "lg")}>
+              {pay.action ?? "See where it's up to"}
+            </Link>
+          }
+        >
+          Jobs in your areas show here as soon as you can be paid for them.
         </EmptyState>
       </>
     );

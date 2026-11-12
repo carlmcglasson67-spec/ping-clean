@@ -8,6 +8,7 @@ import { chromium } from "playwright-core";
 import { adminFlows } from "./admin.flows.mjs";
 import { authFlows } from "./auth.flows.mjs";
 import { cleanerFlows } from "./cleaner.e2e.mjs";
+import { cleanerPaymentsFlows } from "./cleaner-payments.e2e.mjs";
 import { fakeServiceRoleKey, startFakeSupabase } from "./fake-supabase.mjs";
 import { interestFlows } from "./interest.e2e.mjs";
 import { stripeWebhookFlows } from "./stripe-webhooks.e2e.mjs";

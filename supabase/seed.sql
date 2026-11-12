@@ -70,6 +70,14 @@ insert into public.cleaners (id, status, tier, areas, availability, approved_at,
      now() - interval '20 days', '00000000-0000-4000-a000-000000000001', null, 0, 3),
   ('00000000-0000-4000-a000-000000000006', 'applicant', 'new', array['CA26'], '[]', null, null, null, 0, 0);
 
+-- The two active cleaners have finished Stripe set-up (made-up TEST account ids), so they can
+-- be offered and claim work (C10). The applicant hasn't started.
+update public.cleaners
+   set stripe_account_id = 'acct_test' || right(replace(id::text, '-', ''), 12),
+       stripe_charges_enabled = true, stripe_payouts_enabled = true, stripe_details_submitted = true,
+       stripe_status_at = now()
+ where status = 'active';
+
 insert into public.cleaner_documents (id, cleaner_id, kind, storage_path, expires_on, status, reviewed_by, reviewed_at) values
   ('00000000-0000-4000-d000-000000000001', '00000000-0000-4000-a000-000000000004', 'dbs',
      '00000000-0000-4000-a000-000000000004/dbs.pdf', null, 'verified', '00000000-0000-4000-a000-000000000001', now() - interval '60 days'),

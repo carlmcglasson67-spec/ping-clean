@@ -103,9 +103,10 @@ describe("saved cards (private.customer_billing)", () => {
 
 describe("cleaners' Stripe status", () => {
   it("can be read by the cleaner but never set by them", async () => {
-    const r = await as("tara", async (q) => ({
-      read: (await q.rows(`select stripe_charges_enabled, stripe_payouts_enabled from public.cleaners where id = $1`, [U.tara]))[0],
-      write: await q.attempt(`update public.cleaners set stripe_payouts_enabled = true where id = $1`, [U.tara]),
+    // Sam, the applicant, hasn't set up payments (the seeded active cleaners have).
+    const r = await as("sam", async (q) => ({
+      read: (await q.rows(`select stripe_charges_enabled, stripe_payouts_enabled from public.cleaners where id = $1`, [U.sam]))[0],
+      write: await q.attempt(`update public.cleaners set stripe_payouts_enabled = true where id = $1`, [U.sam]),
     }));
     expect(r).toEqual({ read: { stripe_charges_enabled: false, stripe_payouts_enabled: false }, write: DENIED });
   });
@@ -113,6 +114,7 @@ describe("cleaners' Stripe status", () => {
   it("counts a cleaner as payable only with an account that can take charges and pay out", async () => {
     const r = await as("superuser", async (q) => {
       const p = async () => (await q.rows<{ ok: boolean }>(`select private.cleaner_payable($1) as ok`, [U.tara]))[0]!.ok;
+      await q.rows(`update public.cleaners set stripe_account_id = null, stripe_charges_enabled = false, stripe_payouts_enabled = false where id = $1`, [U.tara]);
       const before = await p();
       await q.rows(`update public.cleaners set stripe_account_id = 'acct_TestTara01', stripe_charges_enabled = true where id = $1`, [U.tara]);
       const half = await p();

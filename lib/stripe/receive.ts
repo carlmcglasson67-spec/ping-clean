@@ -2,6 +2,7 @@ import "server-only";
 import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/db/admin";
 import { onSetupIntentSucceeded } from "./cards";
+import { onAccountDeauthorized, onAccountUpdated } from "./connect";
 import { webhookSecret } from "./keys";
 import { MAX_WEBHOOK_BYTES, verifyStripeEvent, type Endpoint } from "./webhooks";
 
@@ -15,7 +16,10 @@ export const HANDLERS: Record<Endpoint, Partial<Record<string, Handler>>> = {
   platform: {
     "setup_intent.succeeded": onSetupIntentSucceeded, // PR 4: a card saved at booking
   },
-  connect: {},
+  connect: {
+    "account.updated": onAccountUpdated, // PR 5: can this cleaner be paid yet?
+    "account.application.deauthorized": onAccountDeauthorized,
+  },
 };
 
 const SECRET_NAME = { platform: "STRIPE_WEBHOOK_SECRET", connect: "STRIPE_CONNECT_WEBHOOK_SECRET" } as const;
@@ -59,12 +63,14 @@ export async function receiveStripeWebhook(request: Request, endpoint: Endpoint)
     console.error(`stripe ${endpoint} webhook: couldn't record ${event.id}`, begun.error.code);
     return json(500, { error: "try again" });
   }
-  if (begun.data === "duplicate") return json(200, { received: true, duplicate: true });
+  const outcome = begun.data?.outcome;
+  if (outcome === "duplicate") return json(200, { received: true, duplicate: true });
   // Another copy of this event is being handled right now: not done yet, so not a 2xx.
   // Stripe retries; once that copy finishes the retry is a duplicate, and if it died, the
   // retry takes over after its 5-minute lease.
-  if (begun.data === "busy") return json(409, { error: "in progress, try again" });
-  if (begun.data !== "process") {
+  if (outcome === "busy") return json(409, { error: "in progress, try again" });
+  const lease = begun.data?.lease;
+  if (outcome !== "process" || !lease) {
     console.error(`stripe ${endpoint} webhook: unexpected event-log answer for ${event.id}`);
     return json(500, { error: "try again" });
   }
@@ -74,11 +80,16 @@ export async function receiveStripeWebhook(request: Request, endpoint: Endpoint)
     if (handler) await handler(event);
   } catch (e) {
     const reason = e instanceof Error ? e.message.slice(0, 200) : "handler failed";
-    await db.rpc("stripe_finish_event", { p_event_id: event.id, p_error: reason });
+    // Only clears our own lease: if ours ran out and another copy took over, this does nothing.
+    await db.rpc("stripe_finish_event", { p_event_id: event.id, p_lease: lease, p_error: reason });
     console.error(`stripe ${endpoint} webhook: ${event.type} ${event.id} failed`);
     return json(500, { error: "try again" });
   }
-  const finished = await db.rpc("stripe_finish_event", { p_event_id: event.id, p_error: null });
+  const finished = await db.rpc("stripe_finish_event", { p_event_id: event.id, p_lease: lease, p_error: null });
   if (finished.error) return json(500, { error: "try again" });
+  // Our lease ran out and another copy holds the event now. The handler is idempotent, but
+  // only the copy holding the lease confirms it: Stripe retries, and gets "duplicate" once
+  // that copy has finished.
+  if (finished.data !== true) return json(409, { error: "in progress, try again" });
   return json(200, { received: true, handled: Boolean(handler) });
 }
