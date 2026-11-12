@@ -457,7 +457,13 @@ begin
   if not found then return 'unknown'; end if;
   if p.status <> 'processing' or p.stripe_payment_intent_id is null then return 'ignored'; end if;
   update public.payments
-     set status = 'failed', next_retry_at = now() + interval '1 hour',
+     set status = 'failed',
+         -- Tried again hourly for three days from when the charge was first due; after that it
+         -- waits for the team (their alert is open), who send it again with admin_charge_visit.
+         next_retry_at = case when p.created_at > now() - interval '3 days' then now() + interval '1 hour' end,
+         -- A new Stripe key for the next confirm: Stripe would answer a reused key with this
+         -- same refusal for a day, or reject it outright if the card has changed since.
+         idempotency_key = 'payment:' || p.id || ':r' || floor(extract(epoch from clock_timestamp()))::bigint,
          last_error_code = left(coalesce(nullif(p_error, ''), 'unknown'), 100),
          attempts = case when p_customer_try then attempts else greatest(attempts - 1, 0) end,
          customer_tries = case when p_customer_try then greatest(customer_tries - 1, 0) else customer_tries end
