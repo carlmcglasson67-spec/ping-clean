@@ -1,3 +1,4 @@
+import { sendDueNotices } from "@/lib/notify/email";
 import { jobRequestAllowed, jobSecret, runChargeJob } from "@/lib/stripe/charges";
 
 // The charge job (payments PR 6). The database's cron calls this every minute when a charge
@@ -15,7 +16,14 @@ export async function POST(request: Request) {
   if (!secret) return json(503, { error: "not configured" });
   if (!jobRequestAllowed(request.headers.get("authorization"), secret)) return json(401, { error: "not allowed" });
   try {
-    return json(200, await runChargeJob());
+    const charges = await runChargeJob();
+    // Then the customer emails those charges (or anything else) queued. Emails never hold
+    // up or fail a charge run.
+    const notices = await sendDueNotices().catch(() => {
+      console.error("charge job: the emails couldn't be sent this run");
+      return null;
+    });
+    return json(200, { ...charges, ...(notices && !notices.off ? { emails: notices } : {}) });
   } catch {
     console.error("charge job: the run couldn't start");
     return json(500, { error: "try again" });

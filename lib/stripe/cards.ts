@@ -44,6 +44,19 @@ export async function createSetupIntent(seriesId: string, stripeCustomerId: stri
   );
 }
 
+/**
+ * A SetupIntent for replacing the customer's card later on (the "use a different card" form).
+ * A fresh one every time: the booking one may already be used up.
+ */
+export async function createCardUpdateIntent(seriesId: string, stripeCustomerId: string, profileId: string): Promise<Stripe.SetupIntent> {
+  return getStripe().setupIntents.create({
+    customer: stripeCustomerId,
+    usage: "off_session",
+    allowed_payment_method_types: ["card"],
+    metadata: { series_id: seriesId, profile_id: profileId },
+  });
+}
+
 const SERIES_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -53,20 +66,23 @@ const SERIES_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
  * A mismatch or an ended block stores nothing and isn't retried (it would never succeed).
  */
 export async function onSetupIntentSucceeded(event: Stripe.Event): Promise<void> {
-  const si = event.data.object as Stripe.SetupIntent;
+  const outcome = await storeSavedCard(event.data.object as Stripe.SetupIntent);
+  if (outcome !== "saved") console.warn(`stripe: setup_intent.succeeded ${event.id}: ${outcome}; nothing stored`);
+}
+
+/**
+ * Stores the card a succeeded SetupIntent saved. The SetupIntent must come from Stripe (a
+ * signed event, or fetched from Stripe by the server), never from a browser. Throws when the
+ * database can't be reached, so a webhook is retried.
+ */
+export async function storeSavedCard(si: Stripe.SetupIntent): Promise<"saved" | "no_series" | "mismatch" | "incomplete"> {
   const seriesId = si.metadata?.series_id;
   const customer = typeof si.customer === "string" ? si.customer : si.customer?.id;
   const pmId = typeof si.payment_method === "string" ? si.payment_method : si.payment_method?.id;
-  if (si.status !== "succeeded" || !seriesId || !SERIES_ID.test(seriesId) || !customer || !pmId) {
-    console.warn(`stripe: setup_intent.succeeded ${event.id} is missing what Ping needs; ignored`);
-    return;
-  }
+  if (si.status !== "succeeded" || !seriesId || !SERIES_ID.test(seriesId) || !customer || !pmId) return "incomplete";
   const pm = await getStripe().paymentMethods.retrieve(pmId);
   const pmCustomer = typeof pm.customer === "string" ? pm.customer : pm.customer?.id;
-  if (pmCustomer !== customer || pm.type !== "card" || !pm.card) {
-    console.warn(`stripe: setup_intent.succeeded ${event.id}: the card isn't attached to that customer; ignored`);
-    return;
-  }
+  if (pmCustomer !== customer || pm.type !== "card" || !pm.card) return "mismatch";
   const saved = await createAdminClient().rpc("stripe_card_saved", {
     p_series: seriesId,
     p_stripe_customer: customer,
@@ -77,5 +93,5 @@ export async function onSetupIntentSucceeded(event: Stripe.Event): Promise<void>
     p_exp_year: pm.card.exp_year,
   });
   if (saved.error) throw new Error("couldn't save the card"); // retried by Stripe
-  if (saved.data !== "saved") console.warn(`stripe: setup_intent.succeeded ${event.id}: ${saved.data}; nothing stored`);
+  return saved.data === "saved" ? "saved" : saved.data === "no_series" ? "no_series" : "mismatch";
 }

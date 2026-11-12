@@ -396,6 +396,7 @@ export type Database = {
           disputed_at: string | null;
           dispute_status: string | null;
           charge_started_at: string | null;
+          customer_tries: number;
         };
         Insert: {
           id?: string;
@@ -420,6 +421,7 @@ export type Database = {
           disputed_at?: string | null;
           dispute_status?: string | null;
           charge_started_at?: string | null;
+          customer_tries?: number;
         };
         Update: {
           id?: string;
@@ -444,6 +446,7 @@ export type Database = {
           disputed_at?: string | null;
           dispute_status?: string | null;
           charge_started_at?: string | null;
+          customer_tries?: number;
         };
         Relationships: [];
       };
@@ -1167,6 +1170,31 @@ export type Database = {
           attempt: number;
           idempotency_key: string;
         }[];
+      };
+      customer_pay_begin: {
+        Args: { p_payment: string; p_customer: string };
+        Returns: {
+          problem: "not_found" | "already_paid" | "in_progress" | "no_card" | "not_ready" | "too_many" | null;
+          payment_id: string;
+          mode: "create" | "retry" | "check";
+          visit_id: string;
+          amount_pence: number;
+          application_fee_pence: number;
+          stripe_customer_id: string | null;
+          payment_method_id: string | null;
+          cleaner_account_id: string | null;
+          payment_intent_id: string | null;
+          attempt: number;
+          idempotency_key: string;
+        }[];
+      };
+      customer_payment_intent: {
+        Args: { p_payment: string; p_customer: string };
+        Returns: string | null;
+      };
+      customer_card_series: {
+        Args: { p_payment: string; p_customer: string };
+        Returns: string | null;
       };
       notices_claim: {
         Args: { p_limit?: number };

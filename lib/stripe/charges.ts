@@ -98,16 +98,20 @@ export function readStripeError(e: unknown): { kind: "answer"; result: ChargeRes
   return { kind: "unknown" }; // network, rate limit, Stripe down: the try is picked up again later
 }
 
-type Claimed = Database["public"]["Functions"]["charge_claim"]["Returns"][number];
+export type Claimed = Database["public"]["Functions"]["charge_claim"]["Returns"][number];
 
-async function send(row: Claimed): Promise<Stripe.PaymentIntent> {
+/**
+ * Sends one try. `present` = the customer pressed "Pay now" themselves (lib/stripe/pay.ts):
+ * the charge is on-session, so their bank can ask them to confirm there and then.
+ */
+export async function sendCharge(row: Claimed, present = false): Promise<Stripe.PaymentIntent> {
   const stripe = getStripe();
   if (row.mode === "check" && row.payment_intent_id) return stripe.paymentIntents.retrieve(row.payment_intent_id);
   if (!row.stripe_customer_id || !row.payment_method_id || !row.cleaner_account_id) throw new Error("claimed charge is missing its card or cleaner");
   if (row.mode === "retry" && row.payment_intent_id) {
     return stripe.paymentIntents.confirm(
       row.payment_intent_id,
-      { payment_method: row.payment_method_id, off_session: true },
+      { payment_method: row.payment_method_id, ...(present ? { use_stripe_sdk: true } : { off_session: true }) },
       { idempotencyKey: `${row.idempotency_key}:confirm:${row.attempt}` },
     );
   }
@@ -118,7 +122,8 @@ async function send(row: Claimed): Promise<Stripe.PaymentIntent> {
       customer: row.stripe_customer_id,
       payment_method: row.payment_method_id,
       allowed_payment_method_types: ["card"], // cards only, so Stripe never needs a page to send the customer back to
-      off_session: true, // the customer isn't there: the clean has just finished
+      // The job: the customer isn't there, the clean has just finished. "Pay now": they are.
+      ...(present ? { use_stripe_sdk: true } : { off_session: true }),
       confirm: true,
       on_behalf_of: row.cleaner_account_id, // the cleaner is the seller
       transfer_data: { destination: row.cleaner_account_id },
@@ -132,7 +137,7 @@ async function send(row: Claimed): Promise<Stripe.PaymentIntent> {
 type Db = ReturnType<typeof createAdminClient>;
 
 /** Hands Stripe's answer to the database, which checks it and decides what changes. */
-async function record(db: Db, paymentId: string, r: ChargeResult, eventAt: Date | null): Promise<string> {
+export async function recordChargeResult(db: Db, paymentId: string, r: ChargeResult, eventAt: Date | null): Promise<string> {
   const saved = await db.rpc("stripe_payment_result", {
     p_payment: paymentId,
     p_intent: r.intentId,
@@ -166,7 +171,7 @@ export async function runChargeJob(limit = 10): Promise<ChargeRun> {
     try {
       let result: ChargeResult;
       try {
-        result = readIntent(await send(row));
+        result = readIntent(await sendCharge(row));
       } catch (e) {
         const read = readStripeError(e);
         if (read.kind === "refused" && row.mode === "create") {
@@ -179,7 +184,7 @@ export async function runChargeJob(limit = 10): Promise<ChargeRun> {
         if (read.kind !== "answer") throw e;
         result = read.result;
       }
-      const outcome = await record(db, row.payment_id, result, null);
+      const outcome = await recordChargeResult(db, row.payment_id, result, null);
       if (outcome === "succeeded" || outcome === "already") run.succeeded++;
       else if (outcome === "failed") run.failed++;
       else if (outcome === "requires_action") run.needsCustomer++;
@@ -227,7 +232,7 @@ export async function onPaymentIntentEvent(event: Stripe.Event): Promise<void> {
     result.outcome = "failed";
     result.error = result.error ?? (event.type === "payment_intent.canceled" ? "canceled" : "payment_failed");
   }
-  const outcome = await record(createAdminClient(), paymentId, result, new Date(event.created * 1000));
+  const outcome = await recordChargeResult(createAdminClient(), paymentId, result, new Date(event.created * 1000));
   if (outcome === "mismatch" || outcome === "unknown") console.warn(`stripe: ${event.type} ${event.id}: ${outcome}; nothing recorded`);
 }
 

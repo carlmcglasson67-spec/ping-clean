@@ -124,6 +124,22 @@ export function startFakeStripe(port = 12111) {
         state.onboardingOutcome = JSON.parse(raw || "{}").outcome ?? "complete";
         return send(res, 200, {});
       }
+      const bank = path.match(/^\/__test\/payment_intents\/(pi_[A-Za-z0-9_]+)\/bank$/);
+      if (bank && req.method === "POST") {
+        const pi = state.paymentIntents.get(bank[1]);
+        if (!pi) return error(res, 404, "No such payment_intent");
+        if (JSON.parse(raw || "{}").ok === false) Object.assign(pi, { status: "requires_payment_method", payment_method: null, next_action: null,
+          last_payment_error: { type: "card_error", code: "payment_intent_authentication_failure", message: "Authentication failed." } });
+        else Object.assign(pi, { status: "succeeded", amount_received: pi.amount, latest_charge: rid("ch"), next_action: null, last_payment_error: null });
+        return send(res, 200, pi);
+      }
+      const setSeti = path.match(/^\/__test\/setup_intents\/(seti_[A-Za-z0-9_]+)$/);
+      if (setSeti && req.method === "POST") {
+        const si = state.setupIntents.get(setSeti[1]);
+        if (!si) return error(res, 404, "No such setup_intent");
+        Object.assign(si, JSON.parse(raw || "{}"));
+        return send(res, 200, si);
+      }
       if (path === "/__test/requests") return send(res, 200, state.requests);
       if (path === "/__test/reset" && req.method === "POST") {
         for (const m of [state.customers, state.setupIntents, state.paymentMethods, state.accounts, state.paymentIntents, state.idempotent]) m.clear();
@@ -154,6 +170,11 @@ export function startFakeStripe(port = 12111) {
           payment_method: null, metadata: b.metadata ?? {}, livemode: false };
         state.setupIntents.set(id, si);
         return remember(si);
+      }
+      const seti = path.match(/^\/v1\/setup_intents\/(seti_[A-Za-z0-9_]+)$/);
+      if (seti && req.method === "GET") {
+        const found = state.setupIntents.get(seti[1]);
+        return found ? send(res, 200, found) : error(res, 404, `No such setup_intent: '${seti[1]}'`);
       }
       if (path === "/v1/accounts" && req.method === "POST") {
         if (b.type !== "express" || b.country !== "GB") return error(res, 400, "The fake only makes GB Express accounts");
@@ -190,6 +211,10 @@ export function startFakeStripe(port = 12111) {
           Object.assign(pi, { status: "succeeded", amount_received: pi.amount, latest_charge: rid("ch"), last_payment_error: null });
           return remember({ ...pi });
         }
+        if (behaviour === "auth" && pi.__present) {
+          Object.assign(pi, { status: "requires_action", last_payment_error: null, next_action: { type: "use_stripe_sdk" } });
+          return remember({ ...pi });
+        }
         const code = behaviour === "auth" ? "authentication_required" : "card_declined";
         const decline_code = behaviour === "auth" ? "authentication_required" : "insufficient_funds";
         Object.assign(pi, { status: "requires_payment_method", payment_method: null, latest_charge: rid("ch"),
@@ -200,11 +225,13 @@ export function startFakeStripe(port = 12111) {
         const amount = Number(b.amount), fee = Number(b.application_fee_amount);
         const dest = b.transfer_data?.destination;
         if (!Number.isInteger(amount) || amount <= 0 || b.currency !== "gbp") return error(res, 400, "Invalid amount or currency");
-        if (b.confirm !== "true" || b.off_session !== "true" || !b.customer || !b.payment_method) return error(res, 400, "The fake only takes confirmed off-session charges on a saved card");
+        if (b.confirm !== "true" || !b.customer || !b.payment_method) return error(res, 400, "The fake only takes confirmed charges on a saved card");
+        // Off-session (the job) or with the customer present (use_stripe_sdk: "Pay now"), never neither.
+        if ((b.off_session === "true") === (b.use_stripe_sdk === "true")) return error(res, 400, "Say whether the customer is present: off_session or use_stripe_sdk");
         if (!/^acct_[A-Za-z0-9]{6,64}$/.test(dest ?? "") || b.on_behalf_of !== dest) return error(res, 400, "The fake only takes destination charges made on the destination's behalf");
         if (!Number.isInteger(fee) || fee < 0 || fee > amount) return error(res, 400, "Invalid application_fee_amount");
         const id = rid("pi");
-        const pi = { id, object: "payment_intent", amount, amount_received: 0, currency: "gbp", customer: b.customer, payment_method: null,
+        const pi = { id, object: "payment_intent", __present: b.use_stripe_sdk === "true", amount, amount_received: 0, currency: "gbp", customer: b.customer, payment_method: null,
           application_fee_amount: fee, on_behalf_of: dest, transfer_data: { destination: dest }, latest_charge: null,
           last_payment_error: null, status: "requires_confirmation", client_secret: `${id}_secret_${randomBytes(8).toString("hex")}`,
           metadata: b.metadata ?? {}, created: Math.floor(Date.now() / 1000), livemode: false };
@@ -216,6 +243,8 @@ export function startFakeStripe(port = 12111) {
         const pi = state.paymentIntents.get(confirm[1]);
         if (!pi) return error(res, 404, `No such payment_intent: '${confirm[1]}'`);
         if (pi.status === "succeeded") return error(res, 400, "This PaymentIntent has already succeeded");
+        if ((b.off_session === "true") === (b.use_stripe_sdk === "true")) return error(res, 400, "Say whether the customer is present: off_session or use_stripe_sdk");
+        pi.__present = b.use_stripe_sdk === "true";
         return attempt(pi, b.payment_method ?? pi.payment_method);
       }
       const intent = path.match(/^\/v1\/payment_intents\/(pi_[A-Za-z0-9_]+)$/);
