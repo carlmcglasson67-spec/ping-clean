@@ -57,7 +57,7 @@ const tier = z.enum(["new", "approved", "top"]);
 /** Optional note: empty is fine, but if given it follows the same rule as a reason. */
 const note = z.string().trim().max(300, "Keep it to 300 characters.").optional();
 
-/** A decision on a cleaner. `expected` is the status the admin was looking at. */
+/** A decision on a cleaner. The database checks the move fits where they stand now (PC053 if not). */
 export const decisionInput = z.discriminatedUnion("decision", [
   z.object({ decision: z.literal("approve"), cleanerId: z.string(), tier, note }),
   z.object({ decision: z.literal("decline"), cleanerId: z.string(), reason }),

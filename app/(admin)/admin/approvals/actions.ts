@@ -63,7 +63,7 @@ export async function reviewDocument(raw: unknown): Promise<ActionResult> {
 const DONE = {
   approve: "Approved. They can see and take jobs now.",
   decline: "Declined. They've been told nothing by Ping: let them know yourself.",
-  suspend: "Suspended. They can't see jobs or addresses any more. Check the jobs page for their blocks.",
+  suspend: "Suspended. They can't see jobs or addresses any more. Their blocks are flagged on the overview: sort those next.",
   reactivate: "Back on. They can see and take jobs again.",
   tier: "Tier changed.",
 } as const;

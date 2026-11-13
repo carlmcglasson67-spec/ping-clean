@@ -80,7 +80,8 @@ begin
   end if;
 
   select * into c from public.cleaners where id = p_cleaner for update;
-  if not found then
+  if not found or p_cleaner = me
+     or not exists (select 1 from public.profiles p where p.id = p_cleaner and p.role = 'cleaner') then
     raise exception 'That cleaner was not found' using errcode = 'PC053', detail = 'missing';
   end if;
 
@@ -91,6 +92,10 @@ begin
   end if;
 
   if p_decision in ('approve', 'reactivate') then
+    -- Lock their documents first: a review of one that's still in flight (another admin
+    -- sending a document back) finishes before the checks are read, so nobody is approved
+    -- on a document that was being rejected at the same moment.
+    perform 1 from public.cleaner_documents where cleaner_id = p_cleaner order by id for update;
     waiting := private.cleaner_checks_waiting(p_cleaner);
     if cardinality(waiting) > 0 then
       raise exception 'The four checks aren''t all verified and in date'
@@ -104,6 +109,16 @@ begin
     update public.cleaners set status = 'left' where id = p_cleaner;
   elsif p_decision = 'suspend' then
     update public.cleaners set status = 'suspended' where id = p_cleaner;
+    -- They can't start a clean any more, so every block they hold with cleans still to come
+    -- needs the office now, not when the first clean is missed.
+    insert into public.engine_alerts (kind, series_id, message)
+    select 'block_stalled', sr.id,
+           'This block''s cleaner has been suspended and can''t do its cleans. Give it to another cleaner or end it, and tell the customer.'
+      from public.series sr
+     where sr.cleaner_id = p_cleaner and sr.status in ('claimed', 'paused')
+       and exists (select 1 from public.visits v where v.series_id = sr.id and v.status in ('scheduled', 'in_progress'))
+       and not exists (select 1 from public.engine_alerts a
+                        where a.series_id = sr.id and a.kind = 'block_stalled' and a.resolved_at is null);
   else
     update public.cleaners set status = 'active' where id = p_cleaner;
   end if;
@@ -135,7 +150,8 @@ begin
   end if;
 
   select * into c from public.cleaners where id = p_cleaner for update;
-  if not found then
+  if not found or p_cleaner = me
+     or not exists (select 1 from public.profiles p where p.id = p_cleaner and p.role = 'cleaner') then
     raise exception 'That cleaner was not found' using errcode = 'PC053', detail = 'missing';
   end if;
   if c.status <> 'active' then
@@ -151,3 +167,24 @@ begin
 end $$;
 revoke all on function public.admin_set_cleaner_tier(uuid, public.cleaner_tier, text) from public, anon;
 grant execute on function public.admin_set_cleaner_tier(uuid, public.cleaner_tier, text) to authenticated;
+
+-- ---------------------------------------------------------------- a way back from suspended
+-- Reactivating needs all four checks in date, so a suspended cleaner must be able to send a
+-- new document (an insurance that ran out while they were suspended). Uploads stay pending
+-- and still give them no jobs or addresses.
+drop policy documents_insert_own on public.cleaner_documents;
+create policy documents_insert_own on public.cleaner_documents
+  for insert to authenticated
+  with check (
+    cleaner_id = (select auth.uid())
+    and exists (select 1 from public.cleaners c where c.id = (select auth.uid()) and c.status in ('applicant', 'active', 'suspended'))
+  );
+
+drop policy "documents: owner uploads" on storage.objects;
+create policy "documents: owner uploads" on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'cleaner-documents'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+    and exists (select 1 from public.cleaners c where c.id = (select auth.uid()) and c.status in ('applicant', 'active', 'suspended'))
+  );

@@ -35,7 +35,7 @@ const COPY: Record<Mode, { open: string; confirm: string; lede: string; why: str
   suspend: {
     open: "Suspend",
     confirm: "Suspend this cleaner",
-    lede: "They lose jobs and customers' addresses at once. Blocks they hold will stall and show on the jobs page: reassign or end those.",
+    lede: "They lose jobs and customers' addresses at once. Every block they hold is flagged on the overview straight away: give each to another cleaner or end it, and tell the customer.",
     why: "Why are they being suspended? Only the team sees this.",
     whyRequired: true,
   },

@@ -1,6 +1,6 @@
 // Cleaner decisions (shared request C-1): approve, decline, suspend, reactivate, change tier.
 import { afterAll, describe, expect, it } from "vitest";
-import { as, DENIED, pool, U, type Query } from "./helpers";
+import { as, DENIED, IDS, pool, U, type Query } from "./helpers";
 
 afterAll(() => pool.end());
 
@@ -173,6 +173,47 @@ describe("declining, suspending, reactivating", () => {
     expect(r.tara.status).toBe("active");
     expect(r.tara.tier).toBe("top");
     expect(r.log).toEqual(["suspend", "reactivate"]);
+  });
+
+  it("suspending flags every block they hold with cleans to come, once", async () => {
+    const r = await as("superuser", async (q) => {
+      const open = () => q.rows<{ series_id: string }>(`select series_id from public.engine_alerts where kind = 'block_stalled' and resolved_at is null`);
+      const before = (await open()).length;
+      await review(q, U.tara, "suspend", null, "Two no-shows this month");
+      const after = await open();
+      await review(q, U.alex, "suspend", null, "Not answering the phone"); // holds nothing
+      return { before, after, afterAlex: (await open()).length };
+    });
+    expect(r.before).toBe(0);
+    expect(r.after).toEqual([{ series_id: IDS.annaSeries }]);
+    expect(r.afterAlex).toBe(1);
+  });
+
+  it("a suspended cleaner can send a new document (the way back), but still can't review it", async () => {
+    const r = await as("superuser", async (q) => {
+      await review(q, U.tara, "suspend", null, "Insurance ran out");
+      await q.actAs(U.tara);
+      const upload = await q.attempt(`insert into public.cleaner_documents (cleaner_id, kind, storage_path) values ($1::uuid, 'insurance', $1::text || '/new-cover.pdf')`, [U.tara]);
+      const verify = await q.attempt(`update public.cleaner_documents set status = 'verified', reviewed_by = $1 where cleaner_id = $1`, [U.tara]);
+      await su(q);
+      await review(q, U.sam, "decline", null, "No right to work document");
+      await q.actAs(U.sam);
+      const declined = await q.attempt(`insert into public.cleaner_documents (cleaner_id, kind, storage_path) values ($1::uuid, 'dbs', $1::text || '/again.pdf')`, [U.sam]);
+      return { upload, verify, declined };
+    });
+    expect(r.upload).toBe("ok");
+    expect(["no-rows", DENIED]).toContain(r.verify);
+    expect(r.declined).toBe(DENIED);
+  });
+
+  it("an admin can't be decided on, not even by themselves", async () => {
+    const r = await as("superuser", async (q) => {
+      await q.rows(`insert into public.cleaners (id) values ($1)`, [U.admin]);
+      await allVerified(q, U.admin);
+      return { self: await review(q, U.admin, "approve", "top", null), tier: await setTier(q, U.admin, "top", "Because I can") };
+    });
+    expect(r.self).toEqual({ code: "PC053", detail: "missing" });
+    expect(r.tier).toEqual({ code: "PC053", detail: "missing" });
   });
 });
 
