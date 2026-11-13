@@ -29,7 +29,7 @@ export default async function CancelCleanPage({ params }: { params: Promise<{ id
   const summary = (
     <aside className="relative overflow-hidden rounded-xl signal-waves p-8 text-on-navy sm:p-10 lg:col-span-5">
       <p className="text-sm font-semibold uppercase tracking-[0.14em] text-teal">The clean</p>
-      <p className="mt-6 font-display text-3xl font-semibold leading-tight sm:text-4xl">{formatDay(v.scheduled_date)}</p>
+      <p className="mt-6 text-balance font-display text-2xl font-semibold leading-tight">{formatDay(v.scheduled_date)}</p>
       <p className="mt-3 text-lg text-on-navy-2">{formatWindow(v.window_start, v.window_end)} · {formatDuration(v.duration_minutes)}</p>
       <p className="mt-8 border-t border-line-navy pt-5 text-on-navy-2">{formatPence(v.price_pence)} when it&rsquo;s done. Nothing has been charged for it.</p>
     </aside>
@@ -46,7 +46,7 @@ export default async function CancelCleanPage({ params }: { params: Promise<{ id
         {summary}
         <Card className="grid content-start gap-6 p-8 sm:p-12 lg:col-span-7">
           <Badge className="justify-self-start">Can&rsquo;t be cancelled here</Badge>
-          <h1 className="text-3xl font-semibold sm:text-4xl">This clean can&rsquo;t be cancelled now.</h1>
+          <h1 className="text-balance text-2xl font-semibold sm:text-3xl">This clean can&rsquo;t be cancelled now.</h1>
           <p className="max-w-prose text-lg text-navy-2">
             {v.status === "cancelled" ? "It’s already cancelled." : v.status === "completed" ? "It’s already been done." : "Its time has started, or your cleaner is already there. If something’s wrong, call the Ping office."}
           </p>
@@ -63,7 +63,7 @@ export default async function CancelCleanPage({ params }: { params: Promise<{ id
       <Card className="grid content-start gap-7 p-8 sm:p-12 lg:col-span-7" data-cancel-quote={q.fee_pence}>
         <Badge tone={free ? "ok" : "warn"} className="justify-self-start">{free ? "Free to cancel" : "Short notice"}</Badge>
         <div className="grid gap-4">
-          <h1 className="text-3xl font-semibold sm:text-4xl">
+          <h1 className="text-balance text-2xl font-semibold sm:text-3xl">
             {free ? "Cancel this clean?" : <>Cancelling now costs <span className="tabular">{formatPence(q.fee_pence)}</span>.</>}
           </h1>
           <p className="max-w-prose text-lg text-navy-2">
