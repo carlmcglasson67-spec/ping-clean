@@ -117,6 +117,38 @@ describe("when it can't be done", () => {
     expect(r.after.visits.filter((v) => v.status === "cancelled")).toEqual([]);
   });
 
+  it("an old clean the office still has to settle doesn't lock the customer out, and is left as it is", async () => {
+    const r = await as("superuser", async (q) => {
+      await q.rows(`update public.visits set status = 'in_progress', started_at = now() - interval '3 days', scheduled_date = scheduled_date - 3 where id = $1`, [IDS.visitToday]);
+      const told = await quote(q);
+      const done = await cancel(q, 0);
+      return { told, done, after: await state(q) };
+    });
+    expect(r.told).toMatchObject({ can_cancel: true, cleans: 1, under_way: 0 });
+    expect(r.done).toBe(1);
+    expect(r.after.series.status).toBe("ended");
+    expect(r.after.visits.map((v) => v.status).sort()).toEqual(["cancelled", "completed", "in_progress"]);
+  });
+
+  it("a block on hold for an unpaid clean can still be cancelled; the unpaid payment stays owed", async () => {
+    const r = await as("superuser", async (q) => {
+      await todayStartsIn(q, 72);
+      await q.rows(`alter table public.series disable trigger user`);
+      await q.rows(`update public.series set status = 'paused' where id = $1`, [series]);
+      await q.rows(`alter table public.series enable trigger user`);
+      const owedBefore = (await q.rows(`select 1 from public.payments p join public.visits v on v.id = p.visit_id where v.series_id = $1`, [series])).length;
+      const told = await quote(q);
+      const done = await cancel(q, 0);
+      const owedAfter = (await q.rows(`select 1 from public.payments p join public.visits v on v.id = p.visit_id where v.series_id = $1`, [series])).length;
+      return { told, done, owedBefore, owedAfter, after: await state(q) };
+    });
+    expect(r.told).toMatchObject({ can_cancel: true, cleans: 2, fee_pence: 0 }); // on hold: nobody is holding the time, so no fee
+    expect(r.done).toBe(2);
+    expect(r.after.series.status).toBe("ended");
+    expect(r.owedAfter).toBe(r.owedBefore);
+    expect(r.after.fees).toEqual([]);
+  });
+
   it("only the block's own customer: another customer, the cleaner, the admin and anon are refused", async () => {
     const r = await as("superuser", async (q) => {
       await todayStartsIn(q, 72);
@@ -144,6 +176,25 @@ describe("when it can't be done", () => {
     expect(r.first).toBe(2);
     expect(r.again).toBe("PC054");
     expect(r.told).toMatchObject({ can_cancel: false });
+  });
+});
+
+describe("the fee that was checked is the fee that's charged", () => {
+  it("cancel_one never reads the settings: it charges exactly the terms it is handed", async () => {
+    const r = await as("superuser", async (q) => {
+      await fee(q, 2000);
+      await todayStartsIn(q, 5);
+      // The terms as checked (late, £20 = £15 + £5)... then the setting changes before the clean is cancelled.
+      await fee(q, 9900);
+      await q.rows(`select private.cancel_one($1, $2, true, 2000, 1500, 500)`, [IDS.visitToday, U.anna]);
+      return state(q);
+    });
+    expect(r.fees).toEqual([{ amount_pence: 2000, cleaner_amount_pence: 1500, application_fee_pence: 500 }]);
+  });
+
+  it("cancel_one can't be called by a signed-in person", async () => {
+    const code = await as("anna", (q) => q.attempt(`select private.cancel_one($1, $2, false, 0, 0, 0)`, [IDS.visitToday, U.anna]));
+    expect(code).toBe(DENIED);
   });
 });
 

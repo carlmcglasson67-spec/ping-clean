@@ -11,40 +11,40 @@
 --
 --   PC035 the total changed since the customer was shown it (nothing is cancelled)
 --   PC054 not their booking, or it has already ended
---   PC055 a clean is under way or its time has started: cancel the rest once it's finished
+--   PC055 today's clean is under way or its time has started: cancel the rest once it's finished
 
 -- ---------------------------------------------------------------- one clean
--- Cancels one clean for its customer. The caller has already checked it's theirs, locked it,
--- and that it can still be cancelled. Returns the fee (0 = none) and whether it was late.
-create function private.cancel_one(p_visit uuid, p_customer uuid, out fee_pence integer, out late boolean)
+-- Cancels one clean for its customer, at the terms the caller has already read and checked
+-- against what the customer was shown. The terms are passed in, never read again here: the
+-- fee that was checked is the fee that's charged, even if a setting changes at that moment.
+-- The caller has also checked it's theirs, locked it, and that it can still be cancelled.
+create function private.cancel_one(
+  p_visit uuid, p_customer uuid, p_late boolean, p_fee_pence integer, p_cleaner_pence integer, p_ping_pence integer
+) returns void
 language plpgsql volatile security definer set search_path = '' as $$
 declare
   v public.visits;
-  t record;
   pid uuid := gen_random_uuid();
 begin
   select * into v from public.visits where id = p_visit;
-  select * into t from private.late_cancel_terms(v.id);
-  fee_pence := t.fee_pence; late := t.late;
-
   perform set_config('app.actor', 'customer:' || p_customer, true);
   update public.visits
      set status = 'cancelled', cancelled_at = now(), cancelled_by = p_customer,
-         cancel_reason = case when t.late then 'customer_late' else 'customer' end,
-         late_cancel_fee_pence = t.fee_pence
+         cancel_reason = case when p_late then 'customer_late' else 'customer' end,
+         late_cancel_fee_pence = p_fee_pence
    where id = v.id;
-  if t.fee_pence > 0 then
+  if p_fee_pence > 0 then
     insert into public.payments (id, visit_id, customer_id, amount_pence, application_fee_pence, cleaner_amount_pence, kind, idempotency_key)
-    values (pid, v.id, p_customer, t.fee_pence, t.ping_pence, t.cleaner_pence, 'late_cancel', 'payment:' || pid);
+    values (pid, v.id, p_customer, p_fee_pence, p_ping_pence, p_cleaner_pence, 'late_cancel', 'payment:' || pid);
   end if;
-  if t.late and v.cleaner_id is not null then
+  if p_late and v.cleaner_id is not null then
     insert into public.engine_alerts (kind, series_id, visit_id, message)
     values ('visit_cancelled_late', v.series_id, v.id,
             'The customer cancelled this clean at short notice. It has gone from the cleaner''s app, but nothing tells them: ring or text them so they don''t travel.'
-            || case when t.fee_pence > 0 then ' The late-cancellation fee is being charged.' else '' end);
+            || case when p_fee_pence > 0 then ' The late-cancellation fee is being charged.' else '' end);
   end if;
 end $$;
-revoke all on function private.cancel_one(uuid, uuid) from public, anon, authenticated;
+revoke all on function private.cancel_one(uuid, uuid, boolean, integer, integer, integer) from public, anon, authenticated;
 
 -- As PR 11, now through private.cancel_one. Behaviour unchanged.
 create or replace function public.cancel_visit(p_visit uuid, p_shown_fee_pence integer) returns text
@@ -53,11 +53,15 @@ declare
   me uuid := (select auth.uid());
   v public.visits;
   t record;
-  done record;
 begin
   if (select private.my_role()) is distinct from 'customer' then
     raise exception 'Only the customer can cancel their clean' using errcode = '42501';
   end if;
+  -- Lock order: series, then visit (as cancel_block and the visit-day functions), so a single
+  -- cancel and a block cancel at the same moment queue up rather than deadlock.
+  perform 1 from public.series sr
+    where sr.id = (select x.series_id from public.visits x where x.id = p_visit and x.customer_id = me)
+    for share;
   select * into v from public.visits where id = p_visit and customer_id = me for update;
   if not found then
     raise exception 'That clean isn''t yours' using errcode = 'PC034';
@@ -69,8 +73,8 @@ begin
   if t.fee_pence is distinct from coalesce(p_shown_fee_pence, -1) then
     raise exception 'The cost of cancelling has changed' using errcode = 'PC035';
   end if;
-  select * into done from private.cancel_one(v.id, me);
-  return case when done.fee_pence > 0 then 'cancelled_with_fee' when done.late then 'cancelled_late' else 'cancelled' end;
+  perform private.cancel_one(v.id, me, t.late, t.fee_pence, t.cleaner_pence, t.ping_pence);
+  return case when t.fee_pence > 0 then 'cancelled_with_fee' when t.late then 'cancelled_late' else 'cancelled' end;
 end $$;
 
 -- ---------------------------------------------------------------- the rest of the block
@@ -78,8 +82,10 @@ end $$;
 --   cleans     how many would be cancelled (booked, time not started)
 --   late       how many of those are at short notice
 --   fee_pence  the total of their late-cancellation fees
---   under_way  cleans that have started or whose time has begun: while there are any, the
---              rest can't be cancelled in one go (the block has to stay live for that clean)
+--   under_way  today's cleans that have started or whose time has begun: while there are
+--              any, the rest can't be cancelled in one go (the block has to stay live for that
+--              clean). An old clean the office still has to settle doesn't count, and is left
+--              exactly as it is.
 create function public.cancel_block_quote(p_series uuid)
 returns table (can_cancel boolean, cleans integer, late integer, fee_pence integer, under_way integer)
 language plpgsql stable security definer set search_path = '' as $$
@@ -94,9 +100,10 @@ begin
   select count(*) filter (where cancellable)::integer,
          count(*) filter (where cancellable and t.late)::integer,
          coalesce(sum(t.fee_pence) filter (where cancellable), 0)::integer,
-         count(*) filter (where not cancellable)::integer
+         count(*) filter (where not cancellable and x.scheduled_date = private.london_today())::integer
     into cleans, late, fee_pence, under_way
-    from (select v.id, v.status = 'scheduled' and now() < (v.scheduled_date + v.window_start) at time zone 'Europe/London' as cancellable
+    from (select v.id, v.scheduled_date,
+                 v.status = 'scheduled' and now() < (v.scheduled_date + v.window_start) at time zone 'Europe/London' as cancellable
             from public.visits v
            where v.series_id = s.id and v.status in ('scheduled', 'in_progress')) x
     cross join lateral private.late_cancel_terms(x.id) t;
@@ -111,10 +118,9 @@ language plpgsql volatile security definer set search_path = '' as $$
 declare
   me uuid := (select auth.uid());
   s public.series;
-  v_id uuid;
-  ids uuid[];
+  r record;
   total integer := 0;
-  done record;
+  charged integer := 0;
   n integer := 0;
 begin
   if (select private.my_role()) is distinct from 'customer' then
@@ -126,25 +132,39 @@ begin
     raise exception 'That booking isn''t yours, or it has already ended' using errcode = 'PC054';
   end if;
   perform 1 from public.visits v where v.series_id = s.id and v.status in ('scheduled', 'in_progress') order by v.id for update;
+  -- Today's clean, started or with its time begun: the block stays live for it.
   if exists (select 1 from public.visits v
-              where v.series_id = s.id
+              where v.series_id = s.id and v.scheduled_date = private.london_today()
                 and (v.status = 'in_progress'
                      or (v.status = 'scheduled' and now() >= (v.scheduled_date + v.window_start) at time zone 'Europe/London'))) then
     raise exception 'A clean is under way' using errcode = 'PC055';
   end if;
 
-  select coalesce(array_agg(v.id order by v.scheduled_date, v.id), '{}') into ids
-    from public.visits v where v.series_id = s.id and v.status = 'scheduled';
+  -- The terms of every clean that can still be cancelled, read once. The total is checked
+  -- against what the customer saw, and those same figures are what's charged.
   select coalesce(sum(t.fee_pence), 0)::integer into total
-    from unnest(ids) as i (id) cross join lateral private.late_cancel_terms(i.id) t;
+    from public.visits v cross join lateral private.late_cancel_terms(v.id) t
+   where v.series_id = s.id and v.status = 'scheduled'
+     and now() < (v.scheduled_date + v.window_start) at time zone 'Europe/London';
   if total is distinct from coalesce(p_shown_fee_pence, -1) then
     raise exception 'The cost of cancelling has changed' using errcode = 'PC035';
   end if;
-
-  foreach v_id in array ids loop
-    select * into done from private.cancel_one(v_id, me);
+  for r in
+    select v.id, t.late, t.fee_pence, t.cleaner_pence, t.ping_pence
+      from public.visits v cross join lateral private.late_cancel_terms(v.id) t
+     where v.series_id = s.id and v.status = 'scheduled'
+       and now() < (v.scheduled_date + v.window_start) at time zone 'Europe/London'
+     order by v.scheduled_date, v.id
+  loop
+    perform private.cancel_one(r.id, me, r.late, r.fee_pence, r.cleaner_pence, r.ping_pence);
     n := n + 1;
+    charged := charged + r.fee_pence;
   end loop;
+  -- Belt and braces: the loop's query is its own read, so if anything moved between the two,
+  -- everything is rolled back and the customer is shown the new figure.
+  if charged is distinct from total then
+    raise exception 'The cost of cancelling has changed' using errcode = 'PC035';
+  end if;
 
   -- Ends the block (offers withdrawn, nothing more booked) and tells the office.
   perform private.close_block(s.id, null, 'The customer cancelled the rest of their cleans (' || n || ').');
