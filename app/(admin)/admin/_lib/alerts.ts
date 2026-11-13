@@ -18,7 +18,8 @@ export type AlertKind =
   | "payout_stuck"
   | "refund_failed"
   | "refund_after_payout"
-  | "payment_disputed";
+  | "payment_disputed"
+  | "visit_cancelled_late";
 
 export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo: string; urgent: boolean }> = {
   visit_needs_cover: {
@@ -121,6 +122,12 @@ export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo:
     label: "Chargeback",
     short: "Chargeback",
     todo: "A customer's bank has disputed a payment. Answer it in Stripe before its deadline, with the clean's photos and checklist from QC.",
+    urgent: true,
+  },
+  visit_cancelled_late: {
+    label: "Cancelled at short notice",
+    short: "Late cancel",
+    todo: "A customer cancelled a clean inside the notice period. Ring or text the cleaner so they don't travel; the app shows them but doesn't notify them yet.",
     urgent: true,
   },
 };

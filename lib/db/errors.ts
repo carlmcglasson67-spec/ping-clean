@@ -45,6 +45,8 @@ export const PING_ERRORS = {
   PC031: "Enter an email address or a UK mobile number.",
   PC032: "We're not taking names for the waiting list just now. Please try again later.",
   PC033: "Something went wrong. Please try again.",
+  PC034: "That clean can't be cancelled now. If it's today, call the Ping office.",
+  PC035: "The cost of cancelling has changed since this page loaded. Check the new figure and confirm again.",
 } as const;
 
 export type PingErrorCode = keyof typeof PING_ERRORS;

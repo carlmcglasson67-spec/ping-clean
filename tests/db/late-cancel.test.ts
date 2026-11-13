@@ -68,7 +68,7 @@ describe("cancelling with plenty of notice", () => {
       await cancel(q, 0);
       return { again: await tryCancel(q, 0), quote: (await quote(q)).can_cancel, stillThere: (await q.rows(`select 1 from public.visits where id = $1`, [next])).length };
     });
-    expect(r).toEqual({ again: "PC030", quote: false, stillThere: 1 });
+    expect(r).toEqual({ again: "PC034", quote: false, stillThere: 1 });
   });
 });
 
@@ -150,7 +150,7 @@ describe("the fee shown is the fee charged", () => {
       const forged = await tryCancel(q, -1);
       return { shownFree, shownMore, forged, visit: (await visit(q)).status, payments: (await payments(q)).length, right: await tryCancel(q, 2000) };
     });
-    expect(r).toEqual({ shownFree: "PC031", shownMore: "PC031", forged: "PC031", visit: "scheduled", payments: 0, right: "ok" });
+    expect(r).toEqual({ shownFree: "PC035", shownMore: "PC035", forged: "PC035", visit: "scheduled", payments: 0, right: "ok" });
   });
 });
 
@@ -169,7 +169,7 @@ describe("what can't be cancelled, and by whom", () => {
       }
       return { started, out };
     });
-    expect(r).toEqual({ started: { quote: false, cancel: "PC030" }, out: { in_progress: "PC030", completed: "PC030", skipped: "PC030", no_show: "PC030" } });
+    expect(r).toEqual({ started: { quote: false, cancel: "PC034" }, out: { in_progress: "PC034", completed: "PC034", skipped: "PC034", no_show: "PC034" } });
   });
 
   it("only the customer whose clean it is: not another customer, the cleaner, the office or a stranger", async () => {
@@ -183,7 +183,7 @@ describe("what can't be cancelled, and by whom", () => {
       }
       return { out, visit: (await visit(q)).status };
     });
-    expect(r).toEqual({ out: { otherCustomer: ["PC030", "PC030"], cleaner: ["PC030", "42501"], admin: ["PC030", "42501"] }, visit: "scheduled" });
+    expect(r).toEqual({ out: { otherCustomer: ["PC034", "PC034"], cleaner: ["PC034", "42501"], admin: ["PC034", "42501"] }, visit: "scheduled" });
     expect(await as("anon", (q) => q.attempt(`select public.cancel_visit('${next}', 0)`))).toBe("42501");
   });
 

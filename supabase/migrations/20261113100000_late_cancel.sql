@@ -61,7 +61,7 @@ declare
 begin
   select * into v from public.visits where id = p_visit and customer_id = me;
   if not found then
-    raise exception 'That clean isn''t yours' using errcode = 'PC030';
+    raise exception 'That clean isn''t yours' using errcode = 'PC034';
   end if;
   select * into t from private.late_cancel_terms(v.id);
   can_cancel := v.status = 'scheduled' and now() < (v.scheduled_date + v.window_start) at time zone 'Europe/London';
@@ -71,7 +71,7 @@ end $$;
 
 -- Cancels one clean. p_shown_fee_pence is the fee the customer saw: if the real fee is now
 -- different (they waited past the cut-off, or the setting changed), nothing happens and they
--- are shown the new figure (PC031). The clean is never deleted and isn't replaced.
+-- are shown the new figure (PC035). The clean is never deleted and isn't replaced.
 create function public.cancel_visit(p_visit uuid, p_shown_fee_pence integer) returns text
 language plpgsql volatile security definer set search_path = '' as $$
 declare
@@ -85,14 +85,14 @@ begin
   end if;
   select * into v from public.visits where id = p_visit and customer_id = me for update;
   if not found then
-    raise exception 'That clean isn''t yours' using errcode = 'PC030';
+    raise exception 'That clean isn''t yours' using errcode = 'PC034';
   end if;
   if v.status <> 'scheduled' or now() >= (v.scheduled_date + v.window_start) at time zone 'Europe/London' then
-    raise exception 'That clean can''t be cancelled now' using errcode = 'PC030';
+    raise exception 'That clean can''t be cancelled now' using errcode = 'PC034';
   end if;
   select * into t from private.late_cancel_terms(v.id);
   if t.fee_pence is distinct from coalesce(p_shown_fee_pence, -1) then
-    raise exception 'The cost of cancelling has changed' using errcode = 'PC031';
+    raise exception 'The cost of cancelling has changed' using errcode = 'PC035';
   end if;
 
   perform set_config('app.actor', 'customer:' || me, true);
