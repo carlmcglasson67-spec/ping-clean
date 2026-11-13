@@ -192,6 +192,11 @@ describe("what can't be refunded", () => {
     expect(r).toEqual({ tooMuch: "PC042", zero: "PC042", noReason: "PC049", second: "PC049", moreThanLeft: "PC042", theRest: "ok", neverCharged: "PC048" });
   });
 
+  it("a clean's payment isn't a fee to waive", async () => {
+    const r = await as("superuser", async (q) => tryAsk(q, U.admin, await paid(q), 500, "fee_waived"));
+    expect(r).toBe("PC049");
+  });
+
   it("only the Ping team can ask; nobody but the server can send or settle one", async () => {
     const p = await as("superuser", async (q) => { const id = await paid(q); return id; }).catch(() => null);
     expect(p).not.toBeNull();

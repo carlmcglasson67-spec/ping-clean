@@ -85,29 +85,27 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
         <div className="grid gap-6">
           <Card className="grid gap-6">
             <div className="grid gap-2">
-              <h2 className="text-xl font-semibold">{isFee ? "Refunding this fee." : "Refund this clean."}</h2>
-              {isFee ? null : canRefund(p.status) && !onItsWay ? <p className="text-navy-2">{formatPence(left)} is left to refund. The reason decides who carries it.</p> : null}
+              <h2 className="text-xl font-semibold">{isFee ? "Refund this fee." : "Refund this clean."}</h2>
+              {canRefund(p.status) && !onItsWay ? <p className="text-navy-2">{formatPence(left)} is left to refund. The reason decides who carries it.</p> : null}
             </div>
-            {isFee ? (
-              <p className="rounded-md bg-mist px-5 py-4 text-navy-2" data-fee-no-refund>A late-cancellation fee can&rsquo;t be refunded from here yet. Don&rsquo;t refund it in Stripe either: Ping wouldn&rsquo;t record it, and the cleaner would still be paid their part.</p>
-            ) : onItsWay ? (
-              <p role="status" className="rounded-md bg-warn-soft px-5 py-4 font-medium">A refund for this clean is on its way. Another can be made once it&rsquo;s finished.</p>
+            {onItsWay ? (
+              <p role="status" className="rounded-md bg-warn-soft px-5 py-4 font-medium">A refund for this {isFee ? "fee" : "clean"} is on its way. Another can be made once it&rsquo;s finished.</p>
             ) : canRefund(p.status) && left > 0 ? (
               <RefundForm payment={{ id: p.id, amount_pence: p.amount_pence, application_fee_pence: p.application_fee_pence, refunded_pence: p.refunded_pence }}
-                cleanerPaid={payout?.status === "in_batch" || payout?.status === "paid"} />
+                cleanerPaid={payout?.status === "in_batch" || payout?.status === "paid"} kind={isFee ? "late_cancel" : "visit"} />
             ) : (
               <p className="rounded-md bg-mist px-5 py-4 text-navy-2">
-                {p.status === "refunded" ? "This clean has been refunded in full."
+                {p.status === "refunded" ? `This ${isFee ? "fee" : "clean"} has been refunded in full.`
                   : p.status === "disputed" ? "The customer's bank has disputed this payment. It can't be refunded while that's open: answer the chargeback in Stripe."
                   : p.status === "dispute_lost" ? "This payment was lost to a chargeback. The customer's bank has already taken it back."
-                  : "Only a clean the customer has paid for can be refunded."}
+                  : isFee ? "Only a fee the customer has paid can be refunded." : "Only a clean the customer has paid for can be refunded."}
               </p>
             )}
           </Card>
 
           {(refunds.data ?? []).length > 0 ? (
             <Card className="grid gap-5">
-              <h2 className="text-xl font-semibold">Refunds on this clean.</h2>
+              <h2 className="text-xl font-semibold">Refunds on this {isFee ? "fee" : "clean"}.</h2>
               <ol className="grid gap-4">
                 {(refunds.data ?? []).map((r) => {
                   const s = REFUND_STATUS[r.status] ?? { label: r.status, tone: "neutral" as const };

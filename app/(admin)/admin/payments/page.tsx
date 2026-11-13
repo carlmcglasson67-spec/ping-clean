@@ -21,7 +21,7 @@ export default async function PaymentsPage() {
 
   const header = (
     <PageHeader eyebrow="Payments" title="Every clean's money."
-      lede="What each customer paid for each clean, and any late-cancellation fee, and where it stands. Open a clean to refund all or part of it." />
+      lede="What each customer paid for each clean, and any late-cancellation fee, and where it stands. Open one to refund all or part of it." />
   );
   if (pay.error) return (<>{header}<ErrorState>The payments didn&rsquo;t load. Refresh to try again.</ErrorState></>);
   const rows = pay.data ?? [];

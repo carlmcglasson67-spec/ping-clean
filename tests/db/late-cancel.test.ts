@@ -324,3 +324,98 @@ describe("who counts as holding the clean (review)", () => {
   });
 });
 
+// Payments 12: the Ping team refunds a paid fee.
+describe("refunding a late-cancellation fee", () => {
+  const PI = "pi_TestLateFee00001";
+  /** Anna cancels late at £20 (Tara £15, Ping £5), it's charged and Stripe says paid. */
+  const paidFee = async (q: Query) => {
+    await card(q);
+    await fee(q, 2000);
+    await startsIn(q, 5);
+    await cancel(q, 2000);
+    await server(q);
+    const [c] = await q.rows<{ payment_id: string; amount_pence: number; application_fee_pence: number; cleaner_account_id: string }>(`select payment_id, amount_pence, application_fee_pence, cleaner_account_id from public.charge_claim(10)`);
+    await q.rows(`select public.stripe_payment_result($1, $2, 'succeeded', $3, $4, $5, 'ch_TestLateFee0001', null, null)`, [c!.payment_id, PI, c!.amount_pence, c!.application_fee_pence, c!.cleaner_account_id]);
+    await su(q);
+    return c!.payment_id;
+  };
+  const ask = async (q: Query, payment: string, pence: number, reason: string, who: string = U.admin) => {
+    await q.actAs(who);
+    const r = await q.rows<{ id: string }>(`select public.admin_refund($1, $2, $3, null) as id`, [payment, pence, reason]);
+    await su(q);
+    return r[0]!.id;
+  };
+  const tryAsk = async (q: Query, payment: string, pence: number, reason: string, who: string = U.admin) => {
+    await q.actAs(who);
+    const code = await q.attempt(`select public.admin_refund($1, $2, $3, null)`, [payment, pence, reason]);
+    await su(q);
+    return code;
+  };
+  const landed = async (q: Query, refund: string, pence: number) => {
+    await server(q);
+    await q.rows(`select public.stripe_refund_result($1, 're_TestLateFee0001', 'succeeded', $2, null, $3)`, [refund, pence, PI]);
+    await su(q);
+  };
+  const parts = async (q: Query, id: string) => (await q.rows<{ cleaner_part_pence: number; ping_part_pence: number; status: string }>(`select cleaner_part_pence, ping_part_pence, status from public.refunds where id = $1`, [id]))[0]!;
+  const payout = async (q: Query) => (await q.rows<{ status: string; amount_pence: number; held_reason: string | null }>(`select status::text, amount_pence, held_reason from public.payouts where visit_id = $1`, [next]))[0]!;
+  const pay = async (q: Query, id: string) => (await q.rows<{ status: string; refunded_pence: number }>(`select status::text, refunded_pence from public.payments where id = $1`, [id]))[0]!;
+
+  it("fee waived in full: both give back their part, the payment shows refunded and the cleaner's part is cancelled", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paidFee(q);
+      const before = await payout(q);
+      const id = await ask(q, p, 2000, "fee_waived");
+      const asked = { parts: await parts(q, id), payout: await payout(q) };
+      await landed(q, id, 2000);
+      return { before, asked, after: { pay: await pay(q, p), payout: await payout(q) } };
+    });
+    expect(r.before).toEqual({ status: "pending", amount_pence: 1500, held_reason: null });
+    expect(r.asked).toEqual({ parts: { cleaner_part_pence: 1500, ping_part_pence: 500, status: "pending" }, payout: { status: "held", amount_pence: 1500, held_reason: "refund_pending" } });
+    expect(r.after.pay).toEqual({ status: "refunded", refunded_pence: 2000 });
+    expect(r.after.payout.status).toBe("cancelled");
+  });
+
+  it("half waived: split as the fee was, and the cleaner's earnings carry on at the lower figure", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paidFee(q);
+      const id = await ask(q, p, 1000, "fee_waived");
+      const split = await parts(q, id);
+      await landed(q, id, 1000);
+      return { split, pay: await pay(q, p), payout: await payout(q) };
+    });
+    expect(r.split).toMatchObject({ cleaner_part_pence: 750, ping_part_pence: 250 });
+    expect(r.pay).toEqual({ status: "partially_refunded", refunded_pence: 1000 });
+    expect(r.payout).toEqual({ status: "pending", amount_pence: 750, held_reason: null });
+  });
+
+  it("goodwill: Ping carries all of it and the cleaner keeps their part", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paidFee(q);
+      const id = await ask(q, p, 2000, "goodwill");
+      const split = await parts(q, id);
+      const held = await payout(q);
+      await landed(q, id, 2000);
+      return { split, held, pay: await pay(q, p), payout: await payout(q) };
+    });
+    expect(r.split).toMatchObject({ cleaner_part_pence: 0, ping_part_pence: 2000 });
+    expect(r.held.status).toBe("pending");
+    expect(r.pay).toEqual({ status: "refunded", refunded_pence: 2000 });
+    expect(r.payout).toEqual({ status: "pending", amount_pence: 1500, held_reason: null });
+  });
+
+  it("the reason has to fit: no faulting a clean that didn't happen, no waiving a clean; and only the Ping team, only what's left", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paidFee(q);
+      return {
+        cleanQuality: await tryAsk(q, p, 500, "clean_quality"),
+        noShow: await tryAsk(q, p, 500, "no_show"),
+        tooMuch: await tryAsk(q, p, 2001, "fee_waived"),
+        customer: await tryAsk(q, p, 500, "fee_waived", U.anna),
+        cleaner: await tryAsk(q, p, 500, "fee_waived", U.tara),
+        refunds: (await q.rows(`select 1 from public.refunds where payment_id = $1`, [p])).length,
+      };
+    });
+    expect(r).toEqual({ cleanQuality: "PC049", noShow: "PC049", tooMuch: "PC042", customer: "42501", cleaner: "42501", refunds: 0 });
+  });
+});
+

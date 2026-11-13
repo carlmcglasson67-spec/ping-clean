@@ -187,9 +187,34 @@ export async function lateCancelFlows({ browser, BASE, check, signIn, SHOTS, str
       await shoot(ap, "admin-payments-late-cancel-1440");
       await row.click();
       await ap.waitForURL(`${BASE}/admin/payments/${p.id}`);
-      await ap.locator("[data-fee-no-refund]").waitFor();
-      assert.equal(await ap.getByRole("button", { name: /^Refund/ }).count(), 0);
       assert.doesNotMatch(await ap.locator("main").innerText(), /pi_|ch_|acct_/);
+    });
+
+    await check("the office waives half the fee: only fee reasons are offered, both give back their part, and Tara's earnings drop to match", async () => {
+      const p = await feePayment(ANNA_NEXT);
+      await ap.getByRole("heading", { name: "Refund this fee." }).waitFor();
+      const main = await ap.locator("main").innerText();
+      assert.match(main, /Fee waived/);
+      assert.doesNotMatch(main, /The clean wasn't right|The cleaner didn't come/);
+      await ap.getByLabel("Amount to refund").fill("10");
+      await ap.getByText("Fee waived").click();
+      assert.equal(await ap.locator('[data-part="cleaner"]').innerText(), "£7.50");
+      assert.equal(await ap.locator('[data-part="ping"]').innerText(), "£2.50");
+      await shoot(ap, "admin-payment-fee-refund-form-1440");
+      const sentBefore = stripe.state.refunds.size;
+      await ap.getByRole("button", { name: "Refund £10.00" }).click();
+      await ap.getByText("£10.00 refunded. It reaches the customer's card in 5 to 10 days.").waitFor();
+      assert.equal(stripe.state.refunds.size, sentBefore + 1);
+      const re = [...stripe.state.refunds.values()].at(-1);
+      assert.equal(re.amount, 1000);
+      const r = await one(`select status, cleaner_part_pence as c, ping_part_pence as g, reason from public.refunds where payment_id = $1`, [p.id]);
+      assert.deepEqual(r, { status: "succeeded", c: 750, g: 250, reason: "fee_waived" });
+      const after = await one(`select pay.status::text as pay, pay.refunded_pence as back, po.status::text as po, po.amount_pence as owed
+                                 from public.payments pay join public.payouts po on po.payment_id = pay.id where pay.id = $1`, [p.id]);
+      assert.deepEqual(after, { pay: "partially_refunded", back: 1000, po: "pending", owed: 750 });
+      const { n } = await one(`select count(*)::int as n from public.audit_log a join public.refunds r on r.id = a.entity_id
+                                where r.payment_id = $1 and a.entity = 'refunds' and a.action = 'insert' and a.actor_id = '00000000-0000-4000-a000-000000000001'`, [p.id]);
+      assert.ok(n >= 1, "the refund is in the audit log against the admin");
     });
     await admin.close();
   } finally {
