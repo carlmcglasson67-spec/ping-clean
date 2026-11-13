@@ -48,7 +48,7 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
     <div className="relative overflow-hidden rounded-xl signal-waves p-8 text-on-navy sm:p-12 lg:col-span-5 lg:self-start">
       <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal">{clean}</p>
       <p className="mt-8 font-display text-[clamp(3rem,2.2rem+3.4vw,5rem)] font-semibold leading-none tabular">{amount}</p>
-      <p className="mt-5 text-lg text-on-navy-2">{isFee ? "The fee for cancelling at short notice. Most of it goes to the cleaner who had kept the time for you." : "One clean, charged after it was finished. Your cleaner is paid from this."}</p>
+      <p className="mt-5 text-lg text-on-navy-2">{isFee ? "The fee for cancelling at short notice. The cleaner who had kept the time for you is paid from it." : "One clean, charged after it was finished. Your cleaner is paid from this."}</p>
     </div>
   );
 

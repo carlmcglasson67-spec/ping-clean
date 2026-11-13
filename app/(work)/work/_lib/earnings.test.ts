@@ -54,3 +54,13 @@ describe("earningTotals", () => {
     expect(t).toEqual({ paidThisMonth: 3750, onItsWay: 9375, awaitingPayment: 3750, refused: 1875 });
   });
 });
+
+describe("a clean cancelled at short notice", () => {
+  it("is the cleaner's part of the fee, followed to the bank like any other earnings", () => {
+    const late: EarningRow = { ...row(po("pending"), null, 1125), lateCancel: true };
+    expect(earningStep(late, now)).toBe("checking");
+    expect(earningTotals([late], "2026-11-01T00:00:00Z", now).onItsWay).toBe(1125);
+    expect(earningNote({ ...late, payout: null }, "awaiting_payment", day)).toMatch(/cancelled at short notice/);
+    expect(earningNote({ ...late, payout: null }, "awaiting_payment", day)).not.toMatch(/£/);
+  });
+});

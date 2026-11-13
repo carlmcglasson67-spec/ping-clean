@@ -1,4 +1,5 @@
-// What a cleaner is told about the money for each finished clean. Pure, so it's tested.
+// What a cleaner is told about the money for each finished clean, and for each clean a
+// customer cancelled too late (their part of the fee). Pure, so it's tested.
 // A clean has a payout row only once its payment has gone through (cleaners are paid from
 // what's collected); the bank payout it went in gives the arrival date. Nothing here says
 // anything about the customer or their card: that's theirs, not the cleaner's.
@@ -9,6 +10,8 @@ export type EarningRow = {
   amountPence: number;
   payout: { status: string; available_after: string; paid_at: string | null } | null;
   batch: { status: string; arrival_date: string | null } | null;
+  /** A clean the customer cancelled at short notice: the cleaner's part of the fee, not a clean's pay. */
+  lateCancel?: boolean;
 };
 
 export type EarningStep = "awaiting_payment" | "checking" | "next_payout" | "sent" | "paid" | "bank_refused" | "held" | "cancelled";
@@ -41,7 +44,7 @@ export const EARNING_COPY: Record<EarningStep, { label: string; tone: "ok" | "wa
 export function earningNote(r: EarningRow, step: EarningStep, day: (ymd: string) => string): string {
   const on = (ymd: string) => (day(ymd) === "today" ? "today" : `on ${day(ymd)}`);
   switch (step) {
-    case "awaiting_payment": return "This clean's payment is going through. Your earnings show here as soon as it has.";
+    case "awaiting_payment": return r.lateCancel ? "The customer cancelled at short notice. Your part of their fee shows here once it's paid." : "This clean's payment is going through. Your earnings show here as soon as it has.";
     case "checking": return `Goes to your bank after ${day(r.payout!.available_after.slice(0, 10))}.`;
     case "next_payout": return "Leaves as soon as the money has cleared at Stripe, usually within a few days.";
     case "sent": return r.batch?.arrival_date ? `Should reach your account ${on(r.batch.arrival_date)}.` : "On its way to your account.";

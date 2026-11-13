@@ -14,6 +14,7 @@ import { cardAtBookingFlows } from "./card-at-booking.e2e.mjs";
 import { chargingFlows, TEST_JOB_SECRET } from "./charging.e2e.mjs";
 import { payoutFlows } from "./payouts.e2e.mjs";
 import { refundFlows } from "./refunds.e2e.mjs";
+import { lateCancelFlows } from "./late-cancel.e2e.mjs";
 import { interestFlows } from "./interest.e2e.mjs";
 import { stripeWebhookFlows } from "./stripe-webhooks.e2e.mjs";
 import { startFakeStripe, TEST_CONNECT_WEBHOOK_SECRET, TEST_PUBLISHABLE_KEY, TEST_SECRET_KEY, TEST_WEBHOOK_SECRET } from "../stripe/fake-stripe.mjs";
@@ -225,6 +226,8 @@ try {
   await payoutFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
   // Payments 10: the team refunds that clean, part shared with the cleaner and the rest as goodwill.
   await refundFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
+  // Payments 11: Anna cancels a clean in good time (free), then one at short notice (a fee, Tara's part paid).
+  await lateCancelFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
   // Track C's admin console. After Track B's, because it approves, assigns and scores.
   await adminFlows({ browser, BASE, check, signIn, SHOTS });
 } finally {

@@ -69,7 +69,7 @@ export default async function CancelCleanPage({ params }: { params: Promise<{ id
           <p className="max-w-prose text-lg text-navy-2">
             {free && !q.late ? <>Your clean on {when} will be cancelled and nothing is charged. It stays free to cancel until <strong className="text-navy">{formatStamp(q.free_until)}</strong>.</>
               : free ? <>Your clean on {when} will be cancelled. It&rsquo;s short notice, but there&rsquo;s nothing to pay.</>
-              : <>It&rsquo;s less than a day before your clean on {when}, and your cleaner has kept that time for you. The fee goes on your saved card; most of it goes to them.</>}
+              : <>Your clean on {when} is close enough that your cleaner can&rsquo;t fill the time, so there&rsquo;s a late-cancellation fee. It goes on your saved card, and your cleaner is paid from it.</>}
           </p>
           <p className="max-w-prose text-navy-2">The rest of your cleans carry on as booked. A cancelled clean isn&rsquo;t moved to another day.</p>
         </div>
