@@ -59,6 +59,7 @@ const FALLBACK = "Something went wrong. Please try again.";
  * and the database's own text is never shown.
  */
 export const CHECK_MESSAGES: Record<string, string> = {
+  settings_late_cancel_fee_min: "A late-cancellation fee has to be at least 30p (card payments can't be smaller), or left empty for no fee.",
   settings_late_cancel_share: "A fixed share needs the cleaner's share of the late fee.",
   settings_late_cancel_share_follows_split:
     "The cleaner's share only applies with a fixed share. Clear it, or choose a fixed share.",

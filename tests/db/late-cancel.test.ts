@@ -279,3 +279,48 @@ describe("the fee is charged and paid on like any other payment", () => {
     expect(r).toEqual({ v: [{ status: "cancelled", cancel_reason: "customer_late" }], pay: 0 });
   });
 });
+
+describe("who counts as holding the clean (review)", () => {
+  const setUp = async (q: Query) => { await su(q); await fee(q, 2000); await q.rows(`update public.settings set cancel_notice_hours = 24`); await startsIn(q, 5); };
+
+  it("no fee when the block is on hold, back on the board, or held by someone else", async () => {
+    const r = await as("superuser", async (q) => {
+      await setUp(q);
+      const out: Record<string, number> = { claimed: (await quote(q)).fee_pence };
+      await q.rows(`alter table public.series disable trigger user`);
+      for (const [name, sql] of [
+        ["paused", `update public.series set status = 'paused' where id = $1`],
+        ["offering", `update public.series set status = 'offering', cleaner_id = null where id = $1`],
+      ] as const) {
+        await q.rows(`savepoint s`);
+        await q.rows(sql, [IDS.annaSeries]);
+        out[name] = (await quote(q)).fee_pence;
+        await q.rows(`rollback to savepoint s`);
+      }
+      return out;
+    });
+    expect(r).toEqual({ claimed: 2000, paused: 0, offering: 0 });
+  });
+
+  it("no fee when the cleaner is suspended: it's still a late cancellation, and the office is still told", async () => {
+    const r = await as("superuser", async (q) => {
+      await setUp(q);
+      await q.rows(`alter table public.cleaners disable trigger user`);
+      await q.rows(`update public.cleaners set status = 'suspended' where id = $1`, [U.tara]);
+      const shown = await quote(q);
+      const done = await cancel(q, 0);
+      const pay = await q.rows(`select 1 from public.payments where visit_id = $1 and kind = 'late_cancel'`, [next]);
+      return { late: shown.late, fee: shown.fee_pence, done, payments: pay.length };
+    });
+    expect(r).toEqual({ late: true, fee: 0, done: "cancelled_late", payments: 0 });
+  });
+
+  it("a fee Stripe can't take can't be set", async () => {
+    const r = await as("superuser", async (q) => ({
+      tenPence: await q.attempt(`update public.settings set late_cancel_fee_pence = 10`),
+      thirty: await q.attempt(`update public.settings set late_cancel_fee_pence = 30, late_cancel_split = 'same_as_clean'`),
+    }));
+    expect(r.tenPence).toBe("23514");
+  });
+});
+

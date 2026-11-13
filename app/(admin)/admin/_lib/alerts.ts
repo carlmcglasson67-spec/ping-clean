@@ -127,7 +127,7 @@ export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo:
   visit_cancelled_late: {
     label: "Cancelled at short notice",
     short: "Late cancel",
-    todo: "A customer cancelled a clean inside the notice period. Ring or text the cleaner so they don't travel; the app shows them but doesn't notify them yet.",
+    todo: "A customer cancelled a clean inside the notice period. Ring or text the cleaner so they don't travel: the clean has gone from their app, but nothing tells them.",
     urgent: true,
   },
 };

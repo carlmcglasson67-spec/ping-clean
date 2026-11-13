@@ -89,7 +89,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
               {isFee ? null : canRefund(p.status) && !onItsWay ? <p className="text-navy-2">{formatPence(left)} is left to refund. The reason decides who carries it.</p> : null}
             </div>
             {isFee ? (
-              <p className="rounded-md bg-mist px-5 py-4 text-navy-2" data-fee-no-refund>A late-cancellation fee can&rsquo;t be refunded from here yet. If this one needs to go back to the customer, refund it in Stripe and tell the cleaner.</p>
+              <p className="rounded-md bg-mist px-5 py-4 text-navy-2" data-fee-no-refund>A late-cancellation fee can&rsquo;t be refunded from here yet. Don&rsquo;t refund it in Stripe either: Ping wouldn&rsquo;t record it, and the cleaner would still be paid their part.</p>
             ) : onItsWay ? (
               <p role="status" className="rounded-md bg-warn-soft px-5 py-4 font-medium">A refund for this clean is on its way. Another can be made once it&rsquo;s finished.</p>
             ) : canRefund(p.status) && left > 0 ? (

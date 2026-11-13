@@ -34,6 +34,14 @@ export async function lateCancelFlows({ browser, BASE, check, signIn, SHOTS, str
        from public.visits where id = $1 returning id`, [ANNA_TODAY, days])).id;
   const LATER = await add(21);
   const ANNA_NEXT = await add(7);
+  // The earlier flows leave Anna's block back on the board. A fee needs a cleaner holding it.
+  const seriesBefore = await one(`select status::text, cleaner_id from public.series where id = $1`, [ANNA_SERIES]);
+  const holdSeries = async (status, cleaner) => {
+    await c.query(`alter table public.series disable trigger user`);
+    await c.query(`update public.series set status = $2, cleaner_id = $3 where id = $1`, [ANNA_SERIES, status, cleaner]);
+    await c.query(`alter table public.series enable trigger user`);
+  };
+  const { tara: taraId } = await one(`select cleaner_id as tara from public.visits where id = $1`, [ANNA_TODAY]);
   await settings(24, null);
   const [{ pm }] = (await c.query(`select stripe_payment_method_id as pm from public.series_billing where series_id = $1`, [ANNA_SERIES])).rows;
   await fetch(`${stripe.url}/__test/payment_methods`, { method: "POST", body: JSON.stringify({ id: pm, customer: "cus_testE2EAnna01", behaviour: "ok" }) });
@@ -89,6 +97,13 @@ export async function lateCancelFlows({ browser, BASE, check, signIn, SHOTS, str
     await check("inside the notice period the fee is shown before anything happens", async () => {
       await settings(24 * 60, 1500); // 60 days' notice, so next week's clean is "late"
       await page.goto(`${BASE}/account/clean/${ANNA_NEXT}/cancel`);
+      if (seriesBefore.status !== "claimed") {
+        // Nobody holds the block: short notice, but nothing to pay.
+        await page.getByRole("heading", { name: "Cancel this clean?" }).waitFor();
+        assert.match(await page.locator("main").innerText(), /short notice, but there’s nothing to pay/);
+        await holdSeries("claimed", taraId);
+        await page.reload();
+      }
       await page.getByRole("heading", { name: "Cancelling now costs £15.00." }).waitFor();
       assert.match(await page.locator("main").innerText(), /Short notice/i);
       await page.getByRole("button", { name: "Cancel and pay £15.00" }).waitFor();
@@ -167,6 +182,8 @@ export async function lateCancelFlows({ browser, BASE, check, signIn, SHOTS, str
       const text = await row.innerText();
       assert.match(text, /Late cancellation fee/);
       assert.match(text, /£20\.00/);
+      await ap.getByRole("heading", { name: "Every clean's money." }).waitFor();
+      await ap.waitForLoadState("networkidle");
       await shoot(ap, "admin-payments-late-cancel-1440");
       await row.click();
       await ap.waitForURL(`${BASE}/admin/payments/${p.id}`);
@@ -176,6 +193,7 @@ export async function lateCancelFlows({ browser, BASE, check, signIn, SHOTS, str
     });
     await admin.close();
   } finally {
+    await holdSeries(seriesBefore.status, seriesBefore.cleaner_id).catch(() => {});
     await c.query(`alter table public.settings disable trigger user`);
     await c.query(`update public.settings set cancel_notice_hours = $1, late_cancel_fee_pence = $2, late_cancel_split = $3`, [before.n, before.f, before.s]);
     await c.query(`alter table public.settings enable trigger user`);

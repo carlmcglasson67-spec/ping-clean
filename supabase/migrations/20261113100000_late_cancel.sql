@@ -21,7 +21,7 @@ alter table public.engine_alerts add constraint engine_alerts_kind_check
 -- ---------------------------------------------------------------- what cancelling costs
 -- Late = less notice than settings.cancel_notice_hours before the clean's window opens (London
 -- time). No notice period set: never late. A fee applies only when it's late, a cleaner holds
--- the clean (C4), and Carl has set a fee and how it's split. Never more than the clean's price.
+-- the clean (C4: the block is claimed by this clean's cleaner, who is active), and Carl has set a fee and how it's split. Never more than the clean's price.
 -- Cleaner's part = fee × share, rounded down; Ping takes the rest (appendix A).
 create function private.late_cancel_terms(
   p_visit uuid, out late boolean, out fee_pence integer, out cleaner_pence integer, out ping_pence integer, out free_until timestamptz
@@ -31,14 +31,21 @@ declare
   v public.visits;
   st public.settings;
   starts timestamptz;
+  held boolean;
 begin
   select * into v from public.visits where id = p_visit;
+  -- "A cleaner holds the clean": the block is live (claimed, not on hold, not back on the board),
+  -- it's this clean's cleaner who has it, and they're an active Ping cleaner. Anything else and
+  -- nobody has kept the time free, so there's nobody to charge a fee for.
+  select exists (select 1 from public.series sr join public.cleaners cl on cl.id = sr.cleaner_id
+                  where sr.id = v.series_id and sr.status = 'claimed' and sr.cleaner_id = v.cleaner_id and cl.status = 'active')
+    into held;
   select * into st from public.settings limit 1;
   starts := (v.scheduled_date + v.window_start) at time zone 'Europe/London';
   free_until := case when st.cancel_notice_hours is null then starts else starts - st.cancel_notice_hours * interval '1 hour' end;
   late := st.cancel_notice_hours is not null and now() > free_until;
   fee_pence := 0; cleaner_pence := 0; ping_pence := 0;
-  if late and v.cleaner_id is not null and v.price_pence > 0
+  if late and held and v.price_pence > 0
      and coalesce(st.late_cancel_fee_pence, 0) > 0 and st.late_cancel_split is not null then
     fee_pence := least(st.late_cancel_fee_pence, v.price_pence);
     cleaner_pence := case st.late_cancel_split
@@ -108,7 +115,7 @@ begin
   if t.late and v.cleaner_id is not null then
     insert into public.engine_alerts (kind, series_id, visit_id, message)
     values ('visit_cancelled_late', v.series_id, v.id,
-            'The customer cancelled this clean at short notice. The cleaner sees it in their app, but nothing texts them: let them know.'
+            'The customer cancelled this clean at short notice. It has gone from the cleaner''s app, but nothing tells them: ring or text them so they don''t travel.'
             || case when t.fee_pence > 0 then ' The late-cancellation fee is being charged.' else '' end);
   end if;
   return case when t.fee_pence > 0 then 'cancelled_with_fee' when t.late then 'cancelled_late' else 'cancelled' end;
@@ -491,4 +498,78 @@ exception when unique_violation then
     raise;
   end if;
   return new_id;
+end $$;
+
+-- ---------------------------------------------------------------- a fee Stripe can take
+-- Stripe won't charge less than 30p, so a smaller fee could never be paid and would leave the
+-- customer's block on hold for nothing. No fee (null or 0) is still fine.
+alter table public.settings add constraint settings_late_cancel_fee_min
+  check (late_cancel_fee_pence is null or late_cancel_fee_pence = 0 or late_cancel_fee_pence >= 30);
+
+-- ---------------------------------------------------------------- a disputed fee
+-- As before (refunds), but a chargeback on a fee is answered with the booking and the
+-- cancellation, not with photos of a clean that didn't happen.
+create or replace function public.stripe_dispute(p_payment_intent text, p_outcome text) returns text
+language plpgsql volatile security definer set search_path = '' as $$
+declare
+  p public.payments;
+  paid_out boolean;
+begin
+  perform set_config('app.actor', 'stripe-webhook', true);
+  if p_outcome not in ('opened', 'won', 'lost') then
+    raise exception 'Unknown dispute result' using errcode = '22023';
+  end if;
+  select * into p from public.payments where stripe_payment_intent_id = p_payment_intent for update;
+  if not found then return 'unknown'; end if;
+
+  if p_outcome = 'opened' then
+    if p.dispute_status is not null then return 'already'; end if;
+    if p.status not in ('succeeded', 'partially_refunded') then
+      -- Refunded in full already, or never paid: nothing of Ping's to hold, but the team should
+      -- know the customer's bank has opened one.
+      perform private.money_alert('payment_disputed', p.visit_id,
+        'The customer''s bank opened a chargeback on a payment that is ' || replace(p.status::text, '_', ' ') || '. Answer it in Stripe (say it was already refunded, if it was).');
+      return 'already';
+    end if;
+    update public.payments set status = 'disputed', dispute_status = 'open' where id = p.id;
+    -- Nothing of the cleaner's for this clean goes to the bank while it's open: rows waiting,
+    -- rows held for anything else, and rows the bank sent back.
+    update public.payouts set status = 'held', held_reason = 'dispute_open' where payment_id = p.id and status in ('pending', 'failed');
+    update public.payouts set held_reason = 'dispute_open' where payment_id = p.id and status = 'held';
+    select exists (select 1 from public.payouts where payment_id = p.id and status in ('in_batch', 'paid')) into paid_out;
+    perform private.money_alert('payment_disputed', p.visit_id,
+      case when p.kind = 'late_cancel'
+        then 'The customer''s bank has disputed a late-cancellation fee (a chargeback). Stripe sets a deadline: answer it in Stripe with when the clean was booked for, when they cancelled, and the terms they agreed to. '
+        else 'The customer''s bank has disputed this clean''s payment (a chargeback). Stripe sets a deadline: answer it in Stripe with the clean''s photos and checklist. ' end
+      || case when paid_out then 'The cleaner has already been paid for it.' else 'The cleaner''s earnings for it are held until it''s settled.' end);
+    return 'disputed';
+  end if;
+
+  if p.status <> 'disputed' then return 'already'; end if;
+  if p_outcome = 'won' then
+    -- Back to where its refunds leave it (a refund may have settled while it was open).
+    update public.payments
+       set dispute_status = 'won',
+           status = (case when p.refunded_pence >= p.amount_pence then 'refunded'
+                          when p.refunded_pence > 0 then 'partially_refunded' else 'succeeded' end)::public.payment_status
+     where id = p.id;
+    perform private.settle_payout_amount(p.id);
+    update public.payouts set status = 'pending', held_reason = null
+     where payment_id = p.id and status = 'held' and held_reason = 'dispute_open'
+       and not exists (select 1 from public.refunds r where r.payment_id = p.id and r.status = 'pending');
+    update public.payouts set held_reason = 'refund_pending'
+     where payment_id = p.id and status = 'held' and held_reason = 'dispute_open';
+    update public.engine_alerts set resolved_at = now() where visit_id = p.visit_id and kind = 'payment_disputed' and resolved_at is null;
+    return 'won';
+  end if;
+
+  update public.payments set status = 'dispute_lost', dispute_status = 'lost' where id = p.id;
+  select exists (select 1 from public.payouts where payment_id = p.id and status in ('in_batch', 'paid')) into paid_out;
+  update public.payouts set status = 'cancelled' where payment_id = p.id and status = 'held';
+  update public.engine_alerts set resolved_at = now() where visit_id = p.visit_id and kind = 'payment_disputed' and resolved_at is null;
+  perform private.money_alert('payment_disputed', p.visit_id,
+    'The chargeback on this clean was lost: the customer''s bank kept the money and Ping carries it. '
+    || case when paid_out then 'The cleaner was already paid for it; review it with them.'
+            else 'The cleaner won''t be paid for it by Ping, but their part is still in their Stripe balance: reverse the transfer in Stripe, then tell the main session.' end);
+  return 'lost';
 end $$;

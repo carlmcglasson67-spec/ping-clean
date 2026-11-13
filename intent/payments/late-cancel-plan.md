@@ -52,3 +52,10 @@ the whole block. So this PR builds cancelling first, and the fee on top.
 - Refunding a fee from the admin Payments page (it lists fees; refunds stay cleans-only).
 - "The cleaner couldn't get in" decisions, and card-expiry reminders.
 - Texting or emailing the cleaner.
+
+## After the security review (13 Nov)
+- A fee applies only when the block is claimed by this clean's cleaner and that cleaner is active. On hold, back on the board, or a suspended cleaner: late, but free.
+- A fee under 30p can't be set (Stripe can't take it).
+- Emails and chargeback alerts word a fee as a fee.
+- Not in this PR: refunding a fee from admin Payments (the page says so and warns against doing it in Stripe); telling the cleaner automatically (the office alert is the only notice).
+
