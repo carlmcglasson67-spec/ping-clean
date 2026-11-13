@@ -200,6 +200,7 @@ export async function lateCancelFlows({ browser, BASE, check, signIn, SHOTS, str
       await ap.getByText("Fee waived").click();
       assert.equal(await ap.locator('[data-part="cleaner"]').innerText(), "£7.50");
       assert.equal(await ap.locator('[data-part="ping"]').innerText(), "£2.50");
+      await ap.waitForTimeout(300); // the chosen reason finishes its colour change
       await shoot(ap, "admin-payment-fee-refund-form-1440");
       const sentBefore = stripe.state.refunds.size;
       await ap.getByRole("button", { name: "Refund £10.00" }).click();
