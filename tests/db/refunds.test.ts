@@ -44,11 +44,11 @@ const tryAsk = async (q: Query, who: string, payment: string, pence: number, rea
   await su(q);
   return code;
 };
-const said = async (q: Query, refund: string, outcome: string, over: { re?: string | null; amount?: number; error?: string } = {}) => {
+const said = async (q: Query, refund: string, outcome: string, over: { re?: string | null; amount?: number; error?: string; pi?: string } = {}) => {
   const [r] = await q.rows<{ amount_pence: number }>(`select amount_pence from public.refunds where id = $1`, [refund]);
   await server(q);
-  const x = await q.rows<{ r: string }>(`select public.stripe_refund_result($1, $2, $3, $4, $5) as r`,
-    [refund, over.re === undefined ? RE : over.re, outcome, over.amount ?? r?.amount_pence ?? 0, over.error ?? null]);
+  const x = await q.rows<{ r: string }>(`select public.stripe_refund_result($1, $2, $3, $4, $5, $6) as r`,
+    [refund, over.re === undefined ? RE : over.re, outcome, over.amount ?? r?.amount_pence ?? 0, over.error ?? null, over.pi ?? null]);
   await su(q);
   return x[0]!.r;
 };
@@ -199,7 +199,7 @@ describe("what can't be refunded", () => {
       const id = await paid(q);
       const out: Record<string, string> = {};
       for (const [name, who] of [["cleaner", U.tara], ["customer", U.anna], ["otherCleaner", U.alex]] as const) out[name] = await tryAsk(q, who, id, 100, "goodwill");
-      const calls = [`select * from public.refund_to_send(gen_random_uuid())`, `select * from public.refunds_unsent()`,
+      const calls = [`select * from public.refund_to_send(gen_random_uuid())`, `select * from public.refunds_open()`,
         `select public.stripe_refund_result(gen_random_uuid(), 're_TestX0000001', 'succeeded', 1, null)`, `select public.stripe_dispute('pi_TestX0000001', 'opened')`];
       for (const who of [U.tara, U.anna, U.admin]) {
         await q.actAs(who);
@@ -216,10 +216,11 @@ describe("what can't be refunded", () => {
       const p = await paid(q);
       const id = await ask(q, p, 1000, "clean_quality");
       await said(q, id, "pending");
-      const out = [await said(q, id, "succeeded", { re: "re_TestSomeoneElse1" }), await said(q, id, "succeeded", { amount: 5000 }), await said(q, "00000000-0000-4000-f300-0000000000ff", "succeeded")];
+      const out = [await said(q, id, "succeeded", { re: "re_TestSomeoneElse1" }), await said(q, id, "succeeded", { amount: 5000 }),
+        await said(q, id, "succeeded", { pi: "pi_TestAnotherOne001" }), await said(q, "00000000-0000-4000-f300-0000000000ff", "succeeded")];
       return { out, refund: await refund(q, id), payment: await payment(q, p), alerts: await alerts(q) };
     });
-    expect(r).toEqual({ out: ["mismatch", "mismatch", "unknown"], refund: { status: "pending", amount_pence: 1000, cleaner_part_pence: 750, ping_part_pence: 250, re: RE },
+    expect(r).toEqual({ out: ["mismatch", "mismatch", "mismatch", "unknown"], refund: { status: "pending", amount_pence: 1000, cleaner_part_pence: 750, ping_part_pence: 250, re: RE },
       payment: { status: "succeeded", refunded_pence: 0 }, alerts: ["refund_failed"] });
   });
 });
@@ -231,7 +232,7 @@ describe("sending and chasing", () => {
       const id = await ask(q, p, 1000, "clean_quality");
       await server(q);
       const [send] = await q.rows<{ payment_intent_id: string; amount_pence: number; shared: boolean; idempotency_key: string }>(`select payment_intent_id, amount_pence, shared, idempotency_key from public.refund_to_send($1)`, [id]);
-      const list = async () => { await server(q); const x = await q.rows(`select refund_id from public.refunds_unsent()`); await su(q); return x.length; };
+      const list = async () => { await server(q); const x = await q.rows<{ mode: string }>(`select mode from public.refunds_open()`); await su(q); return x.map((y) => y.mode); };
       const fresh = await list();
       await q.rows(`alter table public.refunds disable trigger user`);
       await q.rows(`update public.refunds set created_at = now() - interval '20 minutes' where id = $1`, [id]);
@@ -242,7 +243,25 @@ describe("sending and chasing", () => {
       const old = await list();
       return { send: { ...send, idempotency_key: send!.idempotency_key === `refund:${id}` }, fresh, unsent, kick, old, alerts: await alerts(q) };
     });
-    expect(r).toEqual({ send: { payment_intent_id: PI, amount_pence: 1000, shared: true, idempotency_key: true }, fresh: 0, unsent: 1, kick: true, old: 0, alerts: ["refund_failed"] });
+    expect(r).toEqual({ send: { payment_intent_id: PI, amount_pence: 1000, shared: true, idempotency_key: true }, fresh: [], unsent: ["send"], kick: true, old: [], alerts: ["refund_failed"] });
+  });
+
+  it("asks Stripe about a refund it has had for over an hour without an answer", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paid(q);
+      const id = await ask(q, p, 1000, "clean_quality");
+      await said(q, id, "pending"); // Stripe took it and is still working on it
+      const list = async () => { await server(q); const x = await q.rows<{ mode: string; stripe_refund_id: string }>(`select mode, stripe_refund_id from public.refunds_open()`); await su(q); return x; };
+      const soon = await list();
+      await q.rows(`alter table public.refunds disable trigger user`);
+      await q.rows(`update public.refunds set updated_at = now() - interval '61 minutes' where id = $1`, [id]);
+      await q.rows(`alter table public.refunds enable trigger user`);
+      const kick = (await q.rows<{ due: boolean }>(`select private.payouts_due() as due`))[0]!.due;
+      const later = await list();
+      await said(q, id, "pending"); // asked, still going: not asked again for an hour
+      return { soon: soon.length, kick, later, again: (await list()).length };
+    });
+    expect(r).toEqual({ soon: 0, kick: true, later: [{ mode: "check", stripe_refund_id: RE }], again: 0 });
   });
 });
 
@@ -288,6 +307,172 @@ describe("chargebacks", () => {
       return { payment: await payment(q, p), payout: await payout(q) };
     });
     expect(r).toEqual({ payment: { status: "partially_refunded", refunded_pence: 1000 }, payout: { status: "pending", amount_pence: 3000, held_reason: null } });
+  });
+});
+
+/** Tara's earnings for the clean are past their check period and in a bank payout Stripe has taken. */
+async function withTheBank(q: Query) {
+  await q.rows(`update public.payouts set available_after = now() - interval '1 minute' where visit_id = $1`, [today]);
+  await server(q);
+  const [b] = await q.rows<{ batch_id: string }>(`select batch_id from public.payout_batch_open($1, 5000)`, [U.tara]);
+  await su(q);
+  return b!.batch_id;
+}
+const bankSaysNo = async (q: Query, batch: string) => {
+  await server(q);
+  await q.rows(`select public.payout_batch_sent($1, 'po_TestRefund00002', current_date + 2)`, [batch]);
+  await q.rows(`select public.stripe_payout_result($1, 'po_TestRefund00002', (select stripe_account_id from public.cleaners where id = $2), 'failed', 3750, current_date, 'account_closed')`, [batch, U.tara]);
+  await su(q);
+};
+/** A day on, and Stripe says the cleaner's account has changed: bank-refused earnings are due again. */
+const cleanerFixedTheirBank = async (q: Query) => {
+  await q.rows(`alter table public.payout_batches disable trigger user`);
+  await q.rows(`update public.payout_batches set created_at = created_at - interval '21 hours' where cleaner_id = $1`, [U.tara]);
+  await q.rows(`alter table public.payout_batches enable trigger user`);
+  await q.rows(`update public.cleaners set stripe_status_at = now() + interval '2 hours' where id = $1`, [U.tara]);
+};
+const openBatch = async (q: Query) => { await server(q); const x = await q.rows<{ amount_pence: number }>(`select amount_pence from public.payout_batch_open($1, 5000)`, [U.tara]); await su(q); return x[0]?.amount_pence ?? null; };
+
+describe("a cleaner's earnings always end on the right figure (review finding 1)", () => {
+  it("the bank had refused their payout, then a shared refund: reduced, and paid at the reduced figure once they fix their bank", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paid(q);
+      await bankSaysNo(q, await withTheBank(q));
+      const id = await ask(q, p, 1000, "clean_quality");
+      await said(q, id, "succeeded");
+      const after = await payout(q);
+      await cleanerFixedTheirBank(q);
+      return { after, batch: await openBatch(q), row: await payout(q), alerts: await alerts(q) };
+    });
+    expect(r).toEqual({ after: { status: "failed", amount_pence: 3000, held_reason: null }, batch: 3000, row: { status: "in_batch", amount_pence: 3000, held_reason: null }, alerts: [] });
+  });
+
+  it("the same, refunded in full: their row is cancelled, and nothing stops their other earnings", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paid(q);
+      await bankSaysNo(q, await withTheBank(q));
+      const id = await ask(q, p, 5000, "no_show");
+      await said(q, id, "succeeded");
+      await cleanerFixedTheirBank(q);
+      return { row: (await payout(q)).status, batch: await openBatch(q) };
+    });
+    expect(r).toEqual({ row: "cancelled", batch: null });
+  });
+
+  it("a refund lands while their pay is in a bank payout that Stripe then refuses to take: it comes back reduced", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paid(q);
+      const batch = await withTheBank(q);
+      const id = await ask(q, p, 1000, "clean_quality");
+      await said(q, id, "succeeded");
+      const during = await payout(q);
+      await server(q);
+      await q.rows(`select public.payout_batch_not_sent($1, 'stripe_balance_insufficient')`, [batch]);
+      await su(q);
+      const back = await payout(q);
+      await cleanerFixedTheirBank(q);
+      return { during, back, batch: await openBatch(q), alerts: await alerts(q) };
+    });
+    expect(r).toEqual({ during: { status: "in_batch", amount_pence: 3750, held_reason: null }, back: { status: "pending", amount_pence: 3000, held_reason: null },
+      batch: 3000, alerts: ["refund_after_payout"] });
+  });
+
+  it("Stripe takes a refund back after saying it had gone: their earnings are restored and held for a person, not sent", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paid(q);
+      const id = await ask(q, p, 1000, "clean_quality");
+      await said(q, id, "succeeded");
+      const reduced = (await payout(q)).amount_pence;
+      const late = await said(q, id, "failed", { error: "expired_or_canceled_card" });
+      return { reduced, late, row: await payout(q), due: await due(q), alerts: await alerts(q) };
+    });
+    expect(r).toEqual({ reduced: 3000, late: "failed", row: { status: "held", amount_pence: 3750, held_reason: "admin_review" }, due: 0, alerts: ["refund_failed"] });
+  });
+
+  it("Stripe says a refund went through that Ping had recorded as failed: an alarm, and nothing changes", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paid(q);
+      const id = await ask(q, p, 1000, "clean_quality");
+      await said(q, id, "failed", { re: null, error: "unknown" });
+      await q.rows(`update public.engine_alerts set resolved_at = now() where kind = 'refund_failed'`);
+      const late = await said(q, id, "succeeded");
+      const [a] = await q.rows<{ message: string }>(`select message from public.engine_alerts where kind = 'refund_failed' and resolved_at is null`);
+      return { late, payment: await payment(q, p), refund: (await refund(q, id)).status, says: /do NOT refund it again/.test(a?.message ?? "") };
+    });
+    expect(r).toEqual({ late: "already", payment: { status: "succeeded", refunded_pence: 0 }, refund: "failed", says: true });
+  });
+});
+
+describe("a refund settling while a chargeback is open (review finding 2)", () => {
+  it("part refund: the payment stays disputed, the chargeback's outcome is still recorded, and the earnings end right", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paid(q);
+      const id = await ask(q, p, 1000, "clean_quality");
+      await dispute(q, "opened");
+      const settled = await said(q, id, "succeeded");
+      const during = { payment: await payment(q, p), payout: await payout(q), due: await due(q), more: await tryAsk(q, U.admin, p, 100, "goodwill") };
+      const won = await dispute(q, "won");
+      return { settled, during, won, payment: await payment(q, p), payout: await payout(q), alerts: await alerts(q) };
+    });
+    expect(r).toEqual({ settled: "succeeded",
+      during: { payment: { status: "disputed", refunded_pence: 1000 }, payout: { status: "held", amount_pence: 3000, held_reason: "dispute_open" }, due: 0, more: "PC048" },
+      won: "won", payment: { status: "partially_refunded", refunded_pence: 1000 }, payout: { status: "pending", amount_pence: 3000, held_reason: null }, alerts: [] });
+  });
+
+  it("the same chargeback lost: recorded as lost and the earnings cancelled", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paid(q);
+      const id = await ask(q, p, 1000, "clean_quality");
+      await dispute(q, "opened");
+      await said(q, id, "succeeded");
+      const lost = await dispute(q, "lost");
+      return { lost, payment: (await payment(q, p)).status, payout: (await payout(q)).status };
+    });
+    expect(r).toEqual({ lost: "lost", payment: "dispute_lost", payout: "cancelled" });
+  });
+
+  it("refunded in full by Ping during the dispute, then won: the payment ends refunded and the cleaner is still paid", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paid(q);
+      const id = await ask(q, p, 5000, "goodwill");
+      await dispute(q, "opened");
+      const settled = await said(q, id, "succeeded");
+      const during = await payment(q, p);
+      const won = await dispute(q, "won");
+      return { settled, during, won, payment: await payment(q, p), payout: await payout(q), due: await due(q) };
+    });
+    expect(r).toEqual({ settled: "succeeded", during: { status: "disputed", refunded_pence: 5000 }, won: "won",
+      payment: { status: "refunded", refunded_pence: 5000 }, payout: { status: "pending", amount_pence: 3750, held_reason: null }, due: 3750 });
+  });
+
+  it("earnings the bank had sent back are held too, so nothing goes out while it's open", async () => {
+    const r = await as("superuser", async (q) => {
+      await paid(q);
+      await bankSaysNo(q, await withTheBank(q));
+      await dispute(q, "opened");
+      const held = await payout(q);
+      await cleanerFixedTheirBank(q);
+      return { held, batch: await openBatch(q) };
+    });
+    expect(r).toEqual({ held: { status: "held", amount_pence: 3750, held_reason: "dispute_open" }, batch: null });
+  });
+
+  it("an 'opened' that arrives after its own 'closed' does nothing; one on a refunded payment tells the team", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paid(q);
+      await dispute(q, "opened");
+      await dispute(q, "won");
+      const late = await dispute(q, "opened");
+      const after = { payment: (await payment(q, p)).status, payout: (await payout(q)).status };
+      return { late, after };
+    });
+    expect(r).toEqual({ late: "already", after: { payment: "succeeded", payout: "pending" } });
+    const refunded = await as("superuser", async (q) => {
+      const p = await paid(q);
+      await said(q, await ask(q, p, 5000, "goodwill"), "succeeded");
+      return { said: await dispute(q, "opened"), payment: (await payment(q, p)).status, alerts: await alerts(q) };
+    });
+    expect(refunded).toEqual({ said: "already", payment: "refunded", alerts: ["payment_disputed"] });
   });
 });
 

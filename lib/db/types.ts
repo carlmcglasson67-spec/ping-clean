@@ -1284,9 +1284,17 @@ export type Database = {
         Args: { p_refund: string };
         Returns: { refund_id: string; payment_intent_id: string; amount_pence: number; shared: boolean; idempotency_key: string }[];
       };
-      refunds_unsent: {
+      refunds_open: {
         Args: Record<string, never>;
-        Returns: { refund_id: string; payment_intent_id: string; amount_pence: number; shared: boolean; idempotency_key: string }[];
+        Returns: {
+          refund_id: string;
+          mode: "send" | "check";
+          payment_intent_id: string;
+          amount_pence: number;
+          shared: boolean;
+          idempotency_key: string;
+          stripe_refund_id: string | null;
+        }[];
       };
       stripe_refund_result: {
         Args: {
@@ -1295,6 +1303,7 @@ export type Database = {
           p_outcome: "succeeded" | "failed" | "pending";
           p_amount: number;
           p_error: string | null;
+          p_payment_intent?: string | null;
         };
         Returns: "succeeded" | "failed" | "pending" | "already" | "unknown" | "mismatch";
       };

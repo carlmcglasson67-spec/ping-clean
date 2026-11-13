@@ -27,7 +27,7 @@ function db(opts: { send?: Record<string, unknown> | null; unsent?: Record<strin
   rpc.mockImplementation(async (fn: string, args: Record<string, unknown> = {}) => {
     calls.push([fn, args]);
     if (fn === "refund_to_send") return { data: opts.send === null ? [] : [opts.send ?? toSend()], error: null };
-    if (fn === "refunds_unsent") return { data: opts.unsent ?? [], error: null };
+    if (fn === "refunds_open") return { data: opts.unsent ?? [], error: null };
     if (fn === "stripe_refund_result") return { data: args.p_outcome, error: null };
     if (fn === "stripe_dispute") return { data: args.p_outcome === "opened" ? "disputed" : args.p_outcome, error: null };
     return { data: null, error: { code: "XX000" } };
@@ -49,7 +49,7 @@ describe("sending a refund", () => {
     const re = [...fake.state.refunds.values()][0]!;
     expect(re).toMatchObject({ amount: 1000, payment_intent: PI, metadata: { refund_id: REFUND }, __reverse_transfer: true, __refund_application_fee: true });
     expect(fake.state.requests).toEqual([{ method: "POST", path: "/v1/refunds", idempotencyKey: `refund:${REFUND}` }]);
-    expect(d.of("stripe_refund_result")).toEqual([{ p_refund: REFUND, p_stripe_refund: re.id, p_outcome: "succeeded", p_amount: 1000, p_error: null }]);
+    expect(d.of("stripe_refund_result")).toEqual([{ p_refund: REFUND, p_stripe_refund: re.id, p_outcome: "succeeded", p_amount: 1000, p_error: null, p_payment_intent: PI }]);
   });
 
   it("carried by Ping alone: the cleaner's transfer and Ping's fee are left where they are", async () => {
@@ -97,10 +97,24 @@ describe("sending a refund", () => {
 
   it("the job sends the ones that never reached Stripe, and one failing doesn't stop the next", async () => {
     const other = "00000000-0000-4000-f300-0000000000bb";
-    const d = db({ unsent: [toSend({ payment_intent_id: "pi_testNoSuchIntent01" }), toSend({ refund_id: other, idempotency_key: `refund:${other}` })] });
+    const d = db({ unsent: [toSend({ mode: "send", stripe_refund_id: null, payment_intent_id: "pi_testNoSuchIntent01" }), toSend({ mode: "send", stripe_refund_id: null, refund_id: other, idempotency_key: `refund:${other}` })] });
     const run = await resendRefunds();
-    expect(run).toEqual({ sent: 2, errors: 0 });
+    expect(run).toEqual({ sent: 2, checked: 0, errors: 0 });
     expect(d.of("stripe_refund_result").map((r) => [r.p_refund, r.p_outcome])).toEqual([[REFUND, "failed"], [other, "succeeded"]]);
+  });
+});
+
+describe("chasing a refund Stripe hasn't answered on", () => {
+  it("asks Stripe for it and records where it has got to", async () => {
+    await fetch(`${fake.url}/__test/refund-status`, { method: "POST", body: JSON.stringify({ status: "pending" }) });
+    db();
+    await sendRefund(REFUND);
+    const re = [...fake.state.refunds.values()][0]!;
+    re.status = "succeeded"; // Stripe finished it; the webhook never arrived
+    const d = db({ unsent: [toSend({ mode: "check", stripe_refund_id: re.id })] });
+    expect(await resendRefunds()).toEqual({ sent: 0, checked: 1, errors: 0 });
+    expect(d.of("stripe_refund_result")).toEqual([{ p_refund: REFUND, p_stripe_refund: re.id, p_outcome: "succeeded", p_amount: 1000, p_error: null, p_payment_intent: PI }]);
+    expect(fake.state.refunds.size).toBe(1);
   });
 });
 
@@ -123,7 +137,7 @@ describe("refund and dispute webhooks", () => {
   it("refund.updated records Stripe's state for the refund named in it", async () => {
     const d = db();
     await onRefundEvent(ev("refund.updated", refund()));
-    expect(d.of("stripe_refund_result")).toEqual([{ p_refund: REFUND, p_stripe_refund: "re_testHook000001", p_outcome: "succeeded", p_amount: 1000, p_error: null }]);
+    expect(d.of("stripe_refund_result")).toEqual([{ p_refund: REFUND, p_stripe_refund: "re_testHook000001", p_outcome: "succeeded", p_amount: 1000, p_error: null, p_payment_intent: PI }]);
   });
 
   it("refund.failed is a failure whatever the snapshot's status says", async () => {

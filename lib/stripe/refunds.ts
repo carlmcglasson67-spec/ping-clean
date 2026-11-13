@@ -32,8 +32,10 @@ export function readRefund(re: Stripe.Refund): { outcome: RefundOutcome; error: 
 
 async function record(db: Db, refundId: string, re: Stripe.Refund): Promise<string> {
   const { outcome, error } = readRefund(re);
+  const intent = typeof re.payment_intent === "string" ? re.payment_intent : (re.payment_intent?.id ?? null);
   const saved = await db.rpc("stripe_refund_result", {
     p_refund: refundId, p_stripe_refund: re.id, p_outcome: outcome, p_amount: re.amount, p_error: error,
+    p_payment_intent: intent, // the database checks it's this refund's own payment
   });
   if (saved.error || typeof saved.data !== "string") throw new Error("couldn't record the refund result");
   return saved.data;
@@ -83,19 +85,28 @@ export async function sendRefund(refundId: string): Promise<"succeeded" | "pendi
   }
 }
 
-/** The hourly job: refunds that never reached Stripe. One going wrong never stops the rest. */
-export async function resendRefunds(): Promise<{ sent: number; errors: number }> {
+/**
+ * The hourly job: refunds with no final answer. One that never reached Stripe is sent again
+ * (same key); one Stripe has had for over an hour is asked about. One going wrong never
+ * stops the rest.
+ */
+export async function resendRefunds(): Promise<{ sent: number; checked: number; errors: number }> {
   const db = createAdminClient();
-  const run = { sent: 0, errors: 0 };
-  const list = await db.rpc("refunds_unsent");
-  if (list.error) throw new Error("couldn't read the unsent refunds");
+  const run = { sent: 0, checked: 0, errors: 0 };
+  const list = await db.rpc("refunds_open");
+  if (list.error) throw new Error("couldn't read the open refunds");
   for (const r of list.data ?? []) {
     try {
-      await send(db, r);
-      run.sent++;
+      if (r.mode === "check" && r.stripe_refund_id) {
+        await record(db, r.refund_id, await getStripe().refunds.retrieve(r.stripe_refund_id));
+        run.checked++;
+      } else {
+        await send(db, r);
+        run.sent++;
+      }
     } catch {
       run.errors++;
-      console.error(`refunds: refund ${r.refund_id} couldn't be sent this run`);
+      console.error(`refunds: refund ${r.refund_id} couldn't be sent or checked this run`);
     }
   }
   return run;

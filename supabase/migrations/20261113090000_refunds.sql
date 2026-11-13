@@ -3,7 +3,7 @@
 --
 --   admin_refund(payment, pence, reason, note)  the Ping team: ask for a refund
 --   refund_to_send(refund)                      server: what to send Stripe for it
---   refunds_unsent()                            server (job): refunds that never reached Stripe
+--   refunds_open()                              server (job): refunds with no final answer yet
 --   stripe_refund_result(refund, …)             server (action, job, webhook): what Stripe said
 --   stripe_dispute(payment intent, outcome)     server (webhook): a chargeback opened, won or lost
 --
@@ -22,6 +22,8 @@ alter table public.engine_alerts add constraint engine_alerts_kind_check
 -- One open alert per clean for a dispute or a failed refund, however often Stripe repeats itself.
 create unique index engine_alerts_one_open_refund on public.engine_alerts (visit_id, kind)
   where kind in ('payment_disputed', 'refund_failed') and resolved_at is null;
+create unique index engine_alerts_one_open_stuck_clean on public.engine_alerts (visit_id, kind)
+  where kind = 'payout_stuck' and visit_id is not null and resolved_at is null;
 
 create function private.money_alert(p_kind text, p_visit uuid, p_message text) returns void
 language sql volatile security definer set search_path = '' as $$
@@ -98,6 +100,126 @@ language sql stable security definer set search_path = '' as $$
                     where recent.cleaner_id = po.cleaner_id and recent.created_at > now() - interval '20 hours')
 $$;
 
+-- ---------------------------------------------------------------- the payment map, with one more move
+-- As before, plus disputed → refunded: a chargeback won on a payment that had been refunded
+-- in full while the dispute was open.
+create or replace function private.check_payment_move() returns trigger
+language plpgsql set search_path = '' as $$
+declare
+  ok boolean;
+begin
+  if new.status = old.status then return new; end if;
+  ok := case old.status::text
+    when 'pending'            then new.status::text in ('processing', 'failed')
+    when 'processing'         then new.status::text in ('succeeded', 'requires_action', 'failed')
+    when 'requires_action'    then new.status::text in ('processing', 'succeeded', 'failed')
+    when 'failed'             then new.status::text in ('processing', 'failed_final')
+    when 'failed_final'       then new.status::text in ('processing')               -- an admin retry
+    when 'succeeded'          then new.status::text in ('partially_refunded', 'refunded', 'disputed')
+    when 'partially_refunded' then new.status::text in ('refunded', 'disputed')
+    when 'disputed'           then new.status::text in ('succeeded', 'partially_refunded', 'refunded', 'dispute_lost')
+    else false                                                                      -- refunded, dispute_lost: final
+  end;
+  if not ok then
+    raise exception 'A payment can''t go from % to %', old.status, new.status using errcode = 'PC040';
+  end if;
+  return new;
+end $$;
+
+-- ---------------------------------------------------------------- keeping a cleaner's earnings right
+-- What a cleaner is owed for a clean = their part of the payment, less their part of every
+-- refund that has succeeded. This puts every row of theirs that hasn't gone to the bank
+-- (waiting, held, or sent back by the bank) on exactly that figure, or cancels it when nothing
+-- is left. Called whenever a refund settles and whenever rows come back out of a bank payout,
+-- so a row can never be left on a figure the payout guard would refuse.
+create function private.settle_payout_amount(p_payment uuid) returns void
+language plpgsql volatile security definer set search_path = '' as $$
+declare
+  net integer;
+  po public.payouts;
+begin
+  select p.cleaner_amount_pence - coalesce((select sum(r.cleaner_part_pence) from public.refunds r
+                                            where r.payment_id = p.id and r.status = 'succeeded'), 0)
+    into net from public.payments p where p.id = p_payment;
+  for po in select * from public.payouts where payment_id = p_payment and status in ('pending', 'held', 'failed') for update loop
+    if net <= 0 then
+      if po.status = 'failed' then  -- the map has no failed → cancelled
+        update public.payouts set status = 'held', held_reason = 'admin_review' where id = po.id;
+      end if;
+      update public.payouts set status = 'cancelled' where id = po.id;
+    elsif po.amount_pence <> net then
+      update public.payouts set amount_pence = net where id = po.id;
+    end if;
+  end loop;
+end $$;
+revoke all on function private.settle_payout_amount(uuid) from public, anon, authenticated;
+
+-- Rows coming back out of a bank payout (PR 9's fail_batch), now put right on the way out: a
+-- refund may have settled while they were with the bank.
+create or replace function private.fail_batch(p_batch uuid, p_error text, p_return boolean) returns void
+language plpgsql volatile security definer set search_path = '' as $$
+declare
+  pay uuid;
+begin
+  update public.payout_batches
+     set status = 'failed', failure_reason = left(coalesce(nullif(p_error, ''), 'unknown'), 300) where id = p_batch;
+  update public.payouts set status = 'failed' where batch_id = p_batch and status = 'in_batch';
+  for pay in select distinct payment_id from public.payouts where batch_id = p_batch and status = 'failed' loop
+    perform private.settle_payout_amount(pay);
+  end loop;
+  if p_return then
+    update public.payouts set status = 'pending', batch_id = null, stripe_payout_id = null
+     where batch_id = p_batch and status = 'failed';
+  end if;
+end $$;
+
+-- One bank payout (as PR 9), except a row that isn't on the right figure is left out and the
+-- team told, instead of stopping every other clean that cleaner is owed for.
+create or replace function public.payout_batch_open(p_cleaner uuid, p_available_pence integer)
+returns table (batch_id uuid, cleaner_account_id text, amount_pence integer, idempotency_key text)
+language plpgsql volatile security definer set search_path = '' as $$
+declare
+  c public.cleaners;
+  r public.payouts;
+  ids uuid[] := '{}';
+  total integer := 0;
+  bid uuid := gen_random_uuid();
+  net integer;
+begin
+  perform set_config('app.actor', 'job:pay-cleaners', true);
+  select * into c from public.cleaners where id = p_cleaner for update;  -- one run per cleaner at a time
+  if not found or c.stripe_account_id is null or not c.stripe_payouts_enabled then return; end if;
+  if exists (select 1 from public.payout_batches b
+             where b.cleaner_id = p_cleaner and b.status = 'created' and b.stripe_payout_id is null) then
+    return;
+  end if;
+  for r in select d.* from private.payout_rows_due(p_cleaner) d
+           join public.payouts lock_it on lock_it.id = d.id
+           order by d.available_after, d.created_at for update of lock_it loop
+    select p.cleaner_amount_pence - coalesce((select sum(f.cleaner_part_pence) from public.refunds f
+                                              where f.payment_id = p.id and f.status = 'succeeded'), 0)
+      into net from public.payments p where p.id = r.payment_id;
+    if r.amount_pence <> net then
+      perform private.money_alert('payout_stuck', r.visit_id,
+        'A cleaner''s earnings for this clean don''t match what''s left after refunds, so they were left out of their bank payout. Nothing wrong was paid. Tell the main session.');
+      continue;
+    end if;
+    exit when total + r.amount_pence > coalesce(p_available_pence, 0);
+    total := total + r.amount_pence;
+    ids := ids || r.id;
+  end loop;
+  if total = 0 then return; end if;
+
+  insert into public.payout_batches (id, cleaner_id, amount_pence, idempotency_key)
+  values (bid, p_cleaner, total, 'payout-batch:' || bid);
+  update public.payouts set status = 'pending', held_reason = null, batch_id = null, stripe_payout_id = null where id = any (ids) and status = 'failed';
+  update public.payouts set status = 'in_batch', batch_id = bid where id = any (ids);
+
+  batch_id := bid; cleaner_account_id := c.stripe_account_id; amount_pence := total;
+  idempotency_key := 'payout-batch:' || bid;
+  return next;
+end $$;
+
 -- ---------------------------------------------------------------- asking for a refund
 -- The Ping team only. p_reason decides who carries it (plan, step 4):
 --   clean_quality, no_show      the cleaner and Ping, in the proportion the clean was split
@@ -171,40 +293,44 @@ language sql stable security definer set search_path = '' as $$
   where r.id = p_refund and r.status = 'pending' and r.stripe_refund_id is null
 $$;
 
--- Refunds asked for that never reached Stripe (the admin's request was cut off): sent again
--- by the job with the same key while Stripe still remembers it. After 23 hours a person looks.
-create function public.refunds_unsent()
-returns table (refund_id uuid, payment_intent_id text, amount_pence integer, shared boolean, idempotency_key text)
+-- Refunds with no final answer: never reached Stripe (sent again, same key, while Stripe still
+-- remembers it), or with Stripe for over an hour without a word (the job asks Stripe). Either
+-- one still open after 23 hours: a person looks.
+create function public.refunds_open()
+returns table (refund_id uuid, mode text, payment_intent_id text, amount_pence integer, shared boolean, idempotency_key text, stripe_refund_id text)
 language plpgsql volatile security definer set search_path = '' as $$
 begin
   perform set_config('app.actor', 'job:refunds', true);
   perform private.money_alert('refund_failed', p.visit_id,
-            'A refund was asked for but never reached Stripe. Nothing has gone back to the customer. Tell the main session.')
+            case when r.stripe_refund_id is null
+                 then 'A refund was asked for but never reached Stripe. Nothing has gone back to the customer. Tell the main session.'
+                 else 'A refund has been with Stripe for a day with no answer. Check it in Stripe, then tell the main session.' end)
   from public.refunds r join public.payments p on p.id = r.payment_id
-  where r.status = 'pending' and r.stripe_refund_id is null and r.created_at < now() - interval '23 hours'
-    and not exists (select 1 from public.engine_alerts a where a.visit_id = p.visit_id and a.kind = 'refund_failed' and a.resolved_at is null);
+  where r.status = 'pending' and r.created_at < now() - interval '23 hours';
   return query
-    select r.id, p.stripe_payment_intent_id, r.amount_pence, r.cleaner_part_pence > 0, r.idempotency_key
+    select r.id, case when r.stripe_refund_id is null then 'send' else 'check' end, p.stripe_payment_intent_id,
+           r.amount_pence, r.cleaner_part_pence > 0, r.idempotency_key, r.stripe_refund_id
     from public.refunds r join public.payments p on p.id = r.payment_id
-    where r.status = 'pending' and r.stripe_refund_id is null
-      and r.created_at between now() - interval '23 hours' and now() - interval '10 minutes'
+    where r.status = 'pending'
+      and ((r.stripe_refund_id is null and r.created_at between now() - interval '23 hours' and now() - interval '10 minutes')
+        or (r.stripe_refund_id is not null and r.updated_at < now() - interval '1 hour'))
     order by r.created_at limit 50;
 end $$;
 
 -- ---------------------------------------------------------------- what Stripe said
 -- From the admin's own request (Stripe's direct answer), the job and the webhook. The Stripe
--- refund id and the amount must be this refund's, or nothing changes.
+-- refund id, the amount and (when given) the PaymentIntent must be this refund's, or nothing
+-- changes.
 --   p_outcome 'succeeded' | 'failed' | 'pending'
 -- Returns 'succeeded' | 'failed' | 'pending' | 'already' | 'unknown' | 'mismatch'.
 create function public.stripe_refund_result(
-  p_refund uuid, p_stripe_refund text, p_outcome text, p_amount integer, p_error text
+  p_refund uuid, p_stripe_refund text, p_outcome text, p_amount integer, p_error text, p_payment_intent text default null
 ) returns text
 language plpgsql volatile security definer set search_path = '' as $$
 declare
   r public.refunds;
   p public.payments;
-  po public.payouts;
-  net integer;
+  total integer;
 begin
   perform set_config('app.actor', 'stripe', true);
   if p_outcome not in ('succeeded', 'failed', 'pending') then
@@ -215,9 +341,11 @@ begin
   select * into p from public.payments where id = r.payment_id for update;
 
   if p_stripe_refund is not null then
-    if (r.stripe_refund_id is not null and r.stripe_refund_id <> p_stripe_refund) or p_amount is distinct from r.amount_pence then
+    if (r.stripe_refund_id is not null and r.stripe_refund_id <> p_stripe_refund)
+       or p_amount is distinct from r.amount_pence
+       or (p_payment_intent is not null and p_payment_intent is distinct from p.stripe_payment_intent_id) then
       perform private.money_alert('refund_failed', p.visit_id,
-        'Stripe reported a refund that doesn''t match Ping''s record (refund or amount). Nothing was recorded. Check Stripe, then tell the main session.');
+        'Stripe reported a refund that doesn''t match Ping''s record (refund, payment or amount). Nothing was recorded. Check Stripe, then tell the main session.');
       return 'mismatch';
     end if;
     if r.stripe_refund_id is null then
@@ -225,44 +353,60 @@ begin
     end if;
   end if;
 
-  if p_outcome = 'pending' then return 'pending'; end if;
+  if p_outcome = 'pending' then
+    update public.refunds set updated_at = now() where id = r.id and status = 'pending';  -- asked; ask again in an hour
+    return 'pending';
+  end if;
 
   if p_outcome = 'succeeded' then
-    if r.status <> 'pending' then return 'already'; end if;  -- done already, or failed: never moved back
+    if r.status = 'failed' then
+      -- Ping recorded this refund as failed, yet Stripe says the customer has it. Nothing is
+      -- changed here; a person must look before anyone refunds it again.
+      perform private.money_alert('refund_failed', p.visit_id,
+        'Stripe says a refund went through that Ping had recorded as failed. The customer may already have the money: do NOT refund it again. Check Stripe and tell the main session.');
+      return 'already';
+    end if;
+    if r.status <> 'pending' then return 'already'; end if;
     if p_stripe_refund is null then return 'mismatch'; end if;
+    if p.status = 'dispute_lost' then
+      -- The customer's bank already took the whole payment back. The refund guard refuses this.
+      perform private.money_alert('refund_failed', p.visit_id,
+        'Stripe refunded a payment that was already lost to a chargeback. Check Stripe and tell the main session.');
+      return 'mismatch';
+    end if;
     update public.refunds set status = 'succeeded' where id = r.id;
+    total := p.refunded_pence + r.amount_pence;
+    -- A payment under dispute keeps saying so: the chargeback's outcome settles its state
+    -- (stripe_dispute), from the refunded total recorded here.
     update public.payments
-       set refunded_pence = refunded_pence + r.amount_pence,
-           status = case when refunded_pence + r.amount_pence >= amount_pence then 'refunded' else 'partially_refunded' end::public.payment_status
+       set refunded_pence = total,
+           status = case when p.status = 'disputed' then status
+                         when total >= amount_pence then 'refunded'::public.payment_status
+                         else 'partially_refunded'::public.payment_status end
      where id = p.id;
-    -- The cleaner's earnings for this clean.
-    for po in select * from public.payouts where payment_id = p.id for update loop
-      if r.cleaner_part_pence = 0 then
-        null;  -- Ping carried it: nothing of theirs changes (and nothing was held)
-      elsif po.status in ('pending', 'held') then
-        net := po.amount_pence - r.cleaner_part_pence;
-        if net <= 0 then
-          update public.payouts set status = 'cancelled' where id = po.id;
-        else
-          update public.payouts set amount_pence = net where id = po.id;
-          update public.payouts set status = 'pending', held_reason = null where id = po.id and status = 'held' and held_reason = 'refund_pending';
-        end if;
-      elsif po.status in ('in_batch', 'paid', 'failed') then
+    if r.cleaner_part_pence > 0 then
+      if exists (select 1 from public.payouts where payment_id = p.id and status in ('in_batch', 'paid')) then
         perform private.money_alert('refund_after_payout', p.visit_id,
-          'A refund took ' || to_char(r.cleaner_part_pence / 100.0, 'FM£999990.00') || ' from a cleaner who had already been paid for this clean. Stripe takes it from their next earnings; if there are none, Ping covers it. Review it with the cleaner.');
+          'A refund took ' || to_char(r.cleaner_part_pence / 100.0, 'FM£999990.00') || ' from a cleaner whose pay for this clean was already with their bank. Stripe takes it from their next earnings; if there are none, Ping covers it. Review it with the cleaner.');
       end if;
-    end loop;
+      perform private.settle_payout_amount(p.id);
+      update public.payouts set status = 'pending', held_reason = null
+       where payment_id = p.id and status = 'held' and held_reason = 'refund_pending';
+    end if;
     return 'succeeded';
   end if;
 
   -- failed
   if r.status = 'failed' then return 'already'; end if;
   if r.status = 'succeeded' then
-    -- Stripe took a refund back after saying it had gone. The payment and the cleaner's
-    -- earnings stay as they are; a person puts it right.
+    -- Stripe took a refund back after saying it had gone. The payment stays as it shows; the
+    -- cleaner's unpaid earnings for the clean wait for a person rather than go out on a figure
+    -- that may be wrong.
     update public.refunds set status = 'failed', failure_reason = left(coalesce(nullif(p_error, ''), 'unknown'), 300) where id = r.id;
+    update public.payouts set status = 'held', held_reason = 'admin_review' where payment_id = p.id and status in ('pending', 'failed');
+    perform private.settle_payout_amount(p.id);
     perform private.money_alert('refund_failed', p.visit_id,
-      'Stripe reversed a refund after it had shown as done (' || left(coalesce(p_error, 'unknown'), 80) || '). The customer has not had the money. The app still shows it refunded. Tell the main session.');
+      'Stripe reversed a refund after it had shown as done (' || left(coalesce(p_error, 'unknown'), 80) || '). The customer has not had the money. The app still shows it refunded, and the cleaner''s unpaid earnings for the clean are held. Tell the main session.');
     return 'failed';
   end if;
   update public.refunds set status = 'failed', failure_reason = left(coalesce(nullif(p_error, ''), 'unknown'), 300) where id = r.id;
@@ -275,6 +419,8 @@ end $$;
 
 -- ---------------------------------------------------------------- chargebacks
 -- From the webhook. The payment is found by its PaymentIntent (unique, set by the charge job).
+-- payments.dispute_status remembers where the chargeback got to, so an "opened" that arrives
+-- after its own "closed" does nothing.
 --   p_outcome 'opened' | 'won' | 'lost'
 -- Returns 'disputed' | 'won' | 'lost' | 'already' | 'unknown'.
 create function public.stripe_dispute(p_payment_intent text, p_outcome text) returns text
@@ -291,9 +437,18 @@ begin
   if not found then return 'unknown'; end if;
 
   if p_outcome = 'opened' then
-    if p.status not in ('succeeded', 'partially_refunded') then return 'already'; end if;
-    update public.payments set status = 'disputed' where id = p.id;
-    update public.payouts set status = 'held', held_reason = 'dispute_open' where payment_id = p.id and status = 'pending';
+    if p.dispute_status is not null then return 'already'; end if;
+    if p.status not in ('succeeded', 'partially_refunded') then
+      -- Refunded in full already, or never paid: nothing of Ping's to hold, but the team should
+      -- know the customer's bank has opened one.
+      perform private.money_alert('payment_disputed', p.visit_id,
+        'The customer''s bank opened a chargeback on a payment that is ' || replace(p.status::text, '_', ' ') || '. Answer it in Stripe (say it was already refunded, if it was).');
+      return 'already';
+    end if;
+    update public.payments set status = 'disputed', dispute_status = 'open' where id = p.id;
+    -- Nothing of the cleaner's for this clean goes to the bank while it's open: rows waiting,
+    -- rows held for anything else, and rows the bank sent back.
+    update public.payouts set status = 'held', held_reason = 'dispute_open' where payment_id = p.id and status in ('pending', 'failed');
     update public.payouts set held_reason = 'dispute_open' where payment_id = p.id and status = 'held';
     select exists (select 1 from public.payouts where payment_id = p.id and status in ('in_batch', 'paid')) into paid_out;
     perform private.money_alert('payment_disputed', p.visit_id,
@@ -304,14 +459,23 @@ begin
 
   if p.status <> 'disputed' then return 'already'; end if;
   if p_outcome = 'won' then
-    update public.payments set status = (case when p.refunded_pence > 0 then 'partially_refunded' else 'succeeded' end)::public.payment_status where id = p.id;
+    -- Back to where its refunds leave it (a refund may have settled while it was open).
+    update public.payments
+       set dispute_status = 'won',
+           status = (case when p.refunded_pence >= p.amount_pence then 'refunded'
+                          when p.refunded_pence > 0 then 'partially_refunded' else 'succeeded' end)::public.payment_status
+     where id = p.id;
+    perform private.settle_payout_amount(p.id);
     update public.payouts set status = 'pending', held_reason = null
+     where payment_id = p.id and status = 'held' and held_reason = 'dispute_open'
+       and not exists (select 1 from public.refunds r where r.payment_id = p.id and r.status = 'pending');
+    update public.payouts set held_reason = 'refund_pending'
      where payment_id = p.id and status = 'held' and held_reason = 'dispute_open';
     update public.engine_alerts set resolved_at = now() where visit_id = p.visit_id and kind = 'payment_disputed' and resolved_at is null;
     return 'won';
   end if;
 
-  update public.payments set status = 'dispute_lost' where id = p.id;
+  update public.payments set status = 'dispute_lost', dispute_status = 'lost' where id = p.id;
   select exists (select 1 from public.payouts where payment_id = p.id and status in ('in_batch', 'paid')) into paid_out;
   update public.payouts set status = 'cancelled' where payment_id = p.id and status = 'held';
   update public.engine_alerts set resolved_at = now() where visit_id = p.visit_id and kind = 'payment_disputed' and resolved_at is null;
@@ -322,7 +486,7 @@ begin
   return 'lost';
 end $$;
 
--- The hourly job also wakes for refunds that never reached Stripe.
+-- The hourly job also wakes for refunds with no final answer.
 create or replace function private.payouts_due() returns boolean
 language sql stable security definer set search_path = '' as $$
   select exists (
@@ -332,13 +496,15 @@ language sql stable security definer set search_path = '' as $$
           or (b.stripe_payout_id is not null and b.sent_at < now() - interval '30 minutes')))
     or exists (select 1 from private.payout_rows_due(null))
     or exists (select 1 from public.refunds r
-               where r.status = 'pending' and r.stripe_refund_id is null and r.created_at < now() - interval '10 minutes')
+               where r.status = 'pending'
+                 and ((r.stripe_refund_id is null and r.created_at < now() - interval '10 minutes')
+                   or (r.stripe_refund_id is not null and r.updated_at < now() - interval '1 hour')))
 $$;
 
 -- ---------------------------------------------------------------- grants
 revoke all on function public.admin_refund(uuid, integer, text, text) from public, anon;
 grant execute on function public.admin_refund(uuid, integer, text, text) to authenticated;  -- checks is_admin inside
-revoke all on function public.refund_to_send(uuid), public.refunds_unsent(),
-  public.stripe_refund_result(uuid, text, text, integer, text), public.stripe_dispute(text, text) from public, anon, authenticated;
-grant execute on function public.refund_to_send(uuid), public.refunds_unsent(),
-  public.stripe_refund_result(uuid, text, text, integer, text), public.stripe_dispute(text, text) to service_role;
+revoke all on function public.refund_to_send(uuid), public.refunds_open(),
+  public.stripe_refund_result(uuid, text, text, integer, text, text), public.stripe_dispute(text, text) from public, anon, authenticated;
+grant execute on function public.refund_to_send(uuid), public.refunds_open(),
+  public.stripe_refund_result(uuid, text, text, integer, text, text), public.stripe_dispute(text, text) to service_role;

@@ -32,7 +32,7 @@ function db(opts: { due?: { cleaner_id: string; cleaner_account_id: string; due_
   const calls: [string, Record<string, unknown>][] = [];
   rpc.mockImplementation(async (fn: string, args: Record<string, unknown> = {}) => {
     calls.push([fn, args]);
-    if (fn === "refunds_unsent") return { data: [], error: null };
+    if (fn === "refunds_open") return { data: [], error: null };
     if (fn === "payout_batches_open") return { data: opts.open ?? [], error: null };
     if (fn === "payout_due_cleaners") return { data: opts.due ?? [], error: null };
     if (fn === "payout_batch_open") { const b = opts.batchFor?.(args.p_cleaner as string, args.p_available_pence as number); return { data: b ? [b] : [], error: null }; }
