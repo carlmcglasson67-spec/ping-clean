@@ -13,6 +13,7 @@ import { fakeServiceRoleKey, startFakeSupabase } from "./fake-supabase.mjs";
 import { cardAtBookingFlows } from "./card-at-booking.e2e.mjs";
 import { chargingFlows, TEST_JOB_SECRET } from "./charging.e2e.mjs";
 import { payoutFlows } from "./payouts.e2e.mjs";
+import { refundFlows } from "./refunds.e2e.mjs";
 import { interestFlows } from "./interest.e2e.mjs";
 import { stripeWebhookFlows } from "./stripe-webhooks.e2e.mjs";
 import { startFakeStripe, TEST_CONNECT_WEBHOOK_SECRET, TEST_PUBLISHABLE_KEY, TEST_SECRET_KEY, TEST_WEBHOOK_SECRET } from "../stripe/fake-stripe.mjs";
@@ -222,6 +223,8 @@ try {
   await chargingFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
   // Payments 9: that paid clean reaches Tara's bank after the check period.
   await payoutFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
+  // Payments 10: the team refunds that clean, part shared with the cleaner and the rest as goodwill.
+  await refundFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
   // Track C's admin console. After Track B's, because it approves, assigns and scores.
   await adminFlows({ browser, BASE, check, signIn, SHOTS });
 } finally {
