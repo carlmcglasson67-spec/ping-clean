@@ -104,7 +104,7 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
             <div className="grid gap-3">
               <Badge tone="warn" className="justify-self-start">One more step</Badge>
               <h2 className="text-2xl font-semibold">Save your card to finish booking.</h2>
-              <p className="text-lg text-navy-2">Each clean is charged to it only once that clean is finished. Nothing is taken today.</p>
+              <p className="text-lg text-navy-2">Each clean is charged to it only once that clean is finished. Nothing is taken today. Your block goes out to our cleaners as soon as your card is saved.</p>
             </div>
             <SaveCard seriesId={s.id} />
           </Card>

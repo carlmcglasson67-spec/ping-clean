@@ -197,6 +197,10 @@ out += `${ind(2)}};
         Args: { p_visit: string };
         Returns: string;
       };
+      admin_refund: {
+        Args: { p_payment: string; p_amount_pence: number; p_reason: string; p_note: string };
+        Returns: string;
+      };
       charge_claim: {
         Args: { p_limit?: number };
         Returns: {
@@ -258,6 +262,10 @@ out += `${ind(2)}};
         Args: { p_payment: string; p_error: string };
         Returns: "failed" | "ignored" | "unknown";
       };
+      charge_retry_not_sent: {
+        Args: { p_payment: string; p_error: string; p_customer_try: boolean };
+        Returns: "returned" | "ignored" | "unknown";
+      };
       stripe_payment_result: {
         Args: {
           p_payment: string;
@@ -271,6 +279,76 @@ out += `${ind(2)}};
           p_event_at: string | null;
         };
         Returns: "succeeded" | "requires_action" | "failed" | "already" | "ignored" | "unknown" | "mismatch";
+      };
+      payout_due_cleaners: {
+        Args: Record<string, never>;
+        Returns: { cleaner_id: string; cleaner_account_id: string; due_pence: number }[];
+      };
+      payout_batch_open: {
+        Args: { p_cleaner: string; p_available_pence: number };
+        Returns: { batch_id: string; cleaner_account_id: string; amount_pence: number; idempotency_key: string }[];
+      };
+      payout_batch_sent: {
+        Args: { p_batch: string; p_stripe_payout: string; p_arrival: string | null };
+        Returns: "sent" | "already" | "mismatch" | "unknown";
+      };
+      payout_batch_not_sent: {
+        Args: { p_batch: string; p_error: string };
+        Returns: "returned" | "ignored" | "unknown";
+      };
+      payout_batches_open: {
+        Args: Record<string, never>;
+        Returns: {
+          batch_id: string;
+          mode: "send" | "check";
+          cleaner_account_id: string;
+          amount_pence: number;
+          idempotency_key: string;
+          stripe_payout_id: string | null;
+        }[];
+      };
+      stripe_payout_result: {
+        Args: {
+          p_batch: string;
+          p_stripe_payout: string;
+          p_account: string;
+          p_outcome: "paid" | "failed" | "in_transit";
+          p_amount: number;
+          p_arrival: string | null;
+          p_error: string | null;
+        };
+        Returns: "paid" | "failed" | "already" | "ignored" | "unknown" | "mismatch";
+      };
+      refund_to_send: {
+        Args: { p_refund: string };
+        Returns: { refund_id: string; payment_intent_id: string; amount_pence: number; shared: boolean; idempotency_key: string }[];
+      };
+      refunds_open: {
+        Args: Record<string, never>;
+        Returns: {
+          refund_id: string;
+          mode: "send" | "check";
+          payment_intent_id: string;
+          amount_pence: number;
+          shared: boolean;
+          idempotency_key: string;
+          stripe_refund_id: string | null;
+        }[];
+      };
+      stripe_refund_result: {
+        Args: {
+          p_refund: string;
+          p_stripe_refund: string | null;
+          p_outcome: "succeeded" | "failed" | "pending";
+          p_amount: number;
+          p_error: string | null;
+          p_payment_intent?: string | null;
+        };
+        Returns: "succeeded" | "failed" | "pending" | "already" | "unknown" | "mismatch";
+      };
+      stripe_dispute: {
+        Args: { p_payment_intent: string; p_outcome: "opened" | "won" | "lost" };
+        Returns: "disputed" | "won" | "lost" | "already" | "unknown";
       };
       series_card_saved: {
         Args: { p_series: string };

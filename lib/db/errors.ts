@@ -9,6 +9,7 @@ export const PING_ERRORS = {
   PC003: "That job is no longer open to you.",
   PC004: "That job can't go ahead on its dates any more.",
   PC005: "That block has already ended.",
+  PC007: "The customer hasn't saved a card for this block yet.",
   // The visit day
   PC010: "That clean isn't yours.",
   PC011: "That clean is booked for another day.",
@@ -28,6 +29,7 @@ export const PING_ERRORS = {
   PC026: "That day or time isn't valid.",
   PC027: "You already have cleans booked at this home on those dates.",
   PC028: "That booking was already made with different details. Start the booking again.",
+  PC029: "There's a payment to sort out before you book again. You'll find it in My cleans.",
   // Money (state checks: these mean a bug or a replayed event, never the person's mistake)
   PC040: "That payment has already moved on. Refresh to see where it stands.",
   PC041: "That payout has already moved on. Refresh to see where it stands.",

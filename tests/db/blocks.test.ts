@@ -1,9 +1,10 @@
 // Blocks of 1–8 cleans, booking (book_series), and rebooking with first refusal.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { as, CHECK, DENIED, IDS, pool, setupThen, U, type Query } from "./helpers";
+import { cardsOnFile, as, CHECK, DENIED, IDS, pool, setupThen, U, type Query } from "./helpers";
 
 afterAll(() => pool.end());
+cardsOnFile();
 
 const BOOK = `select public.book_series($1::uuid, $2::public.series_frequency, $3::smallint, $4::time, $5::time,
                                       $6::integer, $7::date, $8::smallint, $9::uuid) as id`;
@@ -436,7 +437,9 @@ describe("rebooking: the previous cleaner gets first refusal", () => {
     expect(r.alexBoard).toEqual([]);
     expect(r.board).toHaveLength(1);
     expect(r.board[0]).toMatchObject({ first_refusal: true, town: "Workington" });
-    expect(JSON.stringify(r.board)).not.toMatch(/12 Test Street|CA14 9ZZ|4721|Side gate/);
+    // Ids are random and can contain "4721" by chance; the check is on what the cleaner is shown.
+    const shown = JSON.stringify(r.board.map((b) => ({ ...b, offer_id: null, series_id: null })));
+    expect(shown).not.toMatch(/12 Test Street|CA14 9ZZ|4721|Side gate/);
     expect(r.claimed).toBe("ok");
   });
 

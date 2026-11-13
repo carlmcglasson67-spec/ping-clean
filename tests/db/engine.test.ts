@@ -1,8 +1,9 @@
 // The marketplace engine: visits from series, tiered offers, the job board, first-to-claim.
 import { afterAll, describe, expect, it } from "vitest";
-import { as, DENIED, IDS, pool, U, type Query } from "./helpers";
+import { cardsOnFile, as, DENIED, IDS, pool, U, type Query } from "./helpers";
 
 afterAll(() => pool.end());
+cardsOnFile();
 
 /** Run as superuser for setup, then switch to a user in the same transaction. */
 async function setupThen<T>(setup: (su: Query) => Promise<void>, who: string | null, fn: (q: Query) => Promise<T>) {

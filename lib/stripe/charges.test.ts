@@ -45,6 +45,7 @@ function db(rows: ReturnType<typeof row>[], answer: (args: Record<string, unknow
     if (fn === "charge_claim") return { data: rows, error: null };
     if (fn === "stripe_payment_result") { results.push(args); return { data: answer(args), error: null }; }
     if (fn === "charge_not_sent") { notSent.push(args); return { data: "failed", error: null }; }
+    if (fn === "charge_retry_not_sent") { notSent.push({ retry: true, ...args }); return { data: "returned", error: null }; }
     return { data: null, error: { code: "XX000" } };
   });
   return { results, notSent };
@@ -139,6 +140,19 @@ describe("the charge job", () => {
     const run = await runChargeJob();
     expect(run).toMatchObject({ claimed: 2, failed: 1, succeeded: 1, errors: 0 });
     expect(notSent).toEqual([{ p_payment: PAYMENT, p_error: "stripe_invalid_request" }]);
+    expect(results.map((r) => r.p_payment)).toEqual([other]);
+  });
+
+  it("a retry Stripe refuses to take hands the try back (it wasn't the card), and the others still go", async () => {
+    await card("ok");
+    const other = "00000000-0000-4000-f000-0000000000bb";
+    const { results, notSent } = db([
+      row({ mode: "retry", payment_intent_id: "pi_testGoneAway0001", attempt: 2 }),
+      row({ payment_id: other, idempotency_key: `payment:${other}` }),
+    ]);
+    const run = await runChargeJob();
+    expect(run).toMatchObject({ claimed: 2, succeeded: 1, errors: 1 });
+    expect(notSent).toEqual([{ retry: true, p_payment: PAYMENT, p_error: expect.stringMatching(/^stripe_/), p_customer_try: false }]);
     expect(results.map((r) => r.p_payment)).toEqual([other]);
   });
 

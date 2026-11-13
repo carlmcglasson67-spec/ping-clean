@@ -8,12 +8,13 @@ import { cn } from "@/components/ui/cn";
 type Item = { href: Route; label: string };
 
 // The console's sections, in the order the day runs: what needs you, who to vet, the jobs,
-// the quality check, demand, and the numbers the marketplace runs on.
+// the quality check, the money, demand, and the numbers the marketplace runs on.
 const ITEMS: Item[] = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/approvals", label: "Approvals" },
   { href: "/admin/jobs", label: "Jobs" },
   { href: "/admin/qc", label: "QC" },
+  { href: "/admin/payments", label: "Payments" },
   { href: "/admin/interest", label: "Interest" },
   { href: "/admin/settings", label: "Settings" },
 ];

@@ -123,7 +123,7 @@ describe("coming off hold", () => {
         alertOpen: await q.count(`public.engine_alerts where visit_id = '${today}' and kind = 'payment_failed' and resolved_at is null`) };
     });
     expect(r).toMatchObject({ paid: "succeeded", holds: [{ reason: "payment_failed", outcome: "resumed" }],
-      passed: { status: "skipped", cancel_reason: "payment_hold" }, charged: 0, alertOpen: 0 });
+      passed: { status: "skipped", cancel_reason: "on_hold" }, charged: 0, alertOpen: 0 });
     expect(["claimed", "ended"]).toContain(r.status); // back on (or finished, if that was the block's last clean)
   });
 
@@ -152,7 +152,7 @@ describe("the nightly check", () => {
       await q.rows(`update private.series_holds set held_at = now() - interval '6 days' where series_id = $1`, [IDS.annaSeries]);
       return { ended: await run(q), status: await seriesStatus(q), passed: await nextWeek(q) };
     });
-    expect(r).toEqual({ ended: 0, status: "paused", passed: { status: "skipped", cancel_reason: "payment_hold" } });
+    expect(r).toEqual({ ended: 0, status: "paused", passed: { status: "skipped", cancel_reason: "on_hold" } });
   });
 
   it("ends a block still unpaid after 7 days, frees the cleaner, tells the team and emails the customer", async () => {

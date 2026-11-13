@@ -4,6 +4,8 @@
 //    (https://docs.stripe.com/webhooks/signature: "t=<unix>,v1=<HMAC-SHA256(secret, `${t}.${body}`)>").
 //  * A small fake Stripe API for the calls Ping makes, grown PR by PR:
 //      PR 4: POST /v1/customers, POST /v1/setup_intents, GET /v1/payment_methods/:id
+//      PR 10: POST /v1/refunds, GET /v1/refunds/:id
+//      PR 9: GET /v1/balance, POST /v1/payouts, GET /v1/payouts/:id on a connected account
 //      PR 5: POST /v1/accounts, GET /v1/accounts/:id, POST /v1/account_links (Connect Express).
 //            The link it returns is a page on the fake that "completes" Stripe's form.
 //      PR 6: POST /v1/payment_intents (off-session destination charges), POST …/:id/confirm,
@@ -67,6 +69,9 @@ export function startFakeStripe(port = 12111) {
     paymentMethods: new Map(),
     accounts: new Map(),
     paymentIntents: new Map(),
+    payouts: new Map(),
+    refunds: new Map(),
+    balances: new Map(),    // connected account id → available pence (GBP)
     idempotent: new Map(), // key → response body
     onboardingOutcome: "complete",
     requests: [],           // { method, path, idempotencyKey }
@@ -140,22 +145,91 @@ export function startFakeStripe(port = 12111) {
         Object.assign(si, JSON.parse(raw || "{}"));
         return send(res, 200, si);
       }
+      // Stripe itself in trouble: every API call answers 500 until reset: { down: true }.
+      if (path === "/__test/down" && req.method === "POST") {
+        state.down = JSON.parse(raw || "{}").down !== false;
+        return send(res, 200, {});
+      }
+      // How the next refunds come back from Stripe: { status: "succeeded" | "pending" }.
+      if (path === "/__test/refund-status" && req.method === "POST") {
+        state.refundStatus = JSON.parse(raw || "{}").status ?? "succeeded";
+        return send(res, 200, {});
+      }
+      // What has cleared in a connected account: { available: pence }.
+      const bal = path.match(/^\/__test\/balance\/(acct_[A-Za-z0-9]+)$/);
+      if (bal && req.method === "POST") {
+        state.balances.set(bal[1], Number(JSON.parse(raw || "{}").available ?? 0));
+        return send(res, 200, {});
+      }
+      // The bank's answer on a payout: { status: "paid" | "failed", failure_code }.
+      const setPo = path.match(/^\/__test\/payouts\/(po_[A-Za-z0-9_]+)$/);
+      if (setPo && req.method === "POST") {
+        const po = state.payouts.get(setPo[1]);
+        if (!po) return error(res, 404, "No such payout");
+        Object.assign(po, JSON.parse(raw || "{}"));
+        return send(res, 200, po);
+      }
       if (path === "/__test/requests") return send(res, 200, state.requests);
       if (path === "/__test/reset" && req.method === "POST") {
-        for (const m of [state.customers, state.setupIntents, state.paymentMethods, state.accounts, state.paymentIntents, state.idempotent]) m.clear();
+        for (const m of [state.customers, state.setupIntents, state.paymentMethods, state.accounts, state.paymentIntents, state.payouts, state.refunds, state.balances, state.idempotent]) m.clear();
         state.requests.length = 0;
+        state.refundStatus = "succeeded";
+        state.down = false;
         return send(res, 200, {});
       }
 
       // ---------- the API
+      if (state.down) return send(res, 500, { error: { type: "api_error", message: "Something went wrong on Stripe's end." } });
       const auth = String(req.headers.authorization ?? "");
       if (!/^Bearer (sk|rk)_test_/.test(auth)) return error(res, 401, "Invalid API Key provided", "authentication_error");
       const idem = req.headers["idempotency-key"] ? String(req.headers["idempotency-key"]) : null;
-      state.requests.push({ method: req.method, path, idempotencyKey: idem });
+      const onAccount = req.headers["stripe-account"] ? String(req.headers["stripe-account"]) : null;
+      state.requests.push({ method: req.method, path, idempotencyKey: idem, ...(onAccount ? { account: onAccount } : {}) });
       // Like Stripe: the same key gets the same answer back, an error included.
       if (req.method === "POST" && idem && state.idempotent.has(idem)) { const was = state.idempotent.get(idem); return send(res, was.status, was.body); }
       const remember = (body, status = 200) => { if (req.method === "POST" && idem) state.idempotent.set(idem, { status, body }); return send(res, status, body); };
       const b = req.method === "POST" ? parseForm(raw) : {};
+
+      // ---------- PR 10: refunds on a PaymentIntent
+      if (path === "/v1/refunds" && req.method === "POST") {
+        const intent = state.paymentIntents.get(b.payment_intent);
+        const amount = Number(b.amount);
+        if (!intent || intent.status !== "succeeded") return remember({ error: { type: "invalid_request_error", code: "charge_not_refundable", message: "This PaymentIntent has no successful charge to refund." } }, 400);
+        const already = [...state.refunds.values()].filter((r) => r.payment_intent === intent.id && r.status !== "failed").reduce((n, r) => n + r.amount, 0);
+        if (!Number.isInteger(amount) || amount <= 0 || amount + already > intent.amount) return remember({ error: { type: "invalid_request_error", code: "charge_already_refunded", message: "Refund amount is greater than the unrefunded amount on the charge." } }, 400);
+        const re = { id: rid("re"), object: "refund", amount, currency: "gbp", payment_intent: intent.id, status: state.refundStatus ?? "succeeded", failure_reason: null,
+          metadata: b.metadata ?? {}, __reverse_transfer: b.reverse_transfer === "true", __refund_application_fee: b.refund_application_fee === "true" };
+        state.refunds.set(re.id, re);
+        return remember(re);
+      }
+      const refund = path.match(/^\/v1\/refunds\/(re_[A-Za-z0-9_]+)$/);
+      if (refund && req.method === "GET") {
+        const found = state.refunds.get(refund[1]);
+        return found ? send(res, 200, found) : error(res, 404, `No such refund: '${refund[1]}'`);
+      }
+
+      // ---------- PR 9: a connected account's balance and bank payouts (Stripe-Account header)
+      if (path === "/v1/balance" && req.method === "GET") {
+        if (!onAccount) return error(res, 400, "The fake only reads a connected account's balance");
+        return send(res, 200, { object: "balance", livemode: false, available: [{ amount: state.balances.get(onAccount) ?? 0, currency: "gbp" }], pending: [{ amount: 0, currency: "gbp" }] });
+      }
+      if (path === "/v1/payouts" && req.method === "POST") {
+        if (!onAccount || !/^acct_/.test(onAccount)) return remember({ error: { type: "invalid_request_error", code: "account_invalid", message: "No such connected account" } }, 400);
+        const amount = Number(b.amount);
+        if (b.currency !== "gbp" || !Number.isInteger(amount) || amount <= 0) return error(res, 400, "Invalid payout");
+        const have = state.balances.get(onAccount) ?? 0;
+        if (amount > have) return remember({ error: { type: "invalid_request_error", code: "balance_insufficient", message: "You have insufficient funds in your Stripe account for this transfer." } }, 400);
+        state.balances.set(onAccount, have - amount);
+        const po = { id: rid("po"), object: "payout", amount, currency: "gbp", status: "in_transit", method: "standard", livemode: false,
+          arrival_date: Math.floor(Date.now() / 1000) + 2 * 86400, failure_code: null, metadata: b.metadata ?? {}, __account: onAccount };
+        state.payouts.set(po.id, po);
+        return remember(po);
+      }
+      const payout = path.match(/^\/v1\/payouts\/(po_[A-Za-z0-9_]+)$/);
+      if (payout && req.method === "GET") {
+        const found = state.payouts.get(payout[1]);
+        return found && found.__account === onAccount ? send(res, 200, found) : error(res, 404, `No such payout: '${payout[1]}'`);
+      }
 
       if (path === "/v1/customers" && req.method === "POST") {
         const c = { id: rid("cus"), object: "customer", email: b.email ?? null, name: b.name ?? null, metadata: b.metadata ?? {}, livemode: false };
