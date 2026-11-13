@@ -48,6 +48,8 @@ export const PING_ERRORS = {
   PC033: "Something went wrong. Please try again.",
   PC034: "That clean can't be cancelled now. If it's today, call the Ping office.",
   PC035: "The cost of cancelling has changed since this page loaded. Check the new figure and confirm again.",
+  PC054: "That booking has already ended, or isn't on your account.",
+  PC055: "One of your cleans is under way or about to start. You can cancel the rest once it's finished, or call the Ping office.",
 } as const;
 
 export type PingErrorCode = keyof typeof PING_ERRORS;
