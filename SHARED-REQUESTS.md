@@ -205,7 +205,7 @@ Track A will likely need the same for checkout; worth merging this first.
 
 ## Track C — admin console
 
-### C-1. Cleaner decisions: approve, decline, set tier, suspend, reactivate (blocks console item 2). **Needs a schema change.**
+### C-1. Cleaner decisions: approve, decline, set tier, suspend, reactivate. **Done in the cleaner-decisions PR** (codes PC052/PC053; plan in intent/approvals/plan.md).
 - **What:** `cleaners` has no UPDATE grant on `status`, `tier`, `approved_at` or `approved_by` (correctly),
   and there is no admin function for them, so the console can review documents (existing
   `documents_admin_review` policy) but can't let anyone work. Proposed, all `security definer`,
@@ -299,4 +299,3 @@ Track A will likely need the same for checkout; worth merging this first.
 ### Next for Track C (not built yet)
 - **Reports** (brief item 5): visits, revenue, Ping fees, cleaner league. Waits for Phase 5 money so the
   numbers are real.
-- Wiring the approvals decision panel once C-1 lands (small follow-up PR).

@@ -20,6 +20,14 @@ const STATUS = {
   left: { label: "Left Ping", tone: "neutral" },
 } as const;
 
+const DECISION: Record<string, string> = {
+  approve: "Approved",
+  decline: "Declined",
+  suspend: "Suspended",
+  reactivate: "Put back to work",
+  tier: "Tier changed",
+};
+
 type Slot = { day: number; from: string; to: string };
 
 export default async function CleanerPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ view?: string }> }) {
@@ -30,10 +38,11 @@ export default async function CleanerPage({ params, searchParams }: { params: Pr
   const supabase = await createClient();
   const today = todayInLondon();
 
-  const [cleaner, profile, docs] = await Promise.all([
+  const [cleaner, profile, docs, history] = await Promise.all([
     supabase.from("cleaners").select("id, status, tier, areas, availability, bio, approved_at, completed_visits, created_at").eq("id", id.data).maybeSingle(),
     supabase.from("profiles").select("full_name, email, phone").eq("id", id.data).maybeSingle(),
     supabase.from("cleaner_documents").select("id, cleaner_id, kind, status, expires_on, created_at, reviewed_at, rejection_reason").eq("cleaner_id", id.data).order("created_at", { ascending: false }),
+    supabase.from("cleaner_reviews").select("id, decision, tier, reason, created_at").eq("cleaner_id", id.data).order("created_at", { ascending: false }).limit(20),
   ]);
   if (cleaner.error || profile.error || docs.error) {
     return <ErrorState title="This cleaner didn't load">Refresh the page. If it keeps happening, check the Supabase status page.</ErrorState>;
@@ -126,7 +135,24 @@ export default async function CleanerPage({ params, searchParams }: { params: Pr
         </section>
 
         <aside className="grid gap-6 lg:sticky lg:top-28">
-          <DecisionPanel status={c.status} tier={c.tier} ready={r.ready} waiting={r.waiting.map((k) => DOCUMENT_KIND[k])} />
+          <DecisionPanel cleanerId={c.id} status={c.status} tier={c.tier} ready={r.ready} waiting={r.waiting.map((k) => DOCUMENT_KIND[k])} />
+          {history.data?.length ? (
+            <Card className="grid gap-4">
+              <h2 className="text-lg font-semibold">Decisions so far</h2>
+              <ol className="grid gap-4 text-sm">
+                {history.data.map((h) => (
+                  <li key={h.id} className="grid gap-0.5">
+                    <span className="font-semibold">
+                      {DECISION[h.decision] ?? "Decision"}
+                      {h.tier ? ` · ${TIER[h.tier]} tier` : ""}
+                    </span>
+                    <span className="text-navy-3">{formatStamp(h.created_at)}</span>
+                    {h.reason ? <span className="break-words text-navy-2">{h.reason}</span> : null}
+                  </li>
+                ))}
+              </ol>
+            </Card>
+          ) : null}
           <Card className="grid gap-4">
             <h2 className="text-lg font-semibold">Contact and work</h2>
             <dl className="grid gap-3 text-sm">

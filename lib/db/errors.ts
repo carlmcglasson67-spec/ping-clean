@@ -41,6 +41,9 @@ export const PING_ERRORS = {
   PC047: "That refund has already moved on. Refresh to see where it stands.",
   PC036: "That reason doesn't fit this payment.",
   PC048: "That payment can't be refunded.",
+  // Cleaner decisions (the Ping team)
+  PC052: "The four checks aren't all verified and in date yet.",
+  PC053: "That cleaner has already moved on. Refresh to see where they stand.",
   // Register interest
   PC030: "Enter a full UK postcode, like CA14 3XX.",
   PC031: "Enter an email address or a UK mobile number.",
