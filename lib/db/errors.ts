@@ -66,9 +66,36 @@ export const CHECK_MESSAGES: Record<string, string> = {
     "The cleaner's share only applies with a fixed share. Clear it, or choose a fixed share.",
 };
 
-/** Plain words for an error from a Supabase RPC call. Never shows raw database text. */
-export function pingErrorMessage(error: { code?: string | null; message?: string | null } | null | undefined): string {
+/**
+ * The same codes in the words the Ping team needs. The shared messages are written for the
+ * person who usually meets the code (a cleaner, a customer); these replace them in the
+ * admin console. Anything not listed falls through to PING_ERRORS.
+ */
+export const ADMIN_ERRORS: Record<string, string> = {
+  PC001: "That cleaner isn't active any more, so the job can't go to them.",
+  PC002: "That job has already been taken or isn't open any more. Refresh to see where it stands.",
+  PC004: "That block has no cleans left that could go ahead on its dates, so it can't be given to anyone.",
+  PC005: "That block has already ended.",
+  PC006: "That cleaner hasn't finished setting up payments, so they can't be given work yet.",
+  PC007: "The customer hasn't saved a card for this block yet, so it can't go to a cleaner. It goes out by itself once they have.",
+  PC042: "That's more than is left to refund on this payment.",
+  PC036: "That reason doesn't fit this payment. Refresh the page and choose again.",
+  PC048: "That payment can't be refunded: it isn't paid, it's already refunded in full, or the customer's bank has disputed it.",
+  PC049: "A refund for this payment is already on its way. Wait for it to finish, then refresh.",
+  "22023": "Say why, in a few words (up to 300 characters).",
+  "42501": "Only the Ping team can do that. Sign in again with your admin account.",
+};
+
+/**
+ * Plain words for an error from a Supabase RPC call. Never shows raw database text.
+ * Pass `{ audience: "admin" }` in the admin console for the team's wording.
+ */
+export function pingErrorMessage(
+  error: { code?: string | null; message?: string | null } | null | undefined,
+  options?: { audience?: "admin" },
+): string {
   const code = error?.code;
+  if (options?.audience === "admin" && code && code in ADMIN_ERRORS) return ADMIN_ERRORS[code]!;
   if (code && code in PING_ERRORS) return PING_ERRORS[code as PingErrorCode];
   if (code === "23514") {
     const name = /check constraint "([a-z0-9_]+)"/.exec(error?.message ?? "")?.[1];
