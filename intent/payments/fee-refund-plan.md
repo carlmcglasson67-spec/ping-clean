@@ -12,7 +12,7 @@ refunded in Stripe, where Ping wouldn't record it and the cleaner would still be
   - **Ping's mistake**, **Goodwill**, **Something else**: Ping carries all of it; the cleaner
     keeps their part.
 - "The clean wasn't right" and "The cleaner didn't come" stay for cleans only; "Fee waived" is
-  for fees only. The database refuses the wrong pairing (PC049), not just the form.
+  for fees only. The database refuses the wrong pairing (PC036), not just the form.
 - Everything after the ask is the existing refund machinery unchanged: sent to Stripe once,
   cleaner's unpaid earnings held while it's on its way and reduced when it lands, audit row,
   alerts when Stripe says no.
@@ -23,3 +23,9 @@ refunded in Stripe, where Ping wouldn't record it and the cleaner would still be
 
 ## Not in this
 A customer-facing refund email (still not built for cleans either).
+
+## After the security review (13 Nov)
+No blocking findings. Added: tests for mixed reasons, a refund after the cleaner was paid, Stripe
+saying no, and a chargeback during a refund; a clear error for a reason that doesn't fit;
+alerts and the cleaner's earnings page say "fee" where it is one. Carl's sign-off on the
+database change is the PR itself.

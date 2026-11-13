@@ -51,7 +51,7 @@ export function earningNote(r: EarningRow, step: EarningStep, day: (ymd: string)
     case "paid": return r.payout?.paid_at ? `Reached your bank ${on(r.payout.paid_at.slice(0, 10))}.` : "In your bank.";
     case "bank_refused": return "Check your bank details with Stripe and it's sent again within a day.";
     case "held": return "The Ping office is looking at this one and will be in touch.";
-    case "cancelled": return "The Ping office will have been in touch about this one.";
+    case "cancelled": return r.lateCancel ? "The customer's fee was refunded, so there's nothing to pay for this one." : "The Ping office will have been in touch about this one.";
   }
 }
 

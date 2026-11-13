@@ -39,6 +39,7 @@ export const PING_ERRORS = {
   PC045: "Payment records are kept for good and can't be removed.",
   PC046: "That payment record has to start at the beginning.",
   PC047: "That refund has already moved on. Refresh to see where it stands.",
+  PC036: "That reason doesn't fit this payment.",
   PC048: "That payment can't be refunded.",
   // Register interest
   PC030: "Enter a full UK postcode, like CA14 3XX.",

@@ -62,5 +62,6 @@ describe("a clean cancelled at short notice", () => {
     expect(earningTotals([late], "2026-11-01T00:00:00Z", now).onItsWay).toBe(1125);
     expect(earningNote({ ...late, payout: null }, "awaiting_payment", day)).toMatch(/cancelled at short notice/);
     expect(earningNote({ ...late, payout: null }, "awaiting_payment", day)).not.toMatch(/£/);
+    expect(earningNote({ ...late, payout: po("cancelled") }, "cancelled", day)).toMatch(/fee was refunded/);
   });
 });

@@ -194,7 +194,7 @@ describe("what can't be refunded", () => {
 
   it("a clean's payment isn't a fee to waive", async () => {
     const r = await as("superuser", async (q) => tryAsk(q, U.admin, await paid(q), 500, "fee_waived"));
-    expect(r).toBe("PC049");
+    expect(r).toBe("PC036");
   });
 
   it("only the Ping team can ask; nobody but the server can send or settle one", async () => {

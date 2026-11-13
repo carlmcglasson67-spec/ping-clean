@@ -353,7 +353,7 @@ describe("refunding a late-cancellation fee", () => {
   };
   const landed = async (q: Query, refund: string, pence: number) => {
     await server(q);
-    await q.rows(`select public.stripe_refund_result($1, 're_TestLateFee0001', 'succeeded', $2, null, $3)`, [refund, pence, PI]);
+    await q.rows(`select public.stripe_refund_result($1, $4, 'succeeded', $2, null, $3)`, [refund, pence, PI, `re_Test${refund.replaceAll("-", "")}`]);
     await su(q);
   };
   const parts = async (q: Query, id: string) => (await q.rows<{ cleaner_part_pence: number; ping_part_pence: number; status: string }>(`select cleaner_part_pence, ping_part_pence, status from public.refunds where id = $1`, [id]))[0]!;
@@ -415,7 +415,82 @@ describe("refunding a late-cancellation fee", () => {
         refunds: (await q.rows(`select 1 from public.refunds where payment_id = $1`, [p])).length,
       };
     });
-    expect(r).toEqual({ cleanQuality: "PC049", noShow: "PC049", tooMuch: "PC042", customer: "42501", cleaner: "42501", refunds: 0 });
+    expect(r).toEqual({ cleanQuality: "PC036", noShow: "PC036", tooMuch: "PC042", customer: "42501", cleaner: "42501", refunds: 0 });
+  });
+
+  it("mixed reasons in either order: every penny accounted for, and the cleaner never gives back more than their part", async () => {
+    const run = (steps: [number, string][]) => as("superuser", async (q) => {
+      const p = await paidFee(q);
+      const out: number[][] = [];
+      for (const [pence, reason] of steps) {
+        const id = await ask(q, p, pence, reason);
+        const x = await parts(q, id);
+        out.push([x.cleaner_part_pence, x.ping_part_pence]);
+        await landed(q, id, pence);
+      }
+      return { out, pay: await pay(q, p), payout: await payout(q) };
+    });
+    const a = await run([[1000, "goodwill"], [1000, "fee_waived"]]);
+    expect(a.out).toEqual([[0, 1000], [750, 250]]);
+    expect(a.pay).toEqual({ status: "refunded", refunded_pence: 2000 });
+    expect(a.payout).toMatchObject({ status: "pending", amount_pence: 750 });
+    const b = await run([[1000, "fee_waived"], [500, "goodwill"], [500, "fee_waived"]]);
+    expect(b.out).toEqual([[750, 250], [0, 500], [375, 125]]);
+    expect(b.payout).toMatchObject({ status: "pending", amount_pence: 375 });
+  });
+
+  it("waived after the cleaner was paid: their paid row stands and the team is told it's a fee", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paidFee(q);
+      await q.rows(`update public.payouts set available_after = now() - interval '1 minute' where visit_id = $1`, [next]);
+      await server(q);
+      const [b] = await q.rows<{ batch_id: string; amount_pence: number }>(`select batch_id, amount_pence from public.payout_batch_open($1, 5000)`, [U.tara]);
+      await q.rows(`select public.payout_batch_sent($1, 'po_TestLateFee0001', current_date + 2)`, [b!.batch_id]);
+      await q.rows(`select public.stripe_payout_result($1, 'po_TestLateFee0001', (select stripe_account_id from public.cleaners where id = $2), 'paid', $3, current_date, null)`, [b!.batch_id, U.tara, b!.amount_pence]);
+      await su(q);
+      const id = await ask(q, p, 1000, "fee_waived");
+      await landed(q, id, 1000);
+      const alerts = await q.rows<{ message: string }>(`select message from public.engine_alerts where kind = 'refund_after_payout' and visit_id = $1 and resolved_at is null`, [next]);
+      return { payout: await payout(q), alerts: alerts.map((x) => x.message) };
+    });
+    expect(r.payout).toMatchObject({ status: "paid", amount_pence: 1500 });
+    expect(r.alerts).toHaveLength(1);
+    expect(r.alerts[0]).toMatch(/£7\.50 from a cleaner whose part of this late-cancellation fee was already with their bank/);
+  });
+
+  it("Stripe says no: nothing changes on the fee, the cleaner's part is released and the team is told", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paidFee(q);
+      const id = await ask(q, p, 2000, "fee_waived");
+      await server(q);
+      await q.rows(`select public.stripe_refund_result($1, 're_TestLateFee0001', 'failed', 2000, 'charge_for_pending_refund_disputed', $2)`, [id, PI]);
+      await su(q);
+      const alerts = await q.rows(`select 1 from public.engine_alerts where kind = 'refund_failed' and visit_id = $1 and resolved_at is null`, [next]);
+      return { refund: (await parts(q, id)).status, pay: await pay(q, p), payout: await payout(q), alerts: alerts.length };
+    });
+    expect(r).toEqual({ refund: "failed", pay: { status: "succeeded", refunded_pence: 0 }, payout: { status: "pending", amount_pence: 1500, held_reason: null }, alerts: 1 });
+  });
+
+  it("a chargeback while a waiver is on its way: held for the dispute, reduced when the refund lands, and cancelled if it's lost", async () => {
+    const r = await as("superuser", async (q) => {
+      const p = await paidFee(q);
+      const id = await ask(q, p, 1000, "fee_waived");
+      const dispute = async (o: string) => { await server(q); await q.rows(`select public.stripe_dispute($1, $2)`, [PI, o]); await su(q); };
+      await dispute("opened");
+      const opened = await payout(q);
+      const during = await tryAsk(q, p, 100, "goodwill");
+      await landed(q, id, 1000);
+      const landedAt = await payout(q);
+      await dispute("lost");
+      const lost = await q.rows<{ message: string }>(`select message from public.engine_alerts where visit_id = $1 and message like 'The chargeback on this%' order by created_at desc limit 1`, [next]);
+      return { opened, during, landedAt: landedAt.amount_pence, pay: await pay(q, p), end: (await payout(q)).status, after: await tryAsk(q, p, 100, "goodwill"), lost: lost[0]?.message ?? "" };
+    });
+    expect(r.opened).toMatchObject({ status: "held", held_reason: "dispute_open" });
+    expect(r.during).toBe("PC048");
+    expect(r.landedAt).toBe(750);
+    expect(r.pay.status).toBe("dispute_lost");
+    expect(r.end).toBe("cancelled");
+    expect(r.after).toBe("PC048");
+    expect(r.lost).toMatch(/late-cancellation fee was lost/);
   });
 });
-
