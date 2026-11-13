@@ -2,6 +2,7 @@ import "server-only";
 import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/db/admin";
 import { readStripeError } from "./charges";
+import { resendRefunds } from "./refunds";
 import { getStripe } from "./server";
 
 // Paying cleaners after the check period (payments PR 9). Stripe TEST mode only.
@@ -81,6 +82,15 @@ export type PayoutRun = { cleaners: number; sent: number; waiting: number; paid:
 export async function runPayoutJob(): Promise<PayoutRun> {
   const db = createAdminClient();
   const run: PayoutRun = { cleaners: 0, sent: 0, waiting: 0, paid: 0, failed: 0, errors: 0 };
+
+  // Refunds the team asked for that never reached Stripe go first (payments PR 10).
+  try {
+    const refunds = await resendRefunds();
+    run.errors += refunds.errors;
+  } catch {
+    run.errors++;
+    console.error("payout job: the unsent refunds couldn't be read");
+  }
 
   const open = await db.rpc("payout_batches_open");
   if (open.error) throw new Error("couldn't read the open bank payouts");

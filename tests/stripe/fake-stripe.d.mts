@@ -21,6 +21,8 @@ export type FakeStripe = {
     onboardingOutcome: string;
     payouts: Map<string, Record<string, unknown> & { id: string; amount: number; status: string; metadata: Record<string, string>; __account: string }>;
     balances: Map<string, number>;
+    refunds: Map<string, Record<string, unknown> & { id: string; amount: number; status: string; payment_intent: string; metadata: Record<string, string>; __reverse_transfer: boolean; __refund_application_fee: boolean }>;
+    refundStatus?: string;
     requests: { method: string; path: string; idempotencyKey: string | null; account?: string }[];
   };
 };

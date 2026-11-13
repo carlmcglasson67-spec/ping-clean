@@ -32,6 +32,7 @@ function db(opts: { due?: { cleaner_id: string; cleaner_account_id: string; due_
   const calls: [string, Record<string, unknown>][] = [];
   rpc.mockImplementation(async (fn: string, args: Record<string, unknown> = {}) => {
     calls.push([fn, args]);
+    if (fn === "refunds_unsent") return { data: [], error: null };
     if (fn === "payout_batches_open") return { data: opts.open ?? [], error: null };
     if (fn === "payout_due_cleaners") return { data: opts.due ?? [], error: null };
     if (fn === "payout_batch_open") { const b = opts.batchFor?.(args.p_cleaner as string, args.p_available_pence as number); return { data: b ? [b] : [], error: null }; }
@@ -100,7 +101,6 @@ describe("the payout job", () => {
       batchFor: (c) => (c === ALEX ? batch(BATCH2, ACCT2) : null),
     });
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    rpc.mockImplementationOnce(async () => ({ data: [], error: null })); // payout_batches_open
     const run = await runPayoutJob();
     expect(run.sent).toBe(1);
     expect(d.of("payout_batch_not_sent")).toEqual([]);
@@ -134,7 +134,9 @@ describe("the payout job", () => {
 
   it("stops with an error when the database can't say who is due", async () => {
     rpc.mockResolvedValue({ data: null, error: { code: "57014" } });
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
     await expect(runPayoutJob()).rejects.toThrow(/couldn't read/);
+    err.mockRestore();
   });
 });
 
