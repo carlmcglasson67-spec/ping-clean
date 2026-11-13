@@ -19,8 +19,9 @@ alter table public.engine_alerts add constraint engine_alerts_kind_check
                   'charge_held', 'charge_blocked', 'payment_needs_customer', 'payment_failed',
                   'payout_failed', 'payout_stuck',
                   'refund_failed', 'refund_after_payout', 'payment_disputed'));
-create unique index engine_alerts_one_open_dispute on public.engine_alerts (visit_id, kind)
-  where kind = 'payment_disputed' and resolved_at is null;
+-- One open alert per clean for a dispute or a failed refund, however often Stripe repeats itself.
+create unique index engine_alerts_one_open_refund on public.engine_alerts (visit_id, kind)
+  where kind in ('payment_disputed', 'refund_failed') and resolved_at is null;
 
 create function private.money_alert(p_kind text, p_visit uuid, p_message text) returns void
 language sql volatile security definer set search_path = '' as $$
