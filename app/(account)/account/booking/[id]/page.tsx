@@ -4,10 +4,11 @@ import { Badge, ButtonLink, Card, ErrorState } from "@/components/ui";
 import { requireRole } from "@/lib/auth/session";
 import { formatDay, formatWindow, weekdayName } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
-import { FREQUENCY, SERIES_STATUS } from "@/lib/labels";
+import { FREQUENCY, SERIES_STATUS, VISIT_STATUS } from "@/lib/labels";
 import { formatDuration, formatPence, formatPenceShort } from "@/lib/money";
 import { blockTotalPence, firstCleanDate } from "../../../../(site)/_lib/checkout";
 import { quotePence } from "../../../../(site)/_lib/quote";
+import { Cleans, type CleanRow } from "./cleans";
 import { SaveCard } from "./save-card";
 
 export const metadata: Metadata = { title: "Your booking", robots: { index: false } };
@@ -45,6 +46,25 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
     supabase.from("properties").select("address_line1, town, postcode").eq("id", s.property_id).maybeSingle(),
     supabase.rpc("my_saved_card"), // one card per customer, used for every block
   ]);
+  // The block's cleans (they exist once a cleaner has taken it on), and what cancelling each
+  // would mean. RLS and my_cancel_terms only ever answer for this customer's own cleans.
+  const { data: visits } = await supabase
+    .from("visits")
+    .select("id, scheduled_date, window_start, window_end, status")
+    .eq("series_id", s.id)
+    .order("scheduled_date");
+  const cleans: CleanRow[] = await Promise.all(
+    (visits ?? []).map(async (v) => {
+      const t = v.status === "scheduled" ? (await supabase.rpc("my_cancel_terms", { p_visit: v.id })).data?.[0] : null;
+      return {
+        id: v.id,
+        day: formatDay(v.scheduled_date),
+        window: formatWindow(v.window_start, v.window_end),
+        status: VISIT_STATUS[v.status],
+        terms: t?.can_cancel ? { late: t.late, noticeHours: t.notice_hours, fee: t.fee_pence ? formatPence(t.fee_pence) : null } : null,
+      };
+    }),
+  );
   const saved = cards?.[0]?.last4 ? `${BRANDS[cards[0].brand ?? ""] ?? "Card"} ending ${cards[0].last4}` : null;
   const needsCard = !saved && s.status !== "ended";
 
@@ -96,6 +116,20 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
             Go to My cleans
           </ButtonLink>
         </div>
+
+        {s.status !== "ended" || cleans.length > 0 ? (
+          <Card className="mt-8 grid gap-6 p-8 sm:p-10">
+            <div className="grid gap-2">
+              <h2 className="text-2xl font-semibold">{cleans.length > 0 ? "Your cleans" : "Changed your mind?"}</h2>
+              <p className="text-base text-navy-2">
+                {cleans.length > 0
+                  ? "No contract: cancel any clean that hasn’t started. We’ll always tell you first if it isn’t free."
+                  : "No cleaner has taken your block on yet, so cancelling is free."}
+              </p>
+            </div>
+            <Cleans seriesId={s.id} cleans={cleans} canCancelBlock={s.status !== "ended"} />
+          </Card>
+        ) : null}
       </section>
 
       <section aria-labelledby="next-title" className={`grid content-start gap-6 lg:col-span-5 ${needsCard ? "max-lg:order-first" : ""}`}>
