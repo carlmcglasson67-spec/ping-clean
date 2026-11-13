@@ -10,7 +10,8 @@ description: Ping Clean money and marketplace rules. Use whenever creating or ch
 3. Prices, commission, minimum hours, tier windows and cancellation rules come from the
    settings table. Never hard-code a number in app code.
 4. Card is saved at booking (SetupIntent). Charge happens only when a visit is marked
-   complete. Payout only after the dispute window ends.
+   complete. The one exception is a late-cancellation fee, charged when the
+   customer cancels inside the notice period (intent/payments/late-cancel-plan.md). Payout only after the dispute window ends.
 5. Ping is an introducing agent: the customer buys the clean from the cleaner. Use Stripe
    Connect Express with application fees; never route the full amount through Ping's
    balance as Ping revenue.

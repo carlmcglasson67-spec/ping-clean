@@ -16,6 +16,7 @@ const ADMIN_WORDING: Record<string, string> = {
   PC006: "That cleaner hasn't finished setting up payments, so they can't be given work yet.",
   PC007: "The customer hasn't saved a card for this block yet, so it can't go to a cleaner. It goes out by itself once they have.",
   PC042: "That's more than is left to refund on this payment.",
+  PC036: "That reason doesn't fit this payment. Refresh the page and choose again.",
   PC048: "That payment can't be refunded: it isn't paid, it's already refunded in full, or the customer's bank has disputed it.",
   PC049: "A refund for this payment is already on its way. Wait for it to finish, then refresh.",
   "22023": "Say why, in a few words (up to 300 characters).",

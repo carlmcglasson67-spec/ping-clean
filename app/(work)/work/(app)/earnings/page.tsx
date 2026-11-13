@@ -19,10 +19,15 @@ export default async function EarningsPage() {
 
   // RLS gives a cleaner only their own cleans, earnings and bank payouts. Amounts and states
   // only: no Stripe ids are readable, and nothing about the customer's payment.
-  const [visits, payouts, batches] = await Promise.all([
+  const [visits, lateCancels, payouts, batches] = await Promise.all([
     supabase.from("visits").select("id, scheduled_date, cleaner_earnings_pence")
       .eq("cleaner_id", session.userId).eq("status", "completed").gte("scheduled_date", since)
       .order("scheduled_date", { ascending: false }).limit(200),
+    // Cleans a customer cancelled at short notice. They show only once the fee has been paid
+    // and this cleaner's part of it exists as a payout row: nothing is promised before then.
+    supabase.from("visits").select("id, scheduled_date")
+      .eq("cleaner_id", session.userId).eq("status", "cancelled").eq("cancel_reason", "customer_late").gte("scheduled_date", since)
+      .order("scheduled_date", { ascending: false }).limit(100),
     supabase.from("payouts").select("visit_id, batch_id, amount_pence, status, available_after, paid_at")
       .eq("cleaner_id", session.userId).order("created_at", { ascending: false }).limit(400),
     supabase.from("payout_batches").select("id, status, arrival_date").eq("cleaner_id", session.userId)
@@ -30,7 +35,7 @@ export default async function EarningsPage() {
   ]);
 
   const header = <PageHeader eyebrow="Getting paid" title="Your earnings." />;
-  if (visits.error || payouts.error || batches.error) {
+  if (visits.error || lateCancels.error || payouts.error || batches.error) {
     return (
       <>
         {header}
@@ -56,6 +61,16 @@ export default async function EarningsPage() {
       batch: p?.batch_id ? (batchById.get(p.batch_id) ?? null) : null,
     };
   });
+  for (const v of lateCancels.data ?? []) {
+    const p = payoutByVisit.get(v.id);
+    if (!p) continue;
+    rows.push({
+      visitId: v.id, cleanDate: v.scheduled_date, amountPence: p.amount_pence, lateCancel: true,
+      payout: { status: p.status, available_after: p.available_after, paid_at: p.paid_at },
+      batch: p.batch_id ? (batchById.get(p.batch_id) ?? null) : null,
+    });
+  }
+  rows.sort((a, b) => (a.cleanDate < b.cleanDate ? 1 : a.cleanDate > b.cleanDate ? -1 : 0));
 
   if (rows.length === 0) {
     return (
@@ -114,14 +129,14 @@ export default async function EarningsPage() {
               const step = earningStep(r, now);
               const copy = EARNING_COPY[step];
               return (
-                <li key={r.visitId} data-earning-step={step}>
+                <li key={r.visitId} data-earning-step={step} data-late-cancel={r.lateCancel ? "" : undefined}>
                   <Card className="grid gap-3 p-5 sm:grid-cols-[1fr_auto] sm:items-center sm:gap-6 sm:p-6">
                     <div className="grid gap-2">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                         <span className="text-lg font-semibold">{formatDay(r.cleanDate, now)}</span>
                         <Badge tone={copy.tone}>{copy.label}</Badge>
                       </div>
-                      <p className="text-navy-2">{earningNote(r, step, day)}</p>
+                      <p className="text-navy-2">{r.lateCancel ? "Cancelled by the customer at short notice: your part of their fee. " : ""}{earningNote(r, step, day)}</p>
                     </div>
                     <p className={`font-display text-2xl font-semibold tabular ${step === "cancelled" ? "text-navy-3 line-through" : ""}`}>{formatPence(r.amountPence)}</p>
                   </Card>

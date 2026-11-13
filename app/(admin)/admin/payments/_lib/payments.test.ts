@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canRefund, parsePounds, PAYMENT_STATUS, previewSplit, REFUND_REASONS } from "./payments";
+import { canRefund, parsePounds, PAYMENT_STATUS, previewSplit, REFUND_REASONS, reasonsFor } from "./payments";
 
 describe("parsePounds", () => {
   it("reads what a person types as whole pence", () => {
@@ -41,7 +41,11 @@ describe("labels", () => {
   it("only money that was taken and still stands can be refunded", () => {
     expect(Object.keys(PAYMENT_STATUS).filter(canRefund)).toEqual(["succeeded", "partially_refunded"]);
   });
-  it("the reasons are the database's five, and which are shared matches it", () => {
-    expect(REFUND_REASONS.map((r) => [r.value, r.shared])).toEqual([["clean_quality", true], ["no_show", true], ["ping_error", false], ["goodwill", false], ["other", false]]);
+  it("the reasons are the database's six, and which are shared matches it", () => {
+    expect(REFUND_REASONS.map((r) => [r.value, r.shared])).toEqual([["clean_quality", true], ["no_show", true], ["fee_waived", true], ["ping_error", false], ["goodwill", false], ["other", false]]);
+  });
+  it("a fee is never offered a reason that faults a clean, and a clean is never offered 'fee waived'", () => {
+    expect(reasonsFor("late_cancel").map((r) => r.value)).toEqual(["fee_waived", "ping_error", "goodwill", "other"]);
+    expect(reasonsFor("visit").map((r) => r.value)).toEqual(["clean_quality", "no_show", "ping_error", "goodwill", "other"]);
   });
 });

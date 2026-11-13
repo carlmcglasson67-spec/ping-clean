@@ -39,12 +39,15 @@ export const PING_ERRORS = {
   PC045: "Payment records are kept for good and can't be removed.",
   PC046: "That payment record has to start at the beginning.",
   PC047: "That refund has already moved on. Refresh to see where it stands.",
+  PC036: "That reason doesn't fit this payment.",
   PC048: "That payment can't be refunded.",
   // Register interest
   PC030: "Enter a full UK postcode, like CA14 3XX.",
   PC031: "Enter an email address or a UK mobile number.",
   PC032: "We're not taking names for the waiting list just now. Please try again later.",
   PC033: "Something went wrong. Please try again.",
+  PC034: "That clean can't be cancelled now. If it's today, call the Ping office.",
+  PC035: "The cost of cancelling has changed since this page loaded. Check the new figure and confirm again.",
 } as const;
 
 export type PingErrorCode = keyof typeof PING_ERRORS;
@@ -57,6 +60,7 @@ const FALLBACK = "Something went wrong. Please try again.";
  * and the database's own text is never shown.
  */
 export const CHECK_MESSAGES: Record<string, string> = {
+  settings_late_cancel_fee_min: "A late-cancellation fee has to be at least 30p (card payments can't be smaller), or left empty for no fee.",
   settings_late_cancel_share: "A fixed share needs the cleaner's share of the late fee.",
   settings_late_cancel_share_follows_split:
     "The cleaner's share only applies with a fixed share. Clear it, or choose a fixed share.",

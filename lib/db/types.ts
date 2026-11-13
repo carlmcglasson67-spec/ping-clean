@@ -1158,6 +1158,14 @@ export type Database = {
         Args: { p_visit: string };
         Returns: string;
       };
+      cancel_visit_quote: {
+        Args: { p_visit: string };
+        Returns: { can_cancel: boolean; late: boolean; fee_pence: number; free_until: string }[];
+      };
+      cancel_visit: {
+        Args: { p_visit: string; p_shown_fee_pence: number };
+        Returns: "cancelled" | "cancelled_late" | "cancelled_with_fee";
+      };
       admin_refund: {
         Args: { p_payment: string; p_amount_pence: number; p_reason: string; p_note: string };
         Returns: string;

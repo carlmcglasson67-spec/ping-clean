@@ -24,12 +24,13 @@ export function emailConfig(env: Env = process.env): { key: string; from: string
 
 const escape = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-export type NoticeFacts = { firstName: string | null; amountPence: number | null; cleanDate: string | null; link: string };
+export type NoticeFacts = { firstName: string | null; amountPence: number | null; cleanDate: string | null; link: string; lateCancelFee?: boolean };
 
 /** The wording of each email. Plain, short, and never a promise Ping can't keep. */
 export function noticeEmail(kind: NoticeKind, f: NoticeFacts): { subject: string; text: string; html: string } {
   const hello = f.firstName ? `Hello ${f.firstName},` : "Hello,";
-  const clean = f.cleanDate ? `your clean on ${formatDay(f.cleanDate)}` : "your clean";
+  const what = f.lateCancelFee ? "the late-cancellation fee for your clean" : "your clean";
+  const clean = f.cleanDate ? `${what} on ${formatDay(f.cleanDate)}` : what;
   const amount = f.amountPence != null ? ` (${formatPence(f.amountPence)})` : "";
   let subject: string;
   let lines: string[];
@@ -41,7 +42,7 @@ export function noticeEmail(kind: NoticeKind, f: NoticeFacts): { subject: string
       action = "Confirm the payment";
       break;
     case "payment_failed":
-      subject = "We couldn't take payment for your clean";
+      subject = f.lateCancelFee ? "We couldn't take your late-cancellation fee" : "We couldn't take payment for your clean";
       lines = [`We couldn't take the payment for ${clean}${amount}. Your bank declined it.`, "You can pay now with the same card, or use a different one."];
       action = "Sort the payment";
       break;
@@ -91,7 +92,9 @@ export async function sendDueNotices(limit = 20, fetcher: typeof fetch = fetch):
     if (!n.email) problem = "no_email_address";
     else {
       const link = n.payment_id && n.kind !== "block_ended_unpaid" ? `${site}/account/pay/${n.payment_id}` : `${site}/account`;
-      const mail = noticeEmail(n.kind, { firstName: n.full_name?.trim().split(/\s+/)[0] || null, amountPence: n.amount_pence, cleanDate: n.clean_date, link });
+      // A late-cancellation fee is worded as one: there was no clean to pay for.
+      const kind = n.payment_id ? (await db.from("payments").select("kind").eq("id", n.payment_id).maybeSingle()).data?.kind : null;
+      const mail = noticeEmail(n.kind, { firstName: n.full_name?.trim().split(/\s+/)[0] || null, amountPence: n.amount_pence, cleanDate: n.clean_date, link, lateCancelFee: kind === "late_cancel" });
       try {
         const res = await fetcher("https://api.resend.com/emails", {
           method: "POST",

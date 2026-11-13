@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 const rpc = vi.fn();
-vi.mock("@/lib/db/admin", () => ({ createAdminClient: () => ({ rpc }) }));
+const paymentKind = { select: () => paymentKind, eq: () => paymentKind, maybeSingle: async () => ({ data: { kind: "visit" }, error: null }) };
+vi.mock("@/lib/db/admin", () => ({ createAdminClient: () => ({ rpc, from: () => paymentKind }) }));
 
 const { emailConfig, noticeEmail, sendDueNotices } = await import("./email");
 
@@ -63,6 +64,10 @@ describe("what the emails say", () => {
       expect(m.subject.length).toBeGreaterThan(10);
     }
     expect(noticeEmail("block_on_hold", facts).text).toMatch(/on hold/);
+    const fee = noticeEmail("payment_failed", { ...facts, lateCancelFee: true });
+    expect(fee.subject).toBe("We couldn't take your late-cancellation fee");
+    expect(fee.text).toMatch(/the late-cancellation fee for your clean/);
+    expect(noticeEmail("block_on_hold", { ...facts, lateCancelFee: true }).text).toMatch(/late-cancellation fee/);
     expect(noticeEmail("block_ended_unpaid", { ...facts, amountPence: null, cleanDate: null }).text).toMatch(/cancelled/);
   });
 

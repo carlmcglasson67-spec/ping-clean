@@ -13,8 +13,9 @@ function whenPhrase(ymd: string) {
   return when === "Today" || when === "Tomorrow" ? when.toLowerCase() : `on ${when}`;
 }
 
-export default async function AccountHome() {
+export default async function AccountHome({ searchParams }: { searchParams: Promise<{ cancelled?: string }> }) {
   const session = await requireRole("customer", "/account");
+  const { cancelled } = await searchParams;
   const supabase = await createClient();
   const today = todayInLondon();
 
@@ -35,7 +36,7 @@ export default async function AccountHome() {
     supabase.from("properties").select("id, address_line1, town, postcode"),
     supabase.from("payments").select("id").eq("status", "succeeded"),
     // Payments waiting on the customer: a failed card, or a bank that wants them to confirm.
-    supabase.from("payments").select("id, amount_pence, status").eq("kind", "visit").in("status", ["requires_action", "failed", "failed_final"]).order("created_at"),
+    supabase.from("payments").select("id, amount_pence, status, kind").in("status", ["requires_action", "failed", "failed_final"]).order("created_at"),
     supabase.rpc("my_saved_card"),
   ]);
 
@@ -60,6 +61,12 @@ export default async function AccountHome() {
         }
       />
 
+      {cancelled === "fee" || cancelled === "free" ? (
+        <p role="status" data-cancelled={cancelled} className="mb-8 rounded-xl bg-ok-soft px-7 py-5 text-lg font-medium text-ok ring-1 ring-ok/20">
+          {cancelled === "fee" ? "That clean is cancelled. The late-cancellation fee will be charged to your card." : "That clean is cancelled. Nothing is charged for it."}
+        </p>
+      ) : null}
+
       {cardless ? (
         <section aria-label="Save your card" className="mb-8 grid gap-5 rounded-xl bg-warn-soft p-7 ring-1 ring-warn/25 sm:grid-cols-[1fr_auto] sm:items-center sm:gap-8 sm:p-9">
           <div className="grid gap-2">
@@ -79,7 +86,7 @@ export default async function AccountHome() {
               {u.status === "requires_action" ? "Your bank needs you to confirm a payment." : "A payment didn’t go through."}
             </p>
             <p className="text-lg text-navy-2">
-              {formatPence(u.amount_pence)} for a finished clean.{" "}
+              {formatPence(u.amount_pence)} {u.kind === "late_cancel" ? "for a clean cancelled at short notice." : "for a finished clean."}{" "}
               {u.status === "failed_final" ? "Sort it to keep your cleans going." : "It takes a minute to sort."}
             </p>
           </div>
@@ -158,6 +165,12 @@ export default async function AccountHome() {
                         <div className="grid justify-items-end gap-2">
                           <Badge tone={st.tone}>{st.label}</Badge>
                           <span className="text-sm font-semibold tabular text-navy-2">{formatPence(v.price_pence)}</span>
+                          {v.status === "scheduled" ? (
+                            <Link href={`/account/clean/${v.id}/cancel` as Route} data-cancel={v.id}
+                              className="-mr-2 inline-flex min-h-12 items-center px-2 text-sm font-semibold text-navy underline decoration-line decoration-2 underline-offset-4 hover:decoration-navy">
+                              Cancel this clean
+                            </Link>
+                          ) : null}
                         </div>
                       </Card>
                     </li>
