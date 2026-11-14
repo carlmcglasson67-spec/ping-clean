@@ -1204,6 +1204,14 @@ export type Database = {
         Args: { p_cleaner: string; p_tier: Database["public"]["Enums"]["cleaner_tier"]; p_reason: string };
         Returns: undefined;
       };
+      cancel_block_quote: {
+        Args: { p_series: string };
+        Returns: { can_cancel: boolean; cleans: number; late: number; fee_pence: number; under_way: number }[];
+      };
+      cancel_block: {
+        Args: { p_series: string; p_shown_fee_pence: number };
+        Returns: number;
+      };
       admin_refund: {
         Args: { p_payment: string; p_amount_pence: number; p_reason: string; p_note: string };
         Returns: string;

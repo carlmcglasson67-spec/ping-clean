@@ -163,9 +163,11 @@ export default async function approvalsFlows({ page, BASE, check, dir, browser, 
     });
 
     await check("reactivating is refused by the database when a check has lapsed behind the page, then works", async () => {
+      // Open the form first, then let the insurance lapse behind the page: the page still thinks
+      // they're ready, so it's the database that has to say no.
+      await panel().getByRole("button", { name: "Reactivate", exact: true }).click();
       await sql(`update public.cleaner_documents set expires_on = (now() at time zone 'Europe/London')::date
                   where cleaner_id = $1 and kind = 'insurance' and storage_path like '%/e2e-%'`, [SAM]);
-      await panel().getByRole("button", { name: "Reactivate", exact: true }).click();
       await panel().getByRole("button", { name: "Put them back to work" }).click();
       await panel().getByText(/still waiting on Public liability insurance/).waitFor();
       assert.equal((await sam()).status, "suspended");

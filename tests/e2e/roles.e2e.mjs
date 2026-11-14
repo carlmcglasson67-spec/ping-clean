@@ -15,6 +15,7 @@ import { chargingFlows, TEST_JOB_SECRET } from "./charging.e2e.mjs";
 import { payoutFlows } from "./payouts.e2e.mjs";
 import { refundFlows } from "./refunds.e2e.mjs";
 import { lateCancelFlows } from "./late-cancel.e2e.mjs";
+import { cancelRestFlows } from "./cancel-rest.e2e.mjs";
 import { interestFlows } from "./interest.e2e.mjs";
 import { stripeWebhookFlows } from "./stripe-webhooks.e2e.mjs";
 import { startFakeStripe, TEST_CONNECT_WEBHOOK_SECRET, TEST_PUBLISHABLE_KEY, TEST_SECRET_KEY, TEST_WEBHOOK_SECRET } from "../stripe/fake-stripe.mjs";
@@ -228,6 +229,8 @@ try {
   await refundFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
   // Payments 11: Anna cancels a clean in good time (free), then one at short notice (a fee, Tara's part paid).
   await lateCancelFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
+  // Anna cancels the rest of a block: one clean at short notice (a fee), the block ends.
+  await cancelRestFlows({ browser, BASE, check, signIn, SHOTS });
   // Track C's admin console. After Track B's, because it approves, assigns and scores.
   await adminFlows({ browser, BASE, check, signIn, SHOTS });
 } finally {
