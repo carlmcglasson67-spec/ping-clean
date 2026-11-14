@@ -38,7 +38,7 @@ export default async function interestFlows({ page, browser, signIn, BASE, check
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export all as CSV" }).click()]);
     assert.match(download.suggestedFilename(), /^ping-interest-all-\d{4}-\d{2}-\d{2}\.csv$/);
     const csv = await readFile(await download.path(), "utf8");
-    assert.match(csv, /^postcode,postcode_district,email,phone,registered_at,notified_at\r\n/);
+    assert.match(csv, /^kind,first_name,postcode,postcode_district,email,phone,registered_at,notified_at,answers\r\n/);
     assert.match(csv, /"jo@example\.com"/);
     // Before #31: "'+447700900123" (a leading + was treated as a formula). After #31: "447700900123".
     // Both pass; tighten to the second once #31 is on main.

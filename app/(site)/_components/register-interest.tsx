@@ -265,7 +265,7 @@ type TurnstileApi = { render: (el: HTMLElement, opts: { sitekey: string; theme?:
  * Cloudflare Turnstile, rendered explicitly so it also works when the form appears after
  * the page has loaded. It adds its own hidden "cf-turnstile-response" field to the form.
  */
-function Turnstile({ siteKey, error }: { siteKey: string; error?: string }) {
+export function Turnstile({ siteKey, error, theme = "dark" }: { siteKey: string; error?: string; theme?: "dark" | "light" }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
@@ -280,7 +280,7 @@ function Turnstile({ siteKey, error }: { siteKey: string; error?: string }) {
     const timer = window.setInterval(() => {
       const api = (window as unknown as { turnstile?: TurnstileApi }).turnstile;
       if (api && ref.current && widget === null) {
-        widget = api.render(ref.current, { sitekey: siteKey, theme: "dark" });
+        widget = api.render(ref.current, { sitekey: siteKey, theme });
         window.clearInterval(timer);
       }
     }, 150);
@@ -289,12 +289,12 @@ function Turnstile({ siteKey, error }: { siteKey: string; error?: string }) {
       const api = (window as unknown as { turnstile?: TurnstileApi }).turnstile;
       if (api && widget) api.remove(widget);
     };
-  }, [siteKey]);
+  }, [siteKey, theme]);
   return (
     <div className="grid gap-2">
       <div ref={ref} className="min-h-[65px]" />
       {error ? (
-        <p role="alert" className="text-base font-medium text-bad-on-navy">
+        <p role="alert" className={cn("text-base font-medium", theme === "dark" ? "text-bad-on-navy" : "text-bad")}>
           {error}
         </p>
       ) : null}

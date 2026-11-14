@@ -18,6 +18,7 @@ import { refundFlows } from "./refunds.e2e.mjs";
 import { lateCancelFlows } from "./late-cancel.e2e.mjs";
 import { cancelRestFlows } from "./cancel-rest.e2e.mjs";
 import { interestFlows } from "./interest.e2e.mjs";
+import { launchFlows } from "./launch.e2e.mjs";
 import { stripeWebhookFlows } from "./stripe-webhooks.e2e.mjs";
 import { startFakeStripe, TEST_CONNECT_WEBHOOK_SECRET, TEST_PUBLISHABLE_KEY, TEST_SECRET_KEY, TEST_WEBHOOK_SECRET } from "../stripe/fake-stripe.mjs";
 
@@ -216,6 +217,7 @@ try {
   await authFlows({ browser, BASE, check, shots: process.env.SIGNUP_SHOT_DIR ?? SHOTS });
   await stripeWebhookFlows({ BASE, check, stripe: fakeStripe });
   await interestFlows({ browser, BASE, check, shots: process.env.INTEREST_SHOT_DIR ?? SHOTS });
+  await launchFlows({ browser, BASE, check, shots: process.env.LAUNCH_SHOT_DIR ?? SHOTS });
   // Payments 5: Alex sets up how he gets paid (and ends ready, as seeded).
   await cleanerPaymentsFlows({ browser, BASE, check, signIn, SHOTS, stripe: fakeStripe });
   // Ben saves his card first: a block isn't offered to cleaners until there's a card to charge.
