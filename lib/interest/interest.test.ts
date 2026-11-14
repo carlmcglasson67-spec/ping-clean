@@ -94,16 +94,16 @@ describe("CSV export (review 6)", () => {
   });
 
   it("writes a header and one quoted line per row", () => {
-    const csv = interestCsv([{ postcode: "CA25 5AB", postcode_district: "CA25", email: "=cmd|' /C calc'!A0@x.com", phone: null,
-      registered_at: "2026-11-07T10:00:00Z", notified_at: null }]);
-    expect(csv).toBe(`postcode,postcode_district,email,phone,registered_at,notified_at\r\n` +
-      `"CA25 5AB","CA25","'=cmd|' /C calc'!A0@x.com","","2026-11-07T10:00:00Z",""\r\n`);
+    const csv = interestCsv([{ kind: "customer", first_name: null, postcode: "CA25 5AB", postcode_district: "CA25", email: "=cmd|' /C calc'!A0@x.com", phone: null,
+      answers: {}, registered_at: "2026-11-07T10:00:00Z", notified_at: null }]);
+    expect(csv).toBe(`kind,first_name,postcode,postcode_district,email,phone,registered_at,notified_at,answers\r\n` +
+      `"customer","","CA25 5AB","CA25","'=cmd|' /C calc'!A0@x.com","","2026-11-07T10:00:00Z","",""\r\n`);
   });
 
   it("writes mobiles as 447… (no plus, no apostrophe), ready for bulk-SMS import (final check note 2)", () => {
-    const csv = interestCsv([{ postcode: "CA26 1AA", postcode_district: "CA26", email: null, phone: "+447700900321",
-      registered_at: "2026-11-07T10:00:00Z", notified_at: null }]);
-    expect(csv.split("\r\n")[1]).toBe(`"CA26 1AA","CA26","","447700900321","2026-11-07T10:00:00Z",""`);
+    const csv = interestCsv([{ kind: "cleaner", first_name: "Sam", postcode: "CA26 1AA", postcode_district: "CA26", email: null, phone: "+447700900321",
+      answers: {}, registered_at: "2026-11-07T10:00:00Z", notified_at: null }]);
+    expect(csv.split("\r\n")[1]).toBe(`"cleaner","Sam","CA26 1AA","CA26","","447700900321","2026-11-07T10:00:00Z","",""`);
   });
 });
 

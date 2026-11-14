@@ -23,6 +23,31 @@ export default async function interestFlows({ page, browser, signIn, BASE, check
     assert.ok(!text.includes("jo@example.com") && !text.includes("900123") && !text.includes("cmd@evil"), "no full contact on the page");
   });
 
+  await check("launch sign-ups say who is a customer and who wants to clean, show their answers, and are tallied", async () => {
+    await sql(`select public.register_launch_interest('cleaner', 'Tess', 'CA22 2AA', null, '07700 900555', true, 'e2e-v1', $1::jsonb)`,
+      [JSON.stringify({ experience: "over_3", availability: ["evenings", "weekends"], note: "Paid late by my last agency." })]);
+    await sql(`select public.register_launch_interest('customer', 'Jo', 'CA22 3BB', 'tally@example.com', null, true, 'e2e-v1', $1::jsonb)`,
+      [JSON.stringify({ frequency: "weekly", priorities: ["reliable", "proof"] })]);
+    await page.goto(`${BASE}/admin/interest?district=CA22`);
+    await settle(page);
+    const text = await main();
+    const people = await page.getByRole("region", { name: /CA22: 2/ }).innerText();
+    assert.match(people, /Wants to clean/);
+    assert.match(people, /Customer/);
+    assert.match(people, /Launch page/);
+    assert.match(people, /How much cleaning experience do you have\?[\s\S]*More than 3 years/);
+    assert.match(people, /When can you work\?[\s\S]*Evenings · Weekends/);
+    assert.match(people, /What matters most to you\?[\s\S]*Turning up when they say · Proof it’s been done/);
+    const told = await page.getByRole("region", { name: "What people told us" }).innerText();
+    assert.match(told, /People who want to clean[\s\S]*More than 3 years[\s\S]*1/);
+    assert.match(told, /Customers[\s\S]*Every week/);
+    // Masked list: never the first name, the free-text note or a full contact.
+    assert.ok(!text.includes("Tess") && !text.includes("Paid late") && !text.includes("tally@example.com") && !text.includes("900555"), "no name, note or contact on the page");
+    await shoot(page, dir, "admin-interest-launch");
+    await page.goto(`${BASE}/admin/interest`);
+    await settle(page);
+  });
+
   await check("a district filters the list", async () => {
     await page.getByRole("link", { name: /^CA25/ }).click();
     await page.waitForURL((u) => u.searchParams.get("district") === "CA25");
@@ -38,7 +63,7 @@ export default async function interestFlows({ page, browser, signIn, BASE, check
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export all as CSV" }).click()]);
     assert.match(download.suggestedFilename(), /^ping-interest-all-\d{4}-\d{2}-\d{2}\.csv$/);
     const csv = await readFile(await download.path(), "utf8");
-    assert.match(csv, /^postcode,postcode_district,email,phone,registered_at,notified_at\r\n/);
+    assert.match(csv, /^kind,first_name,postcode,postcode_district,email,phone,registered_at,notified_at,answers\r\n/);
     assert.match(csv, /"jo@example\.com"/);
     // Before #31: "'+447700900123" (a leading + was treated as a formula). After #31: "447700900123".
     // Both pass; tighten to the second once #31 is on main.
