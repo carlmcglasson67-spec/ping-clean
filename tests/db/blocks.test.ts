@@ -571,7 +571,7 @@ describe("review: a block can't stay open forever", () => {
     const r = await setupThen(pastBlock("scheduled"), null, async (q) => {
       await nightly(q, "function");
       const [v] = await q.rows<{ status: string }>(`select status from public.visits where id = $1`, [IDS.visitToday]);
-      const alerts = await q.rows(`select kind, visit_id from public.engine_alerts`);
+      const alerts = await q.rows(`select kind, visit_id from public.engine_alerts where cleaner_id is null`);
       const [s] = await q.rows<{ status: string }>(`select status from public.series where id = $1`, [IDS.annaSeries]);
       await q.actAs(U.tara);
       return { visit: v!.status, alerts, series: s!.status, properties: await q.count("public.properties"),
@@ -585,7 +585,7 @@ describe("review: a block can't stay open forever", () => {
       await nightly(q, "function");
       await nightly(q, "function");
       const [v] = await q.rows<{ status: string }>(`select status from public.visits where id = $1`, [IDS.visitToday]);
-      const alerts = await q.rows(`select kind, visit_id from public.engine_alerts`);
+      const alerts = await q.rows(`select kind, visit_id from public.engine_alerts where cleaner_id is null`);
       const [s] = await q.rows<{ status: string }>(`select status from public.series where id = $1`, [IDS.annaSeries]);
       return { visit: v!.status, alerts, series: s!.status };
     });

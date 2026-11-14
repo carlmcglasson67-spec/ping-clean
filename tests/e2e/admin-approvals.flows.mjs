@@ -204,6 +204,24 @@ export default async function approvalsFlows({ page, BASE, check, dir, browser, 
     await sql(`update public.cleaners set status = 'applicant', tier = 'new', approved_at = null, approved_by = null where id = $1`, [SAM]);
   }
 
+  // ---- Lapsed checks: a working cleaner without all four documents shows up for the office.
+  const TARA = "00000000-0000-4000-a000-000000000004";
+  await check("a working cleaner missing a document is flagged on the jobs page, with a way straight to their documents", async () => {
+    await sql(`select private.run_cleaner_checks()`);
+    const [{ n }] = await sql(`select count(*)::int as n from public.engine_alerts where cleaner_id = $1 and kind = 'cleaner_check_lapsed' and resolved_at is null`, [TARA]);
+    assert.equal(n, 1, "the seed's Tara has two of the four documents");
+    await page.goto(`${BASE}/admin/jobs#alerts`);
+    await settle(page);
+    const card = page.locator("li").filter({ hasText: "Cleaner's checks lapsed" }).filter({ hasText: "Tara" }).first();
+    await card.waitFor();
+    const text = await card.innerText();
+    assert.match(text, /no longer has a verified, in-date document for: photo ID, right to work/);
+    assert.match(text, /closes by itself once the document is verified/);
+    await shoot(page, dir, "admin-jobs-lapsed-check");
+    await card.getByRole("link", { name: /Open this cleaner.s documents/ }).click();
+    await page.waitForURL(`${BASE}/admin/approvals/${TARA}`);
+  });
+
   await page.goto(`${BASE}/admin/approvals`);
   await shoot(page, dir, "admin-approvals");
   await page.goto(`${BASE}/admin/approvals/${SAM}`);
