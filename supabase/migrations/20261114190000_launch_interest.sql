@@ -57,23 +57,40 @@ $$;
 create function private.valid_first_name(p text) returns boolean
 language sql immutable set search_path = '' as $$
   select p !~ '[\x01-\x1F]' and position(chr(127) in p) = 0
-     and p ~ '^[^0-9<>=@+";/\\ -][^0-9<>=@+";/\\]{0,59}$'
+     and p ~ '^[^0-9 ''’-][^0-9]{0,59}$'
+     and p !~ '[][<>=@+";/\\|%{}().,:!?#$&*_~^`]'
 $$;
 
 alter table public.interest_signups
-  -- Optional, so the one message can say hello. Up to 60 characters; no digits, control
-  -- characters or anything a spreadsheet or a page could act on (the form is stricter:
-  -- letters, spaces, hyphens and apostrophes). Written as "not these" so it does not
-  -- depend on the database's locale.
+  -- Optional, so the one message can say hello. Up to 60 characters, starting with a
+  -- letter; no digits, control characters or punctuation beyond a hyphen or an apostrophe,
+  -- so nothing a spreadsheet, a page or a message could act on (no links, no formulas).
+  -- The form is stricter still: letters, spaces, hyphens and apostrophes only. Written as
+  -- "not these" so it does not depend on the database's locale.
   add column first_name text check (first_name is null or private.valid_first_name(first_name)),
   add column answers jsonb not null default '{}'::jsonb check (private.valid_interest_answers(answers));
+
+-- The audit triggers copy a deleted row into audit_log with the listed columns redacted.
+-- The two new columns are personal (a name, and a note in the person's own words that may
+-- name other people), so they join the list: "delete on request" must not leave them
+-- behind in the audit trail (security review, 14 Nov 2026).
+drop trigger interest_signups_audit_mark on public.interest_signups;
+drop trigger interest_signups_audit on public.interest_signups;
+create trigger interest_signups_audit_mark after update on public.interest_signups
+  for each row when (old.notified_at is distinct from new.notified_at
+                     and coalesce(current_setting('app.actor', true), '') <> 'cron:purge-interest')
+  execute function private.audit_row('email', 'phone', 'postcode', 'first_name', 'answers');
+create trigger interest_signups_audit after delete on public.interest_signups
+  for each row when (coalesce(current_setting('app.actor', true), '') <> 'cron:purge-interest')
+  execute function private.audit_row('email', 'phone', 'postcode', 'first_name', 'answers');
 
 -- ---------------------------------------------------------------- register_launch_interest
 -- The /launch form. Server only, like register_interest, and the same promises: nothing is
 -- stored without the tick, an opted-out contact stays out, and the reply is always
 -- 'thanks'. The source is fixed here ('launch_page'); the kind is one of the two the page
--- offers. Registering again for the same area renews consent and the retention clock and
--- replaces the answers; it never clears "told".
+-- offers. Registering again for the same area renews consent and the retention clock. New
+-- answers replace the old ones, but a blank form never wipes a name or answers already
+-- given (anyone could type someone else's address). It never clears "told".
 -- Error codes: PC030 postcode · PC031 email or mobile · PC032 not open · PC033 anything
 -- else about the form (kind, name, answers, consent version).
 create function public.register_launch_interest(
@@ -134,7 +151,9 @@ begin
     values (p_kind, v_name, v_postcode, v_email, p_consent_version, 'launch_page', v_answers,
             now() + make_interval(months => v_months))
     on conflict (kind, email, postcode_district) where email is not null do update
-      set postcode = excluded.postcode, first_name = excluded.first_name, answers = excluded.answers,
+      set postcode = excluded.postcode,
+          first_name = coalesce(excluded.first_name, i.first_name),
+          answers = case when excluded.answers = '{}'::jsonb then i.answers else excluded.answers end,
           consent_text_version = excluded.consent_text_version, source = excluded.source,
           registered_at = now(), delete_after = excluded.delete_after
       where i.unsubscribed_at is null;
@@ -144,7 +163,9 @@ begin
     values (p_kind, v_name, v_postcode, v_phone, p_consent_version, 'launch_page', v_answers,
             now() + make_interval(months => v_months))
     on conflict (kind, phone, postcode_district) where phone is not null do update
-      set postcode = excluded.postcode, first_name = excluded.first_name, answers = excluded.answers,
+      set postcode = excluded.postcode,
+          first_name = coalesce(excluded.first_name, i.first_name),
+          answers = case when excluded.answers = '{}'::jsonb then i.answers else excluded.answers end,
           consent_text_version = excluded.consent_text_version, source = excluded.source,
           registered_at = now(), delete_after = excluded.delete_after
       where i.unsubscribed_at is null;

@@ -113,6 +113,12 @@ describe("parseLaunchForm", () => {
     expect(p.values).toMatchObject({ kind: "cleaner", postcode: "Workington", phone: "01946 123456", notify: false, answers: { hours: ["under_8"] } });
   });
 
+  it("says so when a name or note is far too long, rather than quietly dropping it (security review)", () => {
+    const p = parseLaunchForm(form({ ...customer, first_name: "x".repeat(5000), note: "y".repeat(50_000) }));
+    expect(p.ok).toBe(false);
+    if (!p.ok) expect(Object.keys(p.fieldErrors).sort()).toEqual(["firstName", "note"]);
+  });
+
   it("accepts real first names and refuses control characters in the note", () => {
     for (const ok of ["Jo", "Mary-Anne", "O’Neil", "D'Arcy", "Zoë", "Anne Marie"]) {
       expect({ ok, r: parseLaunchForm(form({ ...customer, first_name: ok })).ok }).toEqual({ ok, r: true });
@@ -121,6 +127,7 @@ describe("parseLaunchForm", () => {
       expect({ bad, r: parseLaunchForm(form({ ...customer, first_name: bad })).ok }).toEqual({ bad, r: false });
     }
     expect(parseLaunchForm(form({ ...customer, note: "hello\u0007" })).ok).toBe(false);
+    expect(parseLaunchForm(form({ ...customer, note: "hello\u0000" })).ok).toBe(false);
     expect(parseLaunchForm(form({ ...customer, note: "line one\nline two\ttabbed" })).ok).toBe(true);
   });
 });

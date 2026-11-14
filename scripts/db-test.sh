@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Schema + RLS tests against a real, throwaway Postgres. No Docker needed.
-#   1. starts an empty Postgres cluster in a temp folder
+#   1. starts an empty Postgres cluster in a temp folder (UTF-8, like production, so text
+#      lengths count characters, not bytes)
 #   2. loads tests/db/supabase-stub.sql (the bits of Supabase we depend on)
 #   3. applies every migration in order, then supabase/seed.sql
 #   4. runs tests/db/*.test.ts, which log in as each seeded role and check what it can see
@@ -21,7 +22,7 @@ if [ -z "${PING_TEST_DATABASE_URL:-}" ]; then
     chown -R pingtest "$TMP"
     RUNAS=(runuser -u pingtest --)
   fi
-  "${RUNAS[@]}" "$PG_BIN/initdb" -D "$TMP/data" -U postgres -A trust >/dev/null
+  "${RUNAS[@]}" "$PG_BIN/initdb" -D "$TMP/data" -U postgres -A trust -E UTF8 --no-locale >/dev/null
   "${RUNAS[@]}" "$PG_BIN/pg_ctl" -D "$TMP/data" -o "-p $PORT -k $TMP -c listen_addresses=''" -l "$TMP/log" -w start >/dev/null
   cleanup() { "${RUNAS[@]}" "$PG_BIN/pg_ctl" -D "$TMP/data" -m immediate stop >/dev/null 2>&1 || true; rm -rf "$TMP"; }
   trap cleanup EXIT

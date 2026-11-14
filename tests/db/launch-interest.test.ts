@@ -132,6 +132,21 @@ describe("register_launch_interest: only the server can call it", () => {
     expect(codes).toEqual({ postcode: "PC030", both: "PC031", neither: "PC031", email: "PC031", landline: "PC031" });
   });
 
+  it("never lets a blank form wipe a name or answers already given, but new answers replace old ones", async () => {
+    const r = await server(async (q) => {
+      await register(q);
+      await register(q, { name: null, answers: null });
+      await q.rows(`reset role`);
+      const kept = (await all(q))[0]!;
+      await q.rows(`set local role service_role`);
+      await register(q, { name: null, answers: { frequency: "fortnightly" } });
+      await q.rows(`reset role`);
+      return { kept, replaced: (await all(q))[0]! };
+    });
+    expect(r.kept).toMatchObject({ first_name: "Jo", answers: { frequency: "weekly", priorities: ["reliable", "proof"], note: "Never turned up.\nTwice." } });
+    expect(r.replaced).toMatchObject({ first_name: "Jo", answers: { frequency: "fortnightly" } });
+  });
+
   it("refuses a kind that doesn't exist, a bad consent version or a bad name (PC033)", async () => {
     const codes = await server(async (q) => {
       const out: Record<string, string> = {};
@@ -139,6 +154,8 @@ describe("register_launch_interest: only the server can call it", () => {
         landlord: { kind: "landlord" }, noKind: { kind: null }, version: { version: "Not A Version!" }, noVersion: { version: null },
         digits: { name: "R2D2" }, formula: { name: "=cmd" }, at: { name: "@jo" }, hyphenFirst: { name: "-Jo" }, tag: { name: "<b>Jo" },
         long: { name: "x".repeat(61) }, control: { name: "Jo\u0007" },
+        link: { name: "www.evil.com click now" }, pipe: { name: "Jo|x" }, percent: { name: "%s" }, braces: { name: "{{x}}" },
+        apostropheFirst: { name: "'Jo" }, brackets: { name: "(Jo)" }, question: { name: "Jo?" },
       })) out[label] = await q.attempt(REG, reg(over));
       return out;
     });
@@ -182,10 +199,9 @@ describe("register_launch_interest: only the server can call it", () => {
     expect(codes).toEqual(Object.fromEntries(Object.keys(bad).map((k) => [k, "PC033"])));
   });
 
-  it("takes a long note with new lines, tabs and any language", async () => {
-    // 500 characters in production (UTF-8). Kept under 500 bytes too, so it also holds on a
-    // byte-counting test database.
-    const note = `Ça n’a jamais marché.\n\tTwice! 你好 ${"x".repeat(440)}`;
+  it("takes a 500-character note with new lines, tabs and any language", async () => {
+    const note = `Ça n’a jamais marché.\n\tTwice! 你好 🧽 ${"x".repeat(500)}`.slice(0, 500);
+    expect([...note].length).toBeLessThanOrEqual(500);
     const stored = await server(async (q) => {
       await register(q, { answers: { note } });
       await q.rows(`reset role`);
@@ -287,6 +303,21 @@ describe("admin: who is who, and what people told us", () => {
     ]);
     expect(r.audit).toEqual([{ action: "view_answers", actor: U.admin, detail: { rows: 6 } }]);
     expect(JSON.stringify(r)).not.toContain("example.com");
+  });
+
+  it("deleting on request leaves neither the first name nor any answer in the audit trail (security review BLOCK)", async () => {
+    const r = await setupThen(seed, U.admin, async (q) => {
+      const ids = await q.rows<{ id: string }>(`select id from public.admin_list_interest()`);
+      await q.rows(`select public.admin_mark_interest_notified($1::uuid[], true)`, [ids.map((x) => x.id)]);
+      const gone = await q.rows<{ n: number }>(`select public.admin_delete_interest($1::uuid[]) as n`, [ids.map((x) => x.id)]);
+      return { gone: gone[0]!.n, audit: await q.rows<{ action: string; detail: unknown }>(`select action, detail from public.audit_log where entity = 'interest_signups' order by id`) };
+    });
+    expect(r.gone).toBe(4);
+    const trail = JSON.stringify(r.audit);
+    expect(r.audit.length).toBeGreaterThanOrEqual(8); // a "told" line and a delete line for each
+    for (const secret of ["Jo", "Sam", "Tess", "Never turned up", "weekly", "fortnightly", "reliable", "weekends", "example.com", "900321", "5AB", "3XX"]) {
+      expect({ secret, leaked: trail.includes(secret) }).toEqual({ secret, leaked: false });
+    }
   });
 
   it("still lets nobody read or write the table directly, the new columns included", async () => {

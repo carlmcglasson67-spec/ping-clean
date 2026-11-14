@@ -25,8 +25,8 @@ export const LAUNCH_NOTIFY_LABEL: Record<LaunchKind, string> = {
 export function launchConsentText(kind: LaunchKind, months: number): string {
   return (
     (kind === "customer"
-      ? "We'll use this to send you one message when booking opens near you, "
-      : "We'll use this to send you one message when we're taking on cleaners near you, ") +
+      ? "We’ll use this to send you one message when booking opens near you, "
+      : "We’ll use this to send you one message when we’re taking on cleaners near you, ") +
     "and to help us plan the launch. " +
     `We delete it after ${months} months, or sooner if you ask us. ` +
     "We never share or sell it."
@@ -148,20 +148,23 @@ export type ParsedLaunch =
   | { ok: false; fieldErrors: Partial<Record<LaunchField, string>>; values: LaunchValues };
 
 const text = (max: number) => z.string().max(max).catch("");
+// Longer than anything the page can send (its fields have maxLength). Kept, cut to this
+// length, so an over-long name or note gets its own message instead of vanishing.
+const cut = (max: number) => z.string().catch("").transform((v) => v.slice(0, max));
 const shape = z.object({
   kind: z.enum(LAUNCH_KINDS).catch("customer"),
-  firstName: text(200),
+  firstName: cut(200),
   postcode: text(16),
   contact: z.enum(["email", "phone"]).catch("email"),
   email: text(320),
   phone: text(32),
   notify: z.literal("on").optional().catch(undefined),
-  note: text(4000),
+  note: cut(4000),
 });
 
 const NAME = /^\p{L}[\p{L} '’-]*$/u;
 // Control characters other than tab, new line and carriage return.
-const CONTROL = /[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
+const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 
 const get = (fd: FormData, k: string) => {
   const v = fd.get(k);
