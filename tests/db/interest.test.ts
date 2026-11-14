@@ -324,9 +324,9 @@ describe("register_interest: only the server can call it (review BLOCK 1)", () =
     }
   });
 
-  it("only takes kinds that exist (customers for now), and the table re-checks every value", async () => {
+  it("only takes kinds that exist (customers and cleaners), and the table re-checks every value", async () => {
     const ins = (cols: string) => `insert into public.interest_signups (kind, postcode, email, consent_text_version, source, delete_after) values (${cols})`;
-    expect(await as("superuser", (q) => q.attempt(ins(`'cleaner', 'CA25 5AB', 'x@example.com', 'v1', 'holding_page', now()`)))).toBe(CHECK);
+    expect(await as("superuser", (q) => q.attempt(ins(`'landlord', 'CA25 5AB', 'x@example.com', 'v1', 'holding_page', now()`)))).toBe(CHECK);
     expect(await as("superuser", (q) => q.attempt(ins(`'customer', 'ZZ9 9ZZ', 'x@example.com', 'v1', 'holding_page', now()`)))).toBe(CHECK);
     expect(await as("superuser", (q) => q.attempt(ins(`'customer', 'CA25 5AB', 'X@example.com', 'v1', 'holding_page', now()`)))).toBe(CHECK);
   });

@@ -35,6 +35,7 @@ export function SiteFooter() {
           </FooterCol>
 
           <FooterCol title="Ping" className="lg:col-span-2">
+            <FooterLink href="/launch">Launch list</FooterLink>
             <FooterLink href={CLEANERS_LINK.href}>{CLEANERS_LINK.label}</FooterLink>
             <FooterLink href="/login">Sign in</FooterLink>
           </FooterCol>

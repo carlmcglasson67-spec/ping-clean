@@ -405,10 +405,12 @@ out += `${ind(2)}};
         Args: { p_district?: string | null };
         Returns: {
           id: string;
+          kind: "customer" | "cleaner";
           postcode_district: string;
           contact_type: "email" | "phone";
           contact_masked: string;
-          source: "instant_price" | "holding_page";
+          source: "instant_price" | "holding_page" | "launch_page";
+          answers: Record<string, string | string[]>;
           registered_at: string;
           notified_at: string | null;
           unsubscribed_at: string | null;
@@ -426,13 +428,33 @@ out += `${ind(2)}};
         Args: { p_district?: string | null };
         Returns: {
           id: string;
+          kind: "customer" | "cleaner";
+          first_name: string | null;
           postcode: string;
           postcode_district: string;
           email: string | null;
           phone: string | null;
+          answers: Record<string, string | string[]>;
           registered_at: string;
           notified_at: string | null;
         }[];
+      };
+      admin_interest_answer_counts: {
+        Args: Record<PropertyKey, never>;
+        Returns: { kind: "customer" | "cleaner"; question: string; answer: string; people: number }[];
+      };
+      register_launch_interest: {
+        Args: {
+          p_kind: "customer" | "cleaner";
+          p_first_name: string | null;
+          p_postcode: string;
+          p_email: string | null;
+          p_phone: string | null;
+          p_notify: boolean;
+          p_consent_version: string;
+          p_answers: Record<string, string | string[]>;
+        };
+        Returns: "thanks";
       };
     };
     Enums: {

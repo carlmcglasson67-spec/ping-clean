@@ -5,6 +5,7 @@ import { cn } from "@/components/ui/cn";
 import { requireRole } from "@/lib/auth/session";
 import { formatStamp } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
+import { LAUNCH_KINDS, LAUNCH_QUESTIONS, type LaunchKind } from "@/lib/interest/launch";
 import { readAll, ROW_CAP } from "../_lib/read-all";
 import { InterestList } from "./interest-list";
 
@@ -19,7 +20,7 @@ export default async function InterestPage({ searchParams }: { searchParams: Pro
   const district = DISTRICT.test(wanted) ? wanted : null;
   const supabase = await createClient();
 
-  const [counts, list, retention] = await Promise.all([
+  const [counts, list, retention, told] = await Promise.all([
     supabase.rpc("admin_interest_counts"),
     // Every entry, in keyset pages (no 1,000-row cap), newest first again afterwards.
     readAll((after) => {
@@ -27,13 +28,14 @@ export default async function InterestPage({ searchParams }: { searchParams: Pro
       return after ? q.gt("id", after) : q;
     }, "id").then((r) => ({ ...r, data: r.data?.sort((x, y) => y.registered_at.localeCompare(x.registered_at) || x.id.localeCompare(y.id)) ?? null })),
     supabase.rpc("interest_retention_months"),
+    supabase.rpc("admin_interest_answer_counts"),
   ]);
 
   const header = (
     <PageHeader
       eyebrow="Register interest"
       title="Where people want Ping next."
-      lede="People outside the launch area, or here before booking opened, who asked for one message when Ping cleans near them. Contacts stay masked here: the full list only leaves in an export, and every look is logged."
+      lede="Customers who asked for one message when Ping cleans near them, and people who want to clean with Ping. Contacts stay masked here: the full list only leaves in an export, and every look is logged."
     />
   );
   if (counts.error || list.error) {
@@ -52,6 +54,8 @@ export default async function InterestPage({ searchParams }: { searchParams: Pro
         <div className="mb-8"><ErrorState title="The export didn't download">Try again. Nothing was sent anywhere.</ErrorState></div>
       ) : null}
 
+      <ToldUs counts={told.data ?? []} failed={Boolean(told.error)} />
+
       <div className="grid gap-8 xl:grid-cols-[22rem_1fr] xl:items-start">
         <aside className="grid gap-6">
           <Card className="grid gap-5">
@@ -65,7 +69,7 @@ export default async function InterestPage({ searchParams }: { searchParams: Pro
           <section aria-labelledby="districts" className="grid gap-3">
             <h2 id="districts" className="text-lg font-semibold">By postcode district</h2>
             {rows.length === 0 ? (
-              <EmptyState title="No sign-ups yet">They arrive from the instant price outside the launch area, and from the &ldquo;booking opens soon&rdquo; page.</EmptyState>
+              <EmptyState title="No sign-ups yet">They arrive from the launch page, the instant price outside the launch area, and the &ldquo;booking opens soon&rdquo; page.</EmptyState>
             ) : (
               <ul className="grid gap-2">
                 <li><DistrictLink href="/admin/interest" current={!district} label="All districts" n={total} /></li>
@@ -111,5 +115,60 @@ function DistrictLink({ href, current, label, n, note }: { href: string; current
       </span>
       <span className="font-display text-xl font-semibold tabular">{n}</span>
     </Link>
+  );
+}
+
+type AnswerCount = { kind: LaunchKind; question: string; answer: string; people: number };
+
+const KIND_TITLE: Record<LaunchKind, string> = { customer: "Customers", cleaner: "People who want to clean" };
+
+/**
+ * "What people told us": the launch page's answers, tallied. Bars are scaled to the most
+ * popular answer of each question, so a glance shows what matters. Counts only: no
+ * contacts, and never the free-text note (that is in the export).
+ */
+function ToldUs({ counts, failed }: { counts: AnswerCount[]; failed: boolean }) {
+  if (failed) {
+    return <div className="mb-8"><ErrorState title="The answers didn&rsquo;t load">Refresh the page. The list below is unaffected.</ErrorState></div>;
+  }
+  if (counts.length === 0) return null;
+  return (
+    <section aria-labelledby="told-us" className="mb-10 grid gap-5">
+      <h2 id="told-us" className="text-xl font-semibold">What people told us</h2>
+      <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
+        {LAUNCH_KINDS.map((kind) => {
+          const mine = counts.filter((c) => c.kind === kind);
+          if (mine.length === 0) return null;
+          return (
+            <Card key={kind} className="grid gap-7">
+              <h3 className="text-lg font-semibold">{KIND_TITLE[kind]}</h3>
+              {LAUNCH_QUESTIONS[kind].map((q) => {
+                const rows = q.options
+                  .map((o) => ({ label: o.label, people: mine.find((c) => c.question === q.key && c.answer === o.value)?.people ?? 0 }))
+                  .sort((a, b) => b.people - a.people);
+                const top = Math.max(1, ...rows.map((r) => r.people));
+                if (rows.every((r) => r.people === 0)) return null;
+                return (
+                  <div key={q.key} className="grid gap-2">
+                    <p className="text-sm font-semibold text-navy-2">{q.label}</p>
+                    <ul className="grid gap-1.5">
+                      {rows.map((r) => (
+                        <li key={r.label} className="grid grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-3 text-sm">
+                          <span className="relative grid min-h-9 items-center overflow-hidden rounded-sm bg-mist px-3">
+                            <span aria-hidden className="absolute inset-y-0 left-0 rounded-sm bg-teal-soft" style={{ width: `${(r.people / top) * 100}%` }} />
+                            <span className="relative truncate font-semibold">{r.label}</span>
+                          </span>
+                          <span className="text-right font-display text-base font-semibold tabular">{r.people}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </Card>
+          );
+        })}
+      </div>
+    </section>
   );
 }
