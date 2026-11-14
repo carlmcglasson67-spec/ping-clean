@@ -86,10 +86,11 @@ export async function launchFlows({ browser, BASE, check, shots }) {
     assert.ok(box && box.y >= 0 && box.y <= 900 / 3, `the thanks card starts near the top of the screen after sending (y=${box?.y})`);
     // Sent: the panel stops asking for what has just been done, and the header's action is the list.
     const panel = await page.locator("#register").innerText();
-    assert.ok(panel.includes("it counts towards where Ping opens first") && !panel.includes("Be first in"), "the left column changes once the form is sent");
+    assert.ok(panel.includes("now counts towards where Ping opens first") && !panel.includes("Be first in"), "the left column changes once the form is sent");
     // The thanks card is a receipt: their district, what happens next, and a link that really copies.
     const card = page.getByRole("status");
-    assert.match(await card.innerText(), /CA14 · customer list/i);
+    assert.match(await card.innerText(), /CA14 · customer/i);
+    assert.match(await card.innerText(), /Your postcode, CA14, is counted/);
     assert.match(await card.innerText(), /Now[\s\S]*Next[\s\S]*Then/);
     await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
     await card.getByRole("button", { name: "Copy the link" }).click();

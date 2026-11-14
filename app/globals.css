@@ -198,6 +198,32 @@
   }
   .ping-pulse { animation: ping-pulse 2.4s var(--ease-out-soft) infinite; }
 
+  /*
+    A signal travelling through a sequence: each step lights for its turn, then rests.
+    Set --step (0, 1, 2…) and --steps on the element. Content is never hidden by it.
+  */
+  @keyframes step-signal {
+    0%, 28% { box-shadow: 0 0 0 2px var(--color-teal), 0 18px 44px -18px rgb(0 194 209 / 0.75); transform: translateY(-3px); }
+    40%, 100% { box-shadow: 0 0 0 0 transparent, var(--shadow-lift); transform: none; }
+  }
+  .step-signal {
+    animation: step-signal calc(var(--steps, 3) * 1.6s) var(--ease-out-soft) infinite;
+    animation-delay: calc(var(--step, 0) * 1.6s + 1.4s);
+  }
+
+  /* "You are here": the current step of a tracker breathes. */
+  @keyframes here {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+  }
+  .here { animation: here 2.4s ease-in-out infinite; }
+
+  /* Cards that lift a little under the pointer. */
+  .lift { transition: transform 0.35s var(--ease-out-soft), box-shadow 0.35s var(--ease-out-soft); }
+  @media (hover: hover) {
+    .lift:hover { transform: translateY(-4px); box-shadow: var(--shadow-lift); }
+  }
+
   @keyframes rise {
     from { opacity: 0; transform: translateY(14px); }
     to { opacity: 1; transform: none; }

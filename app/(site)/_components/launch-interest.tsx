@@ -90,9 +90,12 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
     const cleaner = state.kind === "cleaner";
     // Their own postcode district, from what they typed: "CA14 3XX" → "CA14".
     const district = postcode.trim().toUpperCase().replace(/\s+/g, "").slice(0, -3);
-    const next = cleaner
-      ? ["You’re on the cleaners’ list", "We open one town at a time", "One message when we’re taking on cleaners near you"]
-      : ["You’re on the list", "We open one town at a time", "One message when booking opens near you"];
+    const hasDistrict = /^[A-Z]{1,2}[0-9][A-Z0-9]?$/.test(district);
+    const next = [
+      hasDistrict ? `Your postcode, ${district}, is counted` : "Your postcode is counted",
+      "We open one town at a time",
+      cleaner ? "One message when we’re taking on cleaners near you" : "One message when booking opens near you",
+    ];
     return (
       <div
         ref={thanksRef}
@@ -107,9 +110,9 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
               <path d="m5 10.5 3.2 3L15 6.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </span>
-          {/^[A-Z]{1,2}[0-9][A-Z0-9]?$/.test(district) ? (
+          {hasDistrict ? (
             <p className="rounded-full bg-teal-soft px-5 py-2.5 text-lg font-semibold text-teal-ink tabular">
-              {district} · {cleaner ? "cleaners’ list" : "customer list"}
+              {district} · {cleaner ? "cleaner" : "customer"}
             </p>
           ) : null}
         </div>
@@ -128,7 +131,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
 
         <div className="grid gap-4 border-t border-line pt-8">
           <p className="text-lg text-navy-2">
-            {cleaner ? "Know another cleaner who’d want this? Every postcode on the list counts." : "Know someone who’d want Ping? Every postcode on the list counts."}
+            {cleaner ? "Know another cleaner who’d want this? Every postcode counts." : "Know someone who’d want Ping? Every postcode counts."}
           </p>
           <ShareLaunch />
         </div>
@@ -351,7 +354,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
             </p>
             <div aria-hidden className="h-2 overflow-hidden rounded-full bg-mist">
               <div
-                className="h-full rounded-full bg-[linear-gradient(90deg,var(--color-blue)_0%,var(--color-teal)_100%)] transition-[width] duration-500 ease-out-soft"
+                className="h-full rounded-full bg-blue transition-[width] duration-500 ease-out-soft"
                 style={{ width: `${(answered / questions.length) * 100}%` }}
               />
             </div>
@@ -379,7 +382,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
                     <label
                       key={o.value}
                       className={cn(
-                        "inline-flex min-h-12 min-w-14 max-w-full cursor-pointer select-none items-center justify-center gap-2 rounded-full px-5 py-2.5 text-left text-base font-semibold leading-snug lg:text-lg transition-[background-color,color,box-shadow,transform] duration-200 ease-out-soft active:scale-[0.97] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue has-[:focus-visible]:ring-offset-2",
+                        "inline-flex min-h-12 min-w-14 max-w-full cursor-pointer select-none items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-left text-base font-semibold leading-snug lg:text-lg transition-[background-color,color,box-shadow,transform] duration-200 ease-out-soft active:scale-[0.97] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue has-[:focus-visible]:ring-offset-2",
                         on ? "bg-blue text-white shadow-card" : "bg-card text-navy shadow-card ring-1 ring-inset ring-navy-3/55 hover:ring-navy",
                         !on && full && "cursor-not-allowed opacity-50 shadow-none hover:ring-navy-3/55",
                       )}
@@ -455,7 +458,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
         data-docked={ready || undefined}
         className={cn(
           ready &&
-            "max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:-mx-6 max-sm:border-t max-sm:border-line max-sm:bg-card max-sm:px-6 max-sm:py-3 max-sm:shadow-[0_-12px_24px_-16px_rgb(0_29_68/0.35)]",
+            "max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:-mx-6 max-sm:border-t max-sm:border-line max-sm:bg-card max-sm:px-6 max-sm:pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-sm:pt-3 max-sm:shadow-card",
         )}
       >
         <Button type="submit" size="xl" variant="primary" pending={pending} className="w-full max-sm:px-6">
@@ -465,7 +468,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
 
       <p className="text-base text-navy-2 lg:text-lg">
         {launchConsentText(kind, setup.retentionMonths)}{" "}
-        <Link href="/privacy" className="font-semibold text-blue underline decoration-blue/30 underline-offset-4 hover:decoration-blue">
+        <Link href="/privacy" className="-my-3 inline-block py-3 font-semibold text-blue underline decoration-blue/30 underline-offset-4 hover:decoration-blue">
           Privacy notice
         </Link>
       </p>
@@ -513,37 +516,48 @@ function ShareLaunch() {
   // Only ever rendered in the browser, after the form has been sent, so this is safe to read here.
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
   const url = typeof window === "undefined" ? LAUNCH_URL : `${window.location.origin}/launch`;
+  const shown = url.replace(/^https?:\/\//, "");
   return (
     <div className="grid gap-3">
-      <div className="flex flex-wrap gap-3">
-        {canShare ? (
-          <Button
-            type="button"
-            size="lg"
-            variant="primary"
-            onClick={() => {
-              navigator.share({ title: "Ping Clean", text: "Regular home cleaning for West Cumbria. Put your postcode on the list.", url }).catch(() => {});
-            }}
-          >
-            Share this page
-          </Button>
-        ) : null}
+      {/* The link in a field of its own, with its copy button inside it. */}
+      <div className="flex items-center gap-2 rounded-md bg-canvas py-1.5 pl-4 pr-1.5 ring-1 ring-inset ring-navy-3/55">
+        <span className="min-w-0 flex-1 truncate text-lg font-semibold tabular">{shown}</span>
         <Button
           type="button"
-          size="lg"
-          variant={canShare ? "secondary" : "primary"}
+          variant={copied === "copied" ? "ink" : "primary"}
+          className="shrink-0"
           onClick={() => {
             navigator.clipboard.writeText(url).then(
               () => setCopied("copied"),
               () => setCopied("failed"),
             );
           }}
+          icon={
+            copied === "copied" ? (
+              <svg viewBox="0 0 20 20" className="rise size-5" aria-hidden>
+                <path d="m5 10.5 3.2 3L15 6.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : undefined
+          }
         >
           {copied === "copied" ? "Link copied" : "Copy the link"}
         </Button>
       </div>
-      <p className="text-base text-navy-2 tabular lg:text-lg" aria-live="polite">
-        {copied === "failed" ? `Couldn’t copy. The link is ${url.replace(/^https?:\/\//, "")}` : url.replace(/^https?:\/\//, "")}
+      {canShare ? (
+        <Button
+          type="button"
+          size="lg"
+          variant="secondary"
+          className="w-fit max-sm:w-full"
+          onClick={() => {
+            navigator.share({ title: "Ping Clean", text: "Regular home cleaning for West Cumbria. Put your postcode on the list.", url }).catch(() => {});
+          }}
+        >
+          Share this page
+        </Button>
+      ) : null}
+      <p className="text-base text-bad lg:text-lg" aria-live="polite">
+        {copied === "failed" ? "Couldn’t copy it for you. Press and hold the link to copy it." : ""}
       </p>
     </div>
   );
