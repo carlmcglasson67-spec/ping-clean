@@ -18,8 +18,6 @@ export const PING_ERRORS = {
   PC014: "Add at least one before and one after photo.",
   PC015: "No checklist has been set up yet. Call the Ping office.",
   PC016: "That clean has payment records, so it can't be removed. Cancel it instead.",
-  PC060: "We couldn't find that clean on your account.",
-  PC061: "That clean can't be cancelled now: it's already under way, finished or cancelled.",
   PC017: "This block is on hold, so this clean isn't going ahead. Ping will tell you when it's back on.",
   // Booking
   PC020: "Booking isn't open yet.",
