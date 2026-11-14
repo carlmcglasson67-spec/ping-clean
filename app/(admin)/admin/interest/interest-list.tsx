@@ -5,21 +5,25 @@ import { useState, useTransition } from "react";
 import { Badge, Button } from "@/components/ui";
 import { cn } from "@/components/ui/cn";
 import { formatStamp } from "@/lib/dates";
+import { launchAnswerLabel, launchQuestionLabel } from "@/lib/interest/launch";
 import { NOT_SAVED, type ActionResult } from "../_lib/errors";
 import { deleteInterest, markTold } from "./actions";
 
 export type InterestRow = {
   id: string;
+  kind: "customer" | "cleaner";
   postcode_district: string;
   contact_type: "email" | "phone";
   contact_masked: string;
-  source: "instant_price" | "holding_page";
+  source: "instant_price" | "holding_page" | "launch_page";
+  /** The launch page's tap answers (never the free-text note: that is in the export only). */
+  answers: Record<string, string | string[]>;
   registered_at: string;
   notified_at: string | null;
   unsubscribed_at: string | null;
 };
 
-const SOURCE = { instant_price: "Instant price", holding_page: "Booking opens soon page" } as const;
+const SOURCE = { instant_price: "Instant price", holding_page: "Booking opens soon page", launch_page: "Launch page" } as const;
 
 /** The masked list: tick people to mark told (or undo), and delete one on request. */
 export function InterestList({ rows }: { rows: InterestRow[] }) {
@@ -71,11 +75,22 @@ export function InterestList({ rows }: { rows: InterestRow[] }) {
                   <span className="text-sm text-navy-3">{r.postcode_district} · {r.contact_type === "email" ? "Email" : "Mobile"} · {SOURCE[r.source]} · {formatStamp(r.registered_at)}</span>
                 </span>
               </label>
+              <Badge tone={r.kind === "cleaner" ? "teal" : "mist"}>{r.kind === "cleaner" ? "Wants to clean" : "Customer"}</Badge>
               {r.unsubscribed_at ? <Badge>Unsubscribed</Badge> : r.notified_at ? <Badge tone="ok">Told {formatStamp(r.notified_at)}</Badge> : <Badge tone="warn">Not told yet</Badge>}
               {deleting !== r.id ? (
                 <Button variant="ghost" disabled={pending} onClick={() => { setDeleting(r.id); setResult(null); }}>Delete on request</Button>
               ) : null}
             </div>
+            {Object.keys(r.answers).length > 0 ? (
+              <dl className="grid gap-x-6 gap-y-2 border-t border-line pt-3 text-sm sm:grid-cols-2">
+                {Object.entries(r.answers).map(([question, value]) => (
+                  <div key={question} className="grid gap-0.5">
+                    <dt className="text-navy-3">{launchQuestionLabel(r.kind, question)}</dt>
+                    <dd className="font-semibold">{(Array.isArray(value) ? value : [value]).map((v) => launchAnswerLabel(r.kind, question, v)).join(" · ")}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
             {deleting === r.id ? (
               <DeleteConfirm row={r} pending={pending} onCancel={() => setDeleting(null)}
                 onDelete={(arrivedBy, senderMatches) => run(() => deleteInterest({ id: r.id, arrivedBy, senderMatches }), () => setDeleting(null))} />

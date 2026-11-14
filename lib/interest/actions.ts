@@ -14,6 +14,7 @@ import { createAdminClient } from "@/lib/db/admin";
 import { isPingError, pingErrorMessage } from "@/lib/db/errors";
 import { hasSupabaseEnv } from "@/lib/env";
 import { INTEREST_FIELDS, parseInterestForm, type InterestSource, type RegisterInterestState } from "./form";
+import { LAUNCH_FIELDS, parseLaunchForm, type LaunchInterestState } from "./launch";
 import { verifyTurnstile } from "./turnstile";
 
 const TRY_AGAIN = "Something went wrong. Please try again.";
@@ -54,6 +55,49 @@ async function register(source: InterestSource, formData: FormData): Promise<Reg
   if (!error) return { status: "thanks" };
 
   // Never log the postcode or contact details (ping-data-security rule 5).
+  const fieldErrors =
+    error.code === "PC030" ? { postcode: pingErrorMessage(error) }
+    : error.code === "PC031" ? { [parsed.values.contact]: pingErrorMessage(error) }
+    : undefined;
+  return {
+    status: "error",
+    values: parsed.values,
+    fieldErrors,
+    message: fieldErrors ? undefined : isPingError(error) ? pingErrorMessage(error) : TRY_AGAIN,
+  };
+}
+
+/**
+ * The /launch form: a customer or a would-be cleaner, with a few optional answers.
+ * Same order and the same promises as above. The kind is one of the two the page offers
+ * (checked here and in the database); the source and consent version are set on the server.
+ */
+export async function registerLaunchInterest(_prev: LaunchInterestState, formData: FormData): Promise<LaunchInterestState> {
+  const parsedKind = formData.get(LAUNCH_FIELDS.kind) === "cleaner" ? "cleaner" : "customer";
+  const honeypot = formData.get(LAUNCH_FIELDS.honeypot);
+  if (typeof honeypot === "string" && honeypot.length > 0) return { status: "thanks", kind: parsedKind };
+
+  const parsed = parseLaunchForm(formData);
+  if (!parsed.ok) return { status: "error", fieldErrors: parsed.fieldErrors, values: parsed.values };
+
+  const token = formData.get(LAUNCH_FIELDS.turnstile);
+  const check = await verifyTurnstile(typeof token === "string" ? token : null);
+  if (check === "failed") {
+    return { status: "error", values: parsed.values, fieldErrors: { captcha: "Please complete the check and send it again." } };
+  }
+  if (check === "unavailable") return { status: "error", values: parsed.values, message: TRY_AGAIN };
+
+  if (!hasSupabaseEnv()) return { status: "error", values: parsed.values, message: TRY_AGAIN };
+  let error: { code?: string | null } | null;
+  try {
+    // Service role, server only: the one caller register_launch_interest accepts.
+    ({ error } = await createAdminClient().rpc("register_launch_interest", parsed.args));
+  } catch {
+    return { status: "error", values: parsed.values, message: TRY_AGAIN };
+  }
+  if (!error) return { status: "thanks", kind: parsed.values.kind };
+
+  // Never log the name, postcode, contact details or answers (ping-data-security rule 5).
   const fieldErrors =
     error.code === "PC030" ? { postcode: pingErrorMessage(error) }
     : error.code === "PC031" ? { [parsed.values.contact]: pingErrorMessage(error) }
