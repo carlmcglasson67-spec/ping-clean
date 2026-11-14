@@ -1,21 +1,38 @@
-# Plan: cancel the rest of my cleans
+# Plan: a customer cancels a clean, or the rest of their block
 
-## What
-A customer can cancel one clean (payments 11) but only the office can end a block. This lets
-the customer cancel everything still to come and end their block, from the booking page.
-(The part of PR #48 that #49 didn't bring across. #48 can be closed.)
+Payments plan build step 7, the customer's side ("cancel/skip with the late fee, doesn't
+exist yet"). Today a customer can't cancel anything: only the Ping team can end a block.
 
-## Rules
-- Each clean is cancelled exactly as "Cancel this clean" would: same notice period, same
-  late fee, same split, same office alert. One shared database function does both.
-- The customer sees the total before confirming. If it changed (the cut-off passed, the
-  setting changed), nothing is cancelled and they're shown the new figure.
-- Then the block ends: offers withdrawn, no more cleans booked, the office gets a
-  "block closed" alert.
-- **Not while a clean is under way or its time has started.** The block has to stay live
-  for the cleaner to do that clean. The customer is told to come back after, or call.
-- Cleans already done are untouched. Only the block's own customer can do it.
+## Rules (Carl's settings, 8 Nov 2026)
 
-## For Carl
-- Is "not while a clean is under way" right, or should the office be able to override?
-- The cleaner still isn't messaged; the office alert asks you to ring them (as today).
+- **24 hours' notice is free** (`cancel_notice_hours`). Notice is counted to the start of the
+  clean's arrival window, London time.
+- **Less than that is a late cancellation**, but only when a cleaner has the clean: with no
+  cleaner yet, nobody is put out, so it's free.
+- **Late fee: not set yet** (`late_cancel_fee_pence` is empty). A rule that isn't set doesn't
+  run, so today a late cancellation costs nothing and the team is told. When Carl sets a
+  fee, the amount is recorded on the clean and shown to the customer before they confirm.
+  **Taking that fee from the card is not built here**: the team gets an alert saying a fee
+  is due.
+
+## This PR
+
+- `my_cancel_terms(clean)`: what cancelling would mean (allowed, late, notice hours, fee).
+- `cancel_my_visit(clean)`: cancels one scheduled clean of the customer's own.
+- `cancel_my_block(block)`: cancels every clean still to come and ends the block. A clean
+  that's already under way is left alone and charged as normal when it's finished.
+- A late cancellation raises a `cancelled_late` alert so the office can ring the cleaner.
+- The customer's booking page lists the block's cleans, each with "Cancel this clean", and
+  "Cancel the rest of my cleans". Each asks once more before doing it and says plainly
+  whether it's free.
+- The cleaner's app already shows a cancelled clean as not going ahead.
+
+## Not in this PR
+
+- Charging the late fee to the card (needs the fee, and the split, decided first).
+- Telling the cleaner by message. They see it in the app; the office is alerted when it's late.
+- Moving a clean to another day. Cancel is the only change a customer can make themselves.
+
+## Data changes (needs Carl's sign-off)
+
+- One new alert kind, `cancelled_late`. Three new functions (above). No new tables or columns.

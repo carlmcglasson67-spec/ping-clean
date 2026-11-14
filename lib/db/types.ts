@@ -1154,6 +1154,18 @@ export type Database = {
         };
         Returns: "updated" | "unknown_account";
       };
+      my_cancel_terms: {
+        Args: { p_visit: string };
+        Returns: { can_cancel: boolean; late: boolean; notice_hours: number | null; fee_pence: number | null }[];
+      };
+      cancel_my_visit: {
+        Args: { p_visit: string };
+        Returns: "cancelled" | "cancelled_late";
+      };
+      cancel_my_block: {
+        Args: { p_series: string };
+        Returns: { cancelled: number; late: number };
+      };
       admin_charge_visit: {
         Args: { p_visit: string };
         Returns: string;
