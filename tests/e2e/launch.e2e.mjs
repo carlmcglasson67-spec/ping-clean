@@ -37,7 +37,7 @@ export async function launchFlows({ browser, BASE, check, shots }) {
       await page.goto(`${BASE}/launch`, { waitUntil: "networkidle" });
       await settle(page);
       const text = await page.locator("main").innerText();
-      for (const s of ["cleaners to clients.", "What Ping Clean is", "Built by people who clean for a living.", "Be first in"]) {
+      for (const s of ["cleaners to clients.", "What Ping Clean is", "clean for a living.", "West Cumbria, town by town.", "Workington", "Be first in"]) {
         // Case-insensitive: the small labels are set in capitals by the stylesheet.
         assert.ok(text.toLowerCase().includes(s.toLowerCase()), `expected to see "${s}" at ${width}px`);
       }
@@ -65,7 +65,7 @@ export async function launchFlows({ browser, BASE, check, shots }) {
   });
 
   await check("a customer registers with a name and answers, and can only pick three priorities", async () => {
-    const page = await browser.newPage();
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     await page.goto(`${BASE}/launch`);
     const form = page.locator("#register form");
     await form.getByLabel("First name").fill("Jo");
@@ -80,13 +80,17 @@ export async function launchFlows({ browser, BASE, check, shots }) {
     await form.getByText("Tell me when booking opens near me").click();
     await form.getByRole("button", { name: "Put me on the list" }).click();
     await page.getByText(THANKS).waitFor();
+    // The long form has become a short card: it must be brought into view, not left above the fold.
+    await page.waitForTimeout(900);
+    const box = await page.getByRole("status").boundingBox();
+    assert.ok(box && box.y >= 0 && box.y + box.height <= 900 + 1, "the thanks card is fully on screen after sending");
+    await page.screenshot({ path: `${shots}/launch-thanks-1440.png` });
     const rows = await rowsFor("launch.customer@example.com");
     assert.equal(rows.length, 1);
     assert.deepEqual({ ...rows[0] }, {
       kind: "customer", first_name: "Jo", postcode: "CA14 3XX", email: "launch.customer@example.com", phone: null, source: "launch_page",
       answers: { frequency: "fortnightly", bedrooms: "3", priorities: ["same_cleaner", "reliable", "proof"], note: "They never turned up." },
     });
-    await page.screenshot({ path: `${shots}/launch-thanks-1440.png` });
     await page.close();
   });
 
@@ -105,9 +109,24 @@ export async function launchFlows({ browser, BASE, check, shots }) {
     await form.getByText("Evenings", { exact: true }).click();
     await form.getByText("Tell me when Ping is taking on cleaners near me").click();
     await settle(page);
+    // Nothing in the register panel may be wider than the phone: the panel clips what overflows,
+    // so an over-wide button or chip would silently cut the card off (design review BLOCK).
+    const wide = await page.evaluate(() => {
+      const max = document.documentElement.clientWidth;
+      return [...document.querySelectorAll("#register *")]
+        .filter((el) => el.getBoundingClientRect().width > 0 && (el.getBoundingClientRect().right > max + 0.5 || el.getBoundingClientRect().left < -0.5))
+        .filter((el) => !el.closest("[aria-hidden]"))
+        .map((el) => `${el.tagName.toLowerCase()} "${(el.textContent ?? "").trim().slice(0, 40)}"`)
+        .slice(0, 5);
+    });
+    assert.deepEqual(wide, [], "everything in the register panel fits a 390px screen");
     await page.locator("#register").screenshot({ path: `${shots}/launch-form-cleaner-390.png` });
-    await form.getByRole("button", { name: "Put me on the cleaners’ list" }).click();
+    await form.getByRole("button", { name: "Join the cleaners’ list" }).click();
     await page.getByText(THANKS).waitFor();
+    await page.waitForTimeout(900);
+    const box = await page.getByRole("status").boundingBox();
+    assert.ok(box && box.y >= 0 && box.y + box.height <= 844 + 1, "the thanks card is fully on screen on a phone");
+    await page.screenshot({ path: `${shots}/launch-thanks-390.png` });
     await page.getByRole("link", { name: /See how cleaning with Ping works/ }).waitFor();
     const rows = await rowsFor("+447700900777");
     assert.equal(rows.length, 1);

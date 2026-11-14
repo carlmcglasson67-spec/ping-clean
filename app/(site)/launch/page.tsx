@@ -7,6 +7,7 @@ import { Eyebrow } from "../_components/blocks";
 import { FaqList } from "../_components/faq-list";
 import { LaunchInterest } from "../_components/launch-interest";
 import { STANDARD_CLEAN_COUNT } from "../_content/checklist";
+import { AREA_LINKS, AREAS_LINK } from "../_content/nav";
 import type { Faq } from "../_content/faq";
 
 export const metadata: Metadata = {
@@ -24,14 +25,14 @@ const registerHref = (as: LaunchKind) => `/launch?as=${as}#register` as Route;
 const FACTS = [
   { value: "1", label: "cleaner for your block", note: "The same person for every clean you book, so they learn your home." },
   { value: "8", label: "cleans in a block, at most", note: "Book a block, not a contract. When it ends you rebook, or you don’t." },
-  { value: "0", label: "charged before the clean", note: "Your card is saved when you book and charged only once the clean is done." },
+  { value: "0", label: "charges before the clean", note: "Your card is saved when you book and charged only once the clean is done." },
 ];
 
 /** Why it's different: what people are used to, then what Ping does instead. */
 const DIFFERENT = [
   { old: "Open-ended contracts that are awkward to leave.", title: "Blocks of up to 8 cleans.", body: "Book a block. When it ends you rebook or you stop. Nobody is tied in, customer or cleaner." },
   { old: "Whoever happens to be free that week.", title: "One cleaner for your whole block.", body: "The same person does every clean in it. Rebook, and they’re offered your home before anyone else." },
-  { old: "Taking it on trust that someone’s been checked.", title: "Four checks before any job.", body: "DBS, public liability insurance, photo ID and right to work, all verified before a cleaner sees a single home." },
+  { old: "Taking it on trust that someone’s been checked.", title: "4 checks before any job.", body: "DBS, public liability insurance, photo ID and right to work, all verified before a cleaner sees a single home." },
   { old: "No real idea what was done while you were out.", title: "A checklist and photos, every visit.", body: `${STANDARD_CLEAN_COUNT} ticks, room by room, with before and after photos you can look at even if you weren’t in.` },
   { old: "Paying up front, or cash left on the side.", title: "You pay after, by card.", body: "Nothing is taken in advance. Your card is charged once the clean is finished." },
 ];
@@ -52,12 +53,6 @@ const FOR_CLEANERS = [
   "First refusal when your customer rebooks",
 ];
 
-const HOW = [
-  { title: "You book a block", body: "Pick your day, every week or every two weeks, for up to 8 cleans. Your card is saved, not charged." },
-  { title: "We send the ping", body: "Your block goes to vetted cleaners near you. One of them takes on every clean in it, and you see who’s coming." },
-  { title: "Clean, tick, photo, pay", body: "They work through the checklist and take before and after photos. Then, and only then, your card is charged." },
-];
-
 const LAUNCH_FAQ: Faq[] = [
   { q: "What is Ping Clean?", a: "Regular home cleaning for West Cumbria. You book a block of cleans, Ping offers it to vetted, self-employed cleaners near you, and one of them takes on every clean in the block. Ping handles the booking, the payment and the quality checks." },
   { q: "When does it launch, and where?", a: "Soon, starting in West Cumbria. We’re opening town by town, and the postcodes on this list help decide which come first. Leave yours and we’ll send you one message when booking opens near you." },
@@ -75,7 +70,7 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
     <>
       {/* ------------------------------------------------------------ Hero */}
       <section aria-labelledby="launch-title" className="signal-waves relative overflow-hidden text-on-navy">
-        <div className="mx-auto grid max-w-[96rem] gap-14 px-5 pb-28 pt-12 sm:px-10 sm:pt-16 lg:grid-cols-12 lg:gap-x-10 lg:px-16 lg:pb-40 lg:pt-14">
+        <div className="mx-auto grid max-w-[96rem] gap-14 px-5 pb-40 pt-12 sm:px-10 sm:pt-16 lg:grid-cols-12 lg:gap-x-10 lg:px-16 lg:pb-44 lg:pt-16">
           <div className="rise lg:col-span-12">
             <p className="inline-flex w-fit items-center gap-3 rounded-full bg-white/8 py-2 pl-2 pr-5 text-base font-semibold text-on-navy-2 ring-1 ring-inset ring-white/15">
               <span className="relative grid size-7 place-items-center">
@@ -95,14 +90,14 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
               Regular home cleaning, booked from your phone. One vetted cleaner for your whole block, a checklist and photos every visit, and you pay after it&rsquo;s done.
             </p>
             <div className="mt-10 flex flex-wrap gap-3">
-              <ButtonLink href={registerHref("customer")} size="lg" variant="signal">
+              <ButtonLink href={registerHref("customer")} size="lg" variant="signal" className="max-sm:w-full">
                 I want a cleaner
               </ButtonLink>
-              <ButtonLink href={registerHref("cleaner")} size="lg" variant="onNavy">
+              <ButtonLink href={registerHref("cleaner")} size="lg" variant="onNavy" className="max-sm:w-full">
                 I want to clean with Ping
               </ButtonLink>
             </div>
-            <p className="mt-6 text-base text-on-navy-3">Register your interest. No payment, no commitment.</p>
+            <p className="mt-6 text-lg text-on-navy-2">Register your interest. No payment, no commitment.</p>
           </div>
 
           <PingSequence className="lg:col-span-6 lg:-mt-6" />
@@ -136,8 +131,9 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
           <div className="grid gap-6 lg:grid-cols-12 lg:items-end lg:gap-x-10">
             <div className="lg:col-span-8">
               <Eyebrow>Why it&rsquo;s different</Eyebrow>
-              <h2 id="different-title" className="mt-5 text-4xl font-semibold">
-                Built by people who clean for a living.
+              <h2 id="different-title" className="mt-5 text-3xl font-semibold">
+                Built by people who <br className="hidden sm:block" />
+                clean for a living.
               </h2>
             </div>
             <p className="text-lg text-navy-2 lg:col-span-4">
@@ -151,9 +147,9 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
                 <span aria-hidden className="font-display text-[3.25rem] font-semibold leading-none text-teal-deep tabular lg:col-span-2 lg:text-[4rem]">
                   {String(i + 1).padStart(2, "0")}
                 </span>
-                <p className="text-lg text-navy-3 lg:col-span-4 lg:pt-2">
-                  <span className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em]">Elsewhere</span>
-                  <s className="decoration-navy-3/60 decoration-2">{d.old}</s>
+                <p className="text-lg text-navy-2 lg:col-span-4 lg:pt-2">
+                  <span className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em] text-navy-3">Elsewhere</span>
+                  {d.old}
                 </p>
                 <div className="lg:col-span-6 lg:pt-2">
                   <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-teal-ink">With Ping</p>
@@ -173,8 +169,8 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
           <h2 id="sides-title" className="mt-5 max-w-5xl text-3xl font-semibold">
             It has to work for the person doing the cleaning too.
           </h2>
-          <div className="mt-14 grid gap-5 lg:mt-20 lg:grid-cols-12 lg:items-start">
-            <article className="flex flex-col gap-10 rounded-xl bg-card p-8 shadow-card ring-1 ring-line/70 sm:p-12 lg:col-span-7 lg:p-16">
+          <div className="mt-14 grid gap-5 lg:mt-20 lg:grid-cols-12">
+            <article className="flex flex-col justify-between gap-10 rounded-xl bg-card p-8 shadow-card ring-1 ring-line/70 sm:p-12 lg:col-span-7 lg:p-16">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal-ink">For your home</p>
                 <h3 className="mt-5 text-3xl font-semibold">Come home to it done.</h3>
@@ -184,7 +180,7 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
                 Register as a customer
               </ButtonLink>
             </article>
-            <article className="flex flex-col gap-10 rounded-xl bg-teal p-8 text-navy sm:p-12 lg:col-span-5 lg:mt-24 lg:p-14">
+            <article className="flex flex-col justify-between gap-10 rounded-xl bg-teal p-8 text-navy sm:p-12 lg:col-span-5 lg:p-14">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.16em]">For cleaners</p>
                 <h3 className="mt-5 text-3xl font-semibold">Pick your own work.</h3>
@@ -203,40 +199,56 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
         </div>
       </section>
 
-      {/* ------------------------------------------------------------ How it works */}
-      <section aria-labelledby="how-title">
+      {/* ------------------------------------------------------------ Where: town by town */}
+      <section aria-labelledby="where-title">
         <div className="mx-auto max-w-[96rem] px-5 py-20 sm:px-10 lg:px-16 lg:py-32">
           <div className="grid gap-6 lg:grid-cols-12 lg:items-end lg:gap-x-10">
             <div className="lg:col-span-7">
-              <Eyebrow>How it works</Eyebrow>
-              <h2 id="how-title" className="mt-5 text-3xl font-semibold">
-                Three steps from booked to done.
+              <Eyebrow>Where we&rsquo;re opening</Eyebrow>
+              <h2 id="where-title" className="mt-5 text-3xl font-semibold">
+                West Cumbria, town by town.
               </h2>
             </div>
-            <Link href="/#how" className="inline-flex min-h-12 items-center gap-2 text-lg font-semibold text-navy-2 hover:text-navy lg:col-span-4 lg:col-start-9 lg:justify-self-end">
-              The full five steps <span aria-hidden>&rarr;</span>
-            </Link>
+            <p className="text-lg text-navy-2 lg:col-span-4 lg:col-start-9">
+              We&rsquo;re opening one town at a time. The postcodes left on this list, by customers and by cleaners, help decide which come first.
+            </p>
           </div>
-          <ol className="mt-14 grid gap-5 lg:mt-20 lg:grid-cols-3">
-            {HOW.map((s, i) => (
-              <li
-                key={s.title}
-                className={
-                  "grid content-start gap-5 rounded-xl p-8 sm:p-10 lg:p-12 " +
-                  (i === 2 ? "signal-waves pb-16 text-on-navy lg:mt-24 lg:pb-24" : i === 1 ? "bg-mist lg:mt-12" : "bg-card shadow-card ring-1 ring-line/70")
-                }
-              >
-                <span aria-hidden className={"font-display text-[5rem] font-semibold leading-[0.85] tracking-[-0.05em] tabular lg:text-[6.5rem] " + (i === 2 ? "text-teal" : "text-teal-deep")}>
-                  {i + 1}
-                </span>
-                <h3 className="text-2xl font-semibold">
-                  <span className="sr-only">Step {i + 1}: </span>
-                  {s.title}
-                </h3>
-                <p className={"text-lg " + (i === 2 ? "text-on-navy-2" : "text-navy-2")}>{s.body}</p>
+          <ul className="mt-14 grid gap-px overflow-hidden rounded-xl bg-line ring-1 ring-line sm:grid-cols-2 lg:mt-20 lg:grid-cols-3">
+            {AREA_LINKS.map((t) => (
+              <li key={t.label} className="bg-card">
+                <Link
+                  href={t.href}
+                  className="group flex min-h-24 items-center justify-between gap-4 px-6 py-6 transition-colors duration-200 hover:bg-teal-soft sm:px-8 lg:min-h-28"
+                >
+                  <span className="min-w-0 font-display text-xl font-semibold tracking-[-0.03em]">{t.label}</span>
+                  <span className="flex shrink-0 items-center gap-4 text-lg font-semibold text-teal-ink tabular">
+                    {t.districts.join(", ")}
+                    <span aria-hidden className="grid size-10 place-items-center rounded-full bg-canvas text-navy ring-1 ring-line transition-[transform,background-color] duration-300 ease-out-soft group-hover:translate-x-1 group-hover:bg-teal">
+                      &rarr;
+                    </span>
+                  </span>
+                </Link>
               </li>
             ))}
-          </ol>
+            {/* The last cell closes the grid whatever the number of towns: it spans what is left of the row. */}
+            <li className={"bg-navy text-on-navy " + (AREA_LINKS.length % 2 === 0 ? "sm:max-lg:col-span-2 " : "") + (AREA_LINKS.length % 3 === 1 ? "lg:col-span-2" : AREA_LINKS.length % 3 === 0 ? "lg:col-span-3" : "")}>
+              <Link
+                href={registerHref("customer")}
+                className="group flex min-h-24 items-center justify-between gap-4 px-6 py-6 transition-colors duration-200 hover:bg-navy-800 sm:px-8 lg:min-h-28"
+              >
+                <span className="min-w-0">
+                  <span className="block font-display text-xl font-semibold tracking-[-0.03em]">Your town not here?</span>
+                  <span className="mt-1 block text-lg text-on-navy-2">Leave your postcode anyway. It tells us where to look next.</span>
+                </span>
+                <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-full bg-teal text-navy transition-transform duration-300 ease-out-soft group-hover:translate-x-1">
+                  &rarr;
+                </span>
+              </Link>
+            </li>
+          </ul>
+          <Link href={AREAS_LINK.href} className="mt-8 inline-flex min-h-12 items-center gap-2 text-lg font-semibold text-navy-2 hover:text-navy">
+            What a Ping clean looks like in each town <span aria-hidden>&rarr;</span>
+          </Link>
         </div>
       </section>
 
@@ -245,11 +257,11 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
         <div className="mx-auto grid max-w-[96rem] gap-12 px-5 pb-32 pt-20 sm:px-10 lg:grid-cols-12 lg:gap-x-10 lg:px-16 lg:pb-48 lg:pt-32">
           <div className="lg:sticky lg:top-28 lg:col-span-5 lg:self-start">
             <Eyebrow tone="onInk">Register your interest</Eyebrow>
-            <h2 id="register-title" className="mt-5 text-4xl font-semibold">
-              Be first in <span className="text-brand-gradient-navy">when we launch.</span>
+            <h2 id="register-title" className="mt-5 text-3xl font-semibold">
+              Be first in <span className="block text-brand-gradient-navy">when we launch.</span>
             </h2>
             <p className="mt-8 max-w-md text-xl text-on-navy-2">
-              It takes about a minute. Your postcode and your answers decide where Ping opens first and how it works when it does.
+Three details and a tick put you on the list. The questions are optional, and they decide where Ping opens first and how it works when it does.
             </p>
             <TickList
               className="mt-10"
@@ -282,7 +294,16 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
             <h2 id="faq-title" className="mt-5 text-3xl font-semibold">
               Before you sign up.
             </h2>
-            <Link href="/faq" className="mt-8 inline-flex min-h-12 items-center gap-2 text-lg font-semibold text-navy-2 hover:text-navy">
+            <p className="mt-6 max-w-sm text-lg text-navy-2">Ready? Three details and a tick, and you&rsquo;ll hear the moment Ping opens near you.</p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <ButtonLink href={registerHref("customer")} size="lg" variant="primary">
+                Register as a customer
+              </ButtonLink>
+              <ButtonLink href={registerHref("cleaner")} size="lg" variant="secondary">
+                Register to clean
+              </ButtonLink>
+            </div>
+            <Link href="/faq" className="mt-6 inline-flex min-h-12 items-center gap-2 text-lg font-semibold text-navy-2 hover:text-navy">
               Every question, answered <span aria-hidden>&rarr;</span>
             </Link>
           </div>
@@ -355,7 +376,7 @@ function PingSequence({ className }: { className?: string }) {
           </div>
         </div>
       ))}
-      <figcaption className="pl-1 text-base text-on-navy-3">How a booking will work at launch.</figcaption>
+      <figcaption className="pl-1 text-lg text-on-navy-2">How a booking will work at launch.</figcaption>
     </figure>
   );
 }
