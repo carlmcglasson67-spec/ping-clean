@@ -101,6 +101,14 @@ export async function launchFlows({ browser, BASE, check, shots }) {
     await page.waitForURL((u) => u.searchParams.get("as") === "cleaner");
     const form = page.locator("#register form");
     await form.getByText("A few quick questions about your work").waitFor();
+    // On a phone the send button rides the bottom of the screen while the form is in view
+    // (design review BLOCK): with the first question at the top, the button is still on screen.
+    await form.getByText("How much cleaning experience do you have?").scrollIntoViewIfNeeded();
+    await page.evaluate(() => document.querySelector("#register legend + div")?.scrollIntoView({ block: "start" }));
+    await page.waitForTimeout(400);
+    const send = await form.locator("[data-send]").boundingBox();
+    assert.ok(send && send.y > 844 / 2 && send.y + send.height <= 844, `the send button is pinned near the bottom of the phone screen (y=${send?.y})`);
+    await page.screenshot({ path: `${shots}/launch-form-sticky-390.png` });
     await form.getByLabel("Your postcode").fill("CA28 6AA");
     await form.getByText("Text message").click();
     await form.getByLabel("UK mobile number").fill("07700 900777");

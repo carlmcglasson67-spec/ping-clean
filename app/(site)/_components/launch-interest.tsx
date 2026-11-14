@@ -108,9 +108,10 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
         </p>
         <Link
           href={cleaner ? "/clean-for-ping" : "/#how"}
-          className="inline-flex min-h-12 w-fit items-center gap-2 text-lg font-semibold text-blue underline decoration-blue/30 underline-offset-4 hover:decoration-blue"
+          className="inline-block w-fit py-3 text-lg font-semibold text-blue underline decoration-blue/30 underline-offset-4 hover:decoration-blue"
         >
-          {cleaner ? "See how cleaning with Ping works" : "See how a Ping clean works"} <span aria-hidden>&rarr;</span>
+          {cleaner ? "See how cleaning with Ping works" : "See how a Ping clean works"}
+          <span aria-hidden>&nbsp;&rarr;</span>
         </Link>
       </div>
     );
@@ -169,7 +170,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
             >
               <input type="radio" name={id("side")} checked={kind === k} onChange={() => setKind(k)} className="sr-only" />
               <span className="font-display text-xl font-semibold">{KIND_CHOICE[k].title}</span>
-              <span className={cn("text-base", kind === k ? "text-on-navy-2" : "text-navy-2")}>{KIND_CHOICE[k].note}</span>
+              <span className={cn("text-base lg:text-lg", kind === k ? "text-on-navy-2" : "text-navy-2")}>{KIND_CHOICE[k].note}</span>
             </label>
           ))}
         </div>
@@ -221,7 +222,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
             <label
               key={c}
               className={cn(
-                "flex min-h-12 cursor-pointer items-center justify-center rounded-full text-base font-semibold transition-colors duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue",
+                "flex min-h-12 cursor-pointer items-center justify-center rounded-full text-base font-semibold transition-colors duration-200 lg:text-lg has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue",
                 contact === c ? "bg-card text-navy shadow-card" : "text-navy-2 hover:text-navy",
               )}
             >
@@ -307,7 +308,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
 
       {/* ---------------------------------------------------------- the short questions */}
       <section aria-labelledby={id("questions")} className="grid gap-8 border-t border-line pt-10">
-        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
+        <div className="grid gap-6">
           <div className="grid gap-3">
             <h3 id={id("questions")} className="text-2xl font-semibold">
               {kind === "customer" ? "A few quick questions about your home" : "A few quick questions about your work"}
@@ -315,8 +316,8 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
             <p className="text-lg text-navy-2">All optional. Tap what fits; skip what doesn&rsquo;t.</p>
           </div>
           {/* How far through: a real count of the questions answered, not decoration. */}
-          <div className="grid w-full gap-2 sm:ml-auto sm:w-56">
-            <p className="text-base font-semibold text-navy-2 tabular" aria-live="polite">
+          <div className="grid w-full grid-cols-[auto_1fr] items-center gap-4">
+            <p className="text-base font-semibold text-navy-2 tabular lg:text-lg" aria-live="polite">
               {answered} of {questions.length} answered
             </p>
             <div aria-hidden className="h-2 overflow-hidden rounded-full bg-mist">
@@ -336,7 +337,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
             <fieldset key={`${kind}-${q.key}`} className="grid min-w-0 gap-4">
               <legend className="mb-4 text-lg font-semibold">
                 {q.label}
-                {q.pick === "many" ? <span className="mt-1 block text-base font-normal text-navy-2">{max < q.options.length ? `Pick up to ${max}.` : "Pick all that apply."}</span> : null}
+                {q.pick === "many" ? <span className="mt-1 block text-base font-normal text-navy-2 lg:text-lg">{max < q.options.length ? `Pick up to ${max}.` : "Pick all that apply."}</span> : null}
               </legend>
               <div className="flex flex-wrap gap-2.5">
                 {q.options.map((o) => {
@@ -345,7 +346,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
                     <label
                       key={o.value}
                       className={cn(
-                        "inline-flex min-h-12 min-w-14 max-w-full cursor-pointer select-none items-center justify-center gap-2 rounded-full px-5 py-2.5 text-left text-base font-semibold leading-snug transition-[background-color,color,box-shadow,transform] duration-200 ease-out-soft active:scale-[0.97] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue has-[:focus-visible]:ring-offset-2",
+                        "inline-flex min-h-12 min-w-14 max-w-full cursor-pointer select-none items-center justify-center gap-2 rounded-full px-5 py-2.5 text-left text-base font-semibold leading-snug lg:text-lg transition-[background-color,color,box-shadow,transform] duration-200 ease-out-soft active:scale-[0.97] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue has-[:focus-visible]:ring-offset-2",
                         on ? "bg-blue text-white shadow-card" : "bg-card text-navy shadow-card ring-1 ring-inset ring-navy-3/55 hover:ring-navy",
                         !on && full && "cursor-not-allowed opacity-50 shadow-none hover:ring-navy-3/55",
                       )}
@@ -377,7 +378,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
         <div className="grid gap-3">
           <label htmlFor={id("note")} className="text-lg font-semibold">
             {LAUNCH_NOTE[kind].label}
-            <span className="mt-1 block text-base font-normal text-navy-2">Optional</span>
+            <span className="mt-1 block text-base font-normal text-navy-2 lg:text-lg">Optional</span>
           </label>
           <textarea
             id={id("note")}
@@ -396,7 +397,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
               {fe.note}
             </p>
           ) : note[kind].length >= NOTE_COUNT_FROM ? (
-            <p id={`${id("note")}-count`} className="text-base text-navy-2 tabular" aria-live="polite">
+            <p id={`${id("note")}-count`} className="text-base text-navy-2 tabular lg:text-lg" aria-live="polite">
               {LAUNCH_NOTE_MAX - note[kind].length} characters left
             </p>
           ) : null}
@@ -404,24 +405,29 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
       </section>
 
       {/* ---------------------------------------------------------- send */}
-      <div className="grid gap-6 border-t border-line pt-10">
-        {setup.turnstileSiteKey ? <Turnstile siteKey={setup.turnstileSiteKey} error={fe.captcha} theme="light" /> : null}
-
-        {/* On a phone the questions make a long form: the button rides the bottom of the screen
-            until its place at the end comes into view, so sending is always one tap away. */}
-        <div className="max-sm:sticky max-sm:bottom-3 max-sm:z-10">
-          <Button type="submit" size="xl" variant="primary" pending={pending} className="w-full max-sm:px-6 max-sm:shadow-lift">
-            {KIND_CHOICE[kind].submit}
-          </Button>
+      {setup.turnstileSiteKey ? (
+        <div className="border-t border-line pt-10">
+          <Turnstile siteKey={setup.turnstileSiteKey} error={fe.captcha} theme="light" />
         </div>
+      ) : (
+        <hr className="border-line" />
+      )}
 
-        <p className="text-base text-navy-2 lg:text-lg">
-          {launchConsentText(kind, setup.retentionMonths)}{" "}
-          <Link href="/privacy" className="font-semibold text-blue underline decoration-blue/30 underline-offset-4 hover:decoration-blue">
-            Privacy notice
-          </Link>
-        </p>
+      {/* On a phone the questions make a long form. This is a direct child of the form, so it
+          rides the bottom of the screen for as long as the form is in view, then settles into
+          its place at the end: sending is always one tap away. */}
+      <div data-send className="max-sm:sticky max-sm:bottom-3 max-sm:z-10 max-sm:-mx-2 max-sm:rounded-full max-sm:bg-card/85 max-sm:p-1.5 max-sm:shadow-lift max-sm:backdrop-blur">
+        <Button type="submit" size="xl" variant="primary" pending={pending} className="w-full max-sm:px-6">
+          {KIND_CHOICE[kind].submit}
+        </Button>
       </div>
+
+      <p className="text-base text-navy-2 lg:text-lg">
+        {launchConsentText(kind, setup.retentionMonths)}{" "}
+        <Link href="/privacy" className="font-semibold text-blue underline decoration-blue/30 underline-offset-4 hover:decoration-blue">
+          Privacy notice
+        </Link>
+      </p>
     </form>
   );
 }
@@ -443,7 +449,7 @@ function LightField({ id, label, optional, error, children }: { id: string; labe
     <div className="grid min-w-0 content-start gap-2">
       <label htmlFor={id} className="flex flex-wrap items-baseline justify-between gap-x-3 text-lg font-semibold">
         {label}
-        {optional ? <span className="text-base font-normal text-navy-2">Optional</span> : null}
+        {optional ? <span className="text-base font-normal text-navy-2 lg:text-lg">Optional</span> : null}
       </label>
       {children}
       {error ? (

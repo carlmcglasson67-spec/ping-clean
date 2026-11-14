@@ -37,17 +37,16 @@ const DIFFERENT = [
   { old: "Paying up front, or cash left on the side.", title: "You pay after, by card.", body: "Nothing is taken in advance. Your card is charged once the clean is finished." },
 ];
 
+// Only what the page hasn't already said above: the numbers and the "elsewhere" rows cover the rest.
 const FOR_CUSTOMERS = [
-  "One vetted, insured cleaner for every clean in your block",
-  "A room-by-room checklist and photos on every visit",
   "Every week or every two weeks, on the day that suits you",
-  "No contract: book up to 8 cleans, then rebook any time",
-  "Your card is charged only once the clean is done",
+  "You see who’s coming before your first clean",
+  "No need to be in: leave a key or a key safe code",
+  "Rate every clean in a tap; the Ping team checks the photos too",
 ];
 
 const FOR_CLEANERS = [
   "Self-employed: you pick your areas, days and hours",
-  "Blocks of regular cleans that are yours, not one-offs",
   "You see what you’ll earn before you take a home on",
   "Customers pay through Ping, so there’s no money to chase",
   "First refusal when your customer rebooks",
@@ -110,7 +109,7 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
           <div className="grid gap-8 lg:grid-cols-12 lg:gap-x-10">
             <Eyebrow className="lg:col-span-3 lg:pt-4">What Ping Clean is</Eyebrow>
             <h2 id="what-title" className="text-3xl font-semibold lg:col-span-9">
-              You book a block of cleans. We <span className="text-brand-gradient">ping</span> it to vetted cleaners near you. One of them makes your home theirs to look after.
+              You book a block of cleans. We <span className="text-brand-gradient">ping</span> it to vetted cleaners near you. One of them takes on your home.
             </h2>
           </div>
         </div>
@@ -170,10 +169,10 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
             It has to work for the person doing the cleaning too.
           </h2>
           <div className="mt-14 grid gap-5 lg:mt-20 lg:grid-cols-12">
-            <article className="flex flex-col justify-between gap-10 rounded-xl bg-card p-8 shadow-card ring-1 ring-line/70 sm:p-12 lg:col-span-7 lg:p-16">
+            <article className="flex flex-col justify-between gap-10 rounded-xl bg-card p-8 shadow-card ring-1 ring-line/70 sm:p-12 lg:col-span-7 lg:p-14">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal-ink">For your home</p>
-                <h3 className="mt-5 text-3xl font-semibold">Come home to it done.</h3>
+                <h3 className="mt-5 text-2xl font-semibold">Come home to it done.</h3>
               </div>
               <TickList items={FOR_CUSTOMERS} tone="light" />
               <ButtonLink href={registerHref("customer")} size="lg" variant="primary" className="w-fit">
@@ -183,7 +182,7 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
             <article className="flex flex-col justify-between gap-10 rounded-xl bg-teal p-8 text-navy sm:p-12 lg:col-span-5 lg:p-14">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.16em]">For cleaners</p>
-                <h3 className="mt-5 text-3xl font-semibold">Pick your own work.</h3>
+                <h3 className="mt-5 text-2xl font-semibold">Pick your own work.</h3>
               </div>
               <TickList items={FOR_CLEANERS} tone="teal" />
               <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
@@ -246,14 +245,14 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
               </Link>
             </li>
           </ul>
-          <Link href={AREAS_LINK.href} className="mt-8 inline-flex min-h-12 items-center gap-2 text-lg font-semibold text-navy-2 hover:text-navy">
-            What a Ping clean looks like in each town <span aria-hidden>&rarr;</span>
+          <Link href={AREAS_LINK.href} className="mt-8 inline-block py-3 text-lg font-semibold text-navy-2 hover:text-navy">
+            What a Ping clean looks like in each town<span aria-hidden>&nbsp;&rarr;</span>
           </Link>
         </div>
       </section>
 
       {/* ------------------------------------------------------------ Register */}
-      <section id="register" aria-labelledby="register-title" className="signal-waves relative scroll-mt-20 overflow-hidden text-on-navy">
+      <section id="register" aria-labelledby="register-title" className="signal-waves relative scroll-mt-20 overflow-clip text-on-navy">
         <div className="mx-auto grid max-w-[96rem] gap-12 px-5 pb-32 pt-20 sm:px-10 lg:grid-cols-12 lg:gap-x-10 lg:px-16 lg:pb-48 lg:pt-32">
           <div className="lg:sticky lg:top-28 lg:col-span-5 lg:self-start">
             <Eyebrow tone="onInk">Register your interest</Eyebrow>
@@ -261,7 +260,7 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
               Be first in <span className="block text-brand-gradient-navy">when we launch.</span>
             </h2>
             <p className="mt-8 max-w-md text-xl text-on-navy-2">
-Three details and a tick put you on the list. The questions are optional, and they decide where Ping opens first and how it works when it does.
+A postcode, one way to reach you and a tick put you on the list. The questions are optional, and they help decide where Ping opens first and how it works when it does.
             </p>
             <TickList
               className="mt-10"
@@ -294,7 +293,7 @@ Three details and a tick put you on the list. The questions are optional, and th
             <h2 id="faq-title" className="mt-5 text-3xl font-semibold">
               Before you sign up.
             </h2>
-            <p className="mt-6 max-w-sm text-lg text-navy-2">Ready? Three details and a tick, and you&rsquo;ll hear the moment Ping opens near you.</p>
+            <p className="mt-6 max-w-sm text-lg text-navy-2">Ready? A postcode, one way to reach you and a tick, and you&rsquo;ll hear when Ping opens near you.</p>
             <div className="mt-8 flex flex-wrap gap-3">
               <ButtonLink href={registerHref("customer")} size="lg" variant="primary">
                 Register as a customer
@@ -372,7 +371,7 @@ function PingSequence({ className }: { className?: string }) {
           </span>
           <div>
             <p className="font-display text-xl font-semibold leading-tight">{s.title}</p>
-            <p className={"mt-1 text-base " + (i === 2 ? "text-navy" : "text-navy-2")}>{s.note}</p>
+            <p className={"mt-1 text-base lg:text-lg " + (i === 2 ? "text-navy" : "text-navy-2")}>{s.note}</p>
           </div>
         </div>
       ))}
