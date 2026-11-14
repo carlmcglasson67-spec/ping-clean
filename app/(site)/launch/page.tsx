@@ -285,25 +285,46 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
       </section>
 
       {/* ------------------------------------------------------------ Register */}
-      <section id="register" aria-labelledby="register-title" className="signal-waves relative scroll-mt-20 overflow-clip text-on-navy">
+      <section id="register" aria-labelledby="register-title" className="group/register signal-waves relative scroll-mt-20 overflow-clip text-on-navy">
         <div className="mx-auto grid max-w-[96rem] gap-12 px-5 pb-32 pt-20 sm:px-10 lg:grid-cols-12 lg:gap-x-10 lg:px-16 lg:pb-48 lg:pt-32">
+          {/* The left column changes once the form is sent (the thanks card carries data-sent):
+              it stops asking for what has just been done and says what happens next. */}
           <div className="lg:sticky lg:top-28 lg:col-span-5 lg:self-start">
             <Eyebrow tone="onInk">Register your interest</Eyebrow>
-            <h2 id="register-title" className="mt-5 text-3xl font-semibold">
-              Be first in <span className="block text-brand-gradient-navy">when we launch.</span>
-            </h2>
-            <p className="mt-8 max-w-md text-xl text-on-navy-2">
-A postcode, one way to reach you and a tick put you on the list. The questions are optional, and they help decide where Ping opens first and how it works when it does.
-            </p>
-            <TickList
-              className="mt-10"
-              tone="navy"
-              items={[
-                "No payment and no commitment",
-                "One message when Ping opens near you",
-                interest.retentionMonths ? `Deleted after ${interest.retentionMonths} months, or sooner if you ask` : "Deleted whenever you ask",
-              ]}
-            />
+            <div className="group-has-[[data-sent]]/register:hidden">
+              <h2 id="register-title" className="mt-5 text-3xl font-semibold">
+                Be first in <span className="block text-brand-gradient-navy">when we launch.</span>
+              </h2>
+              <p className="mt-8 max-w-md text-xl text-on-navy-2">
+                A postcode, one way to reach you and a tick put you on the list. The questions are optional, and they help decide where Ping opens first and how it works when it does.
+              </p>
+              <TickList
+                className="mt-10"
+                tone="navy"
+                items={[
+                  "No payment and no commitment",
+                  "One message when Ping opens near you",
+                  interest.retentionMonths ? `Deleted after ${interest.retentionMonths} months, or sooner if you ask` : "Deleted whenever you ask",
+                ]}
+              />
+            </div>
+            <div className="hidden group-has-[[data-sent]]/register:block">
+              <p className="mt-5 font-display text-3xl font-semibold tracking-[-0.03em]">
+                You&rsquo;re in. <span className="block text-brand-gradient-navy">We&rsquo;ll take it from here.</span>
+              </p>
+              <p className="mt-8 max-w-md text-xl text-on-navy-2">
+                Your postcode is on the list, and it counts towards where Ping opens first. The next thing you hear from us is the one message that says we&rsquo;re open near you.
+              </p>
+              <TickList
+                className="mt-10"
+                tone="navy"
+                items={[
+                  "Nothing to pay and nothing more to do",
+                  "Know someone who’d want Ping? Send them this page",
+                  interest.retentionMonths ? `Your details are deleted after ${interest.retentionMonths} months, or sooner if you ask` : "Your details are deleted whenever you ask",
+                ]}
+              />
+            </div>
           </div>
           <div className="lg:col-span-7">
             {interest.retentionMonths === null ? (

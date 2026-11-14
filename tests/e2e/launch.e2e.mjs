@@ -84,6 +84,11 @@ export async function launchFlows({ browser, BASE, check, shots }) {
     await page.waitForTimeout(900);
     const box = await page.getByRole("status").boundingBox();
     assert.ok(box && box.y >= 0 && box.y + box.height <= 900 + 1, "the thanks card is fully on screen after sending");
+    // Sent: the panel stops asking for what has just been done, and the header's action is the list.
+    const panel = await page.locator("#register").innerText();
+    assert.ok(panel.includes("We’ll take it from here.") && !panel.includes("Be first in"), "the left column changes once the form is sent");
+    assert.equal(await page.getByRole("banner").getByRole("link", { name: "Register interest" }).count(), 1, "the header's action on /launch is the list");
+    assert.equal(await page.getByRole("banner").getByRole("link", { name: "Get your price" }).count(), 0, "no 'Get your price' on a page with no price");
     await page.screenshot({ path: `${shots}/launch-thanks-1440.png` });
     const rows = await rowsFor("launch.customer@example.com");
     assert.equal(rows.length, 1);

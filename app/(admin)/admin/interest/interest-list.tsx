@@ -67,7 +67,7 @@ export function InterestList({ rows }: { rows: InterestRow[] }) {
         {rows.map((r) => (
           <li key={r.id} className={cn("grid gap-3 rounded-lg bg-card p-4 shadow-card ring-1 ring-line/70 sm:p-5", r.unsubscribed_at && "opacity-70")}>
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-              <label className="flex min-h-12 min-w-0 flex-1 cursor-pointer items-center gap-3">
+              <label className="flex min-h-12 min-w-0 flex-1 basis-full cursor-pointer items-center gap-3 sm:basis-0">
                 <input type="checkbox" checked={picked.has(r.id)} disabled={!!r.unsubscribed_at} onChange={() => toggle(r.id)}
                   className="size-5 shrink-0 accent-[var(--color-blue)]" aria-label={`Tick ${r.contact_masked}`} />
                 <span className="grid min-w-0">

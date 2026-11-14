@@ -91,6 +91,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
     return (
       <div
         ref={thanksRef}
+        data-sent
         tabIndex={-1}
         role="status"
         className={cn("grid content-center gap-6 rounded-xl bg-card p-8 text-navy shadow-lift focus:outline-none sm:p-12 lg:min-h-[30rem] lg:p-16", className)}
