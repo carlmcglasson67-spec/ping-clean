@@ -169,13 +169,46 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
             It has to work for the person doing the cleaning too.
           </h2>
           <div className="mt-14 grid gap-5 lg:mt-20 lg:grid-cols-12">
-            <article className="flex flex-col justify-between gap-10 rounded-xl bg-card p-8 shadow-card ring-1 ring-line/70 sm:p-12 lg:col-span-7 lg:p-14">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal-ink">For your home</p>
-                <h3 className="mt-5 text-2xl font-semibold">Come home to it done.</h3>
+            {/* Navy, not a white box: the customer side carries the same weight as the cleaner side. */}
+            <article className="signal-waves relative flex flex-col justify-between gap-12 overflow-hidden rounded-xl p-8 pb-24 text-on-navy sm:p-12 sm:pb-28 lg:col-span-7 lg:p-14 lg:pb-32">
+              <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_19rem] xl:items-start xl:gap-x-12">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal">For your home</p>
+                  <h3 className="mt-5 text-2xl font-semibold">
+                    Come home <br />
+                    <span className="text-brand-gradient-navy">to it done.</span>
+                  </h3>
+                  <p className="mt-6 max-w-sm text-lg text-on-navy-2">The same cleaner, the same checklist, and photos to prove it, even when you&rsquo;re out.</p>
+                </div>
+                {/* A moment from the customer app: what "done" looks like when you weren't in. */}
+                <div className="rounded-lg bg-card p-5 text-navy shadow-lift sm:p-6">
+                  <div className="flex items-center gap-3">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-ok-soft text-ok">
+                      <svg viewBox="0 0 20 20" className="size-5" aria-hidden>
+                        <path d="m5 10.5 3.2 3L15 6.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    <div>
+                      <p className="font-semibold leading-tight">Clean complete</p>
+                      <p className="text-base text-navy-2">Just now</p>
+                    </div>
+                  </div>
+                  <div className="mt-5 grid grid-cols-2 gap-3 border-t border-line pt-4">
+                    <div>
+                      <p className="font-display text-xl font-semibold tabular">
+                        {STANDARD_CLEAN_COUNT}/{STANDARD_CLEAN_COUNT}
+                      </p>
+                      <p className="text-base text-navy-2">checklist ticked</p>
+                    </div>
+                    <div>
+                      <p className="font-display text-xl font-semibold tabular">8</p>
+                      <p className="text-base text-navy-2">photos to look at</p>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <TickList items={FOR_CUSTOMERS} tone="light" />
-              <ButtonLink href={registerHref("customer")} size="lg" variant="primary" className="w-fit">
+              <TickList items={FOR_CUSTOMERS} tone="navy" className="sm:grid-cols-2 sm:gap-x-10 sm:gap-y-5" />
+              <ButtonLink href={registerHref("customer")} size="lg" variant="signal" className="w-fit max-sm:w-full">
                 Register as a customer
               </ButtonLink>
             </article>
