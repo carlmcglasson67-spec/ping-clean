@@ -6,7 +6,7 @@ import type { LaunchKind } from "@/lib/interest/launch";
 import { Eyebrow } from "../_components/blocks";
 import { FaqList } from "../_components/faq-list";
 import { LaunchInterest } from "../_components/launch-interest";
-import { STANDARD_CLEAN_COUNT } from "../_content/checklist";
+import { STANDARD_CLEAN, STANDARD_CLEAN_COUNT } from "../_content/checklist";
 import { AREA_LINKS, AREAS_LINK } from "../_content/nav";
 import type { Faq } from "../_content/faq";
 
@@ -28,15 +28,16 @@ const FACTS = [
   { value: "0", label: "charges before the clean", note: "Your card is saved when you book and charged only once the clean is done." },
 ];
 
-/** Why it's different: what people are used to, then what Ping does instead. */
-const DIFFERENT = [
-  { old: "Open-ended contracts that are awkward to leave.", title: "Blocks of up to 8 cleans.", body: "Book a block. When it ends you rebook or you stop. Nobody is tied in, customer or cleaner." },
-  { old: "Whoever happens to be free that week.", title: "One cleaner for your whole block.", body: "The same person does every clean in it. Rebook, and they’re offered your home before anyone else." },
-  { old: "Taking it on trust that someone’s been checked.", title: "4 checks before any job.", body: "DBS, public liability insurance, photo ID and right to work, all verified before a cleaner sees a single home." },
-  { old: "No real idea what was done while you were out.", title: "A checklist and photos, every visit.", body: `${STANDARD_CLEAN_COUNT} ticks, room by room, with before and after photos you can look at even if you weren’t in.` },
-  { old: "Paying up front, or cash left on the side.", title: "You pay after, by card.", body: "Nothing is taken in advance. Your card is charged once the clean is finished." },
+/**
+ * Why it's different: what people are used to, then what Ping does instead. None of these
+ * repeats the three facts above (one cleaner, blocks of 8, pay after).
+ */
+const DIFFERENT: { old: string; title: string; body: string; fragment: "checks" | "checklist" | "rate" | "cover" }[] = [
+  { old: "Taking it on trust that someone’s been checked.", title: "4 checks before any job.", body: "All four are verified by a person at Ping before a cleaner sees a single home.", fragment: "checks" },
+  { old: "No real idea what was done while you were out.", title: "A checklist and photos, every visit.", body: `${STANDARD_CLEAN_COUNT} ticks, room by room, with before and after photos you can look at even if you weren’t in.`, fragment: "checklist" },
+  { old: "A price agreed on the doorstep, different for every home.", title: "One rate, set by Ping.", body: "The same fixed hourly rate in every town, shown before you book. Nobody haggles, and your cleaner sees what they’ll earn before they say yes.", fragment: "rate" },
+  { old: "Your cleaner’s off, and you’re left to sort it out.", title: "Ping finds your cover.", body: "If your cleaner can’t make it, your clean goes straight back to vetted cleaners near you and we tell you who’s coming.", fragment: "cover" },
 ];
-
 // Only what the page hasn't already said above: the numbers and the "elsewhere" rows cover the rest.
 const FOR_CUSTOMERS = [
   "Every week or every two weeks, on the day that suits you",
@@ -104,24 +105,29 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
       </section>
 
       {/* ------------------------------------------------------------ What it is */}
-      <section aria-labelledby="what-title" className="border-b border-line bg-card">
-        <div className="mx-auto max-w-[96rem] px-5 pt-20 sm:px-10 lg:px-16 lg:pt-32">
+      <section aria-labelledby="what-title" className="bg-mist">
+        <div className="mx-auto max-w-[96rem] px-5 py-20 sm:px-10 lg:px-16 lg:py-32">
           <div className="grid gap-8 lg:grid-cols-12 lg:gap-x-10">
             <Eyebrow className="lg:col-span-3 lg:pt-4">What Ping Clean is</Eyebrow>
             <h2 id="what-title" className="text-3xl font-semibold lg:col-span-9">
               You book a block of cleans. We <span className="text-brand-gradient">ping</span> it to vetted cleaners near you. One of them takes on your home.
             </h2>
           </div>
+          <dl className="mt-14 grid gap-5 lg:mt-24 lg:grid-cols-3">
+            {FACTS.map((f, i) => (
+              <div key={f.label} className="flex flex-col rounded-xl bg-card p-8 shadow-card ring-1 ring-line/70 sm:p-10">
+                <dd className="order-1 font-display text-[clamp(4.5rem,2.5rem+6vw,8rem)] font-semibold leading-[0.85] tracking-[-0.05em] tabular">
+                  <span className="text-brand-gradient">{f.value}</span>
+                </dd>
+                <dt className="order-2 mt-4 font-display text-xl font-semibold">{f.label}</dt>
+                <dd className="order-3 mt-3 max-w-sm text-lg text-navy-2">{f.note}</dd>
+                <dd className="order-4 mt-auto pt-10">
+                  <FactVisual which={i} />
+                </dd>
+              </div>
+            ))}
+          </dl>
         </div>
-        <dl className="mx-auto mt-16 grid max-w-[96rem] border-t border-line sm:grid-cols-3 lg:mt-24">
-          {FACTS.map((f, i) => (
-            <div key={f.label} className={"grid content-start gap-2 px-5 py-10 sm:px-10 lg:px-16 lg:py-16 " + (i > 0 ? "border-t border-line sm:border-l sm:border-t-0" : "")}>
-              <dt className="order-2 font-display text-xl font-semibold">{f.label}</dt>
-              <dd className="order-1 font-display text-[clamp(4rem,2.5rem+5vw,7.5rem)] font-semibold leading-[0.9] tracking-[-0.04em] text-navy tabular">{f.value}</dd>
-              <dd className="order-3 max-w-xs text-lg text-navy-2">{f.note}</dd>
-            </div>
-          ))}
-        </dl>
       </section>
 
       {/* ------------------------------------------------------------ Why it's different */}
@@ -140,20 +146,35 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
             </p>
           </div>
 
-          <ol className="mt-14 border-t border-line lg:mt-24">
-            {DIFFERENT.map((d, i) => (
-              <li key={d.title} className="grid gap-x-10 gap-y-5 border-b border-line py-9 lg:grid-cols-12 lg:py-12">
-                <span aria-hidden className="font-display text-[3.25rem] font-semibold leading-none text-teal-deep tabular lg:col-span-2 lg:text-[4rem]">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <p className="text-lg text-navy-2 lg:col-span-4 lg:pt-2">
-                  <span className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em] text-navy-3">Elsewhere</span>
-                  {d.old}
-                </p>
-                <div className="lg:col-span-6 lg:pt-2">
-                  <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-teal-ink">With Ping</p>
-                  <h3 className="text-2xl font-semibold">{d.title}</h3>
-                  <p className="mt-4 max-w-xl text-lg text-navy-2">{d.body}</p>
+          {/* A true before and after: what you're used to sits back; what Ping does stands forward. */}
+          <ol className="mt-14 grid gap-5 lg:mt-24">
+            {DIFFERENT.map((d) => (
+              <li key={d.title} className="grid gap-2 lg:grid-cols-12 lg:gap-0">
+                <div className="grid content-start gap-4 rounded-xl bg-mist p-8 sm:p-10 lg:col-span-4 lg:rounded-r-none lg:p-12">
+                  <p className="flex items-center gap-3 text-sm font-semibold uppercase tracking-[0.16em] text-navy-3">
+                    <span aria-hidden className="grid size-7 place-items-center rounded-full bg-line text-navy-2">
+                      <svg viewBox="0 0 20 20" className="size-4">
+                        <path d="m6 6 8 8M14 6l-8 8" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                    Elsewhere
+                  </p>
+                  <p className="text-xl text-navy-2">{d.old}</p>
+                </div>
+                <div className="grid gap-8 rounded-xl bg-card p-8 shadow-card ring-1 ring-line/70 sm:p-10 lg:col-span-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-center lg:gap-x-12 lg:rounded-l-none lg:p-12">
+                  <div>
+                    <p className="flex items-center gap-3 text-sm font-semibold uppercase tracking-[0.16em] text-teal-ink">
+                      <span aria-hidden className="grid size-7 place-items-center rounded-full bg-teal text-navy">
+                        <svg viewBox="0 0 20 20" className="size-4">
+                          <path d="m5 10.5 3.2 3L15 6.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                      With Ping
+                    </p>
+                    <h3 className="mt-5 text-2xl font-semibold">{d.title}</h3>
+                    <p className="mt-4 max-w-xl text-lg text-navy-2">{d.body}</p>
+                  </div>
+                  <Fragment which={d.fragment} />
                 </div>
               </li>
             ))}
@@ -171,7 +192,7 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
           <div className="mt-14 grid gap-5 lg:mt-20 lg:grid-cols-12">
             {/* Navy, not a white box: the customer side carries the same weight as the cleaner side. */}
             <article className="signal-waves relative flex flex-col justify-between gap-12 overflow-hidden rounded-xl p-8 pb-24 text-on-navy sm:p-12 sm:pb-28 lg:col-span-7 lg:p-14 lg:pb-32">
-              <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_19rem] xl:items-start xl:gap-x-12">
+              <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start xl:gap-x-10">
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal">For your home</p>
                   <h3 className="mt-5 text-2xl font-semibold">
@@ -181,30 +202,39 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
                   <p className="mt-6 max-w-sm text-lg text-on-navy-2">The same cleaner, the same checklist, and photos to prove it, even when you&rsquo;re out.</p>
                 </div>
                 {/* A moment from the customer app: what "done" looks like when you weren't in. */}
-                <div className="rounded-lg bg-card p-5 text-navy shadow-lift sm:p-6">
+                <div aria-hidden className="rounded-lg bg-card p-5 text-navy shadow-lift sm:p-6">
                   <div className="flex items-center gap-3">
                     <span className="grid size-10 shrink-0 place-items-center rounded-full bg-ok-soft text-ok">
-                      <svg viewBox="0 0 20 20" className="size-5" aria-hidden>
+                      <svg viewBox="0 0 20 20" className="size-5">
                         <path d="m5 10.5 3.2 3L15 6.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </span>
                     <div>
-                      <p className="font-semibold leading-tight">Clean complete</p>
-                      <p className="text-base text-navy-2">Just now</p>
-                    </div>
-                  </div>
-                  <div className="mt-5 grid grid-cols-2 gap-3 border-t border-line pt-4">
-                    <div>
-                      <p className="font-display text-xl font-semibold tabular">
-                        {STANDARD_CLEAN_COUNT}/{STANDARD_CLEAN_COUNT}
+                      <p className="text-lg font-semibold leading-tight">Clean complete</p>
+                      <p className="text-base text-navy-2">
+                        {STANDARD_CLEAN_COUNT} of {STANDARD_CLEAN_COUNT} ticked
                       </p>
-                      <p className="text-base text-navy-2">checklist ticked</p>
-                    </div>
-                    <div>
-                      <p className="font-display text-xl font-semibold tabular">8</p>
-                      <p className="text-base text-navy-2">photos to look at</p>
                     </div>
                   </div>
+                  <div className="mt-5 grid grid-cols-2 gap-2">
+                    {["Before", "After"].map((label, n) => (
+                      <div key={label} className={"grid aspect-[4/3] content-end rounded-md p-3 " + (n === 0 ? "bg-mist" : "bg-teal-soft")}>
+                        <span className="w-fit rounded-full bg-card px-2.5 py-1 text-sm font-semibold text-navy-2">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <ul className="mt-5 grid gap-2.5 border-t border-line pt-4">
+                    {STANDARD_CLEAN.slice(0, 2).map((r) => (
+                      <li key={r.room} className="grid grid-cols-[1.5rem_1fr] items-start gap-3 text-base text-navy-2">
+                        <span className="mt-0.5 grid size-6 place-items-center rounded-full bg-teal-soft text-teal-ink">
+                          <svg viewBox="0 0 20 20" className="size-3.5">
+                            <path d="m5 10.5 3.2 3L15 6.5" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </span>
+                        {r.items[0]}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </div>
               <TickList items={FOR_CUSTOMERS} tone="navy" className="sm:grid-cols-2 sm:gap-x-10 sm:gap-y-5" />
@@ -216,6 +246,23 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.16em]">For cleaners</p>
                 <h3 className="mt-5 text-2xl font-semibold">Pick your own work.</h3>
+              </div>
+              {/* A moment from the cleaner app: a block offered near you. No pay figure: that comes from settings. */}
+              <div aria-hidden className="rounded-lg bg-card p-5 text-navy shadow-lift sm:p-6">
+                <div className="flex items-center gap-3">
+                  <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-navy text-teal">
+                    <span className="ping-pulse absolute size-3 rounded-full bg-teal" />
+                    <LogoMark colour="current" className="relative size-6" />
+                  </span>
+                  <div>
+                    <p className="text-lg font-semibold leading-tight">New block near you</p>
+                    <p className="text-base text-navy-2">Tuesday mornings, every week, 8 cleans</p>
+                  </div>
+                </div>
+                <div className="mt-5 grid grid-cols-2 gap-2 border-t border-line pt-4">
+                  <span className="grid min-h-12 place-items-center rounded-full bg-navy text-base font-semibold text-white">Take it on</span>
+                  <span className="grid min-h-12 place-items-center rounded-full bg-mist text-base font-semibold text-navy-2">Not for me</span>
+                </div>
               </div>
               <TickList items={FOR_CLEANERS} tone="teal" />
               <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
@@ -245,17 +292,17 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
               We&rsquo;re opening one town at a time. The postcodes left on this list, by customers and by cleaners, help decide which come first.
             </p>
           </div>
-          <ul className="mt-14 grid gap-px overflow-hidden rounded-xl bg-line ring-1 ring-line sm:grid-cols-2 lg:mt-20 lg:grid-cols-3">
+          <ul className="mt-14 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-line ring-1 ring-line lg:mt-20 lg:grid-cols-3">
             {AREA_LINKS.map((t) => (
               <li key={t.label} className="bg-card">
                 <Link
                   href={t.href}
-                  className="group flex min-h-24 items-center justify-between gap-4 px-6 py-6 transition-colors duration-200 hover:bg-teal-soft sm:px-8 lg:min-h-28"
+                  className="group flex min-h-24 items-center justify-between gap-x-4 gap-y-1 px-4 py-5 transition-colors duration-200 hover:bg-teal-soft max-sm:flex-col max-sm:items-start max-sm:justify-center sm:px-8 lg:min-h-28"
                 >
-                  <span className="min-w-0 font-display text-xl font-semibold tracking-[-0.03em]">{t.label}</span>
+                  <span className="min-w-0 font-display text-lg font-semibold tracking-[-0.03em] sm:text-xl">{t.label}</span>
                   <span className="flex shrink-0 items-center gap-4 text-lg font-semibold text-teal-ink tabular">
                     {t.districts.join(", ")}
-                    <span aria-hidden className="grid size-10 place-items-center rounded-full bg-canvas text-navy ring-1 ring-line transition-[transform,background-color] duration-300 ease-out-soft group-hover:translate-x-1 group-hover:bg-teal">
+                    <span aria-hidden className="grid size-10 place-items-center max-sm:hidden rounded-full bg-canvas text-navy ring-1 ring-line transition-[transform,background-color] duration-300 ease-out-soft group-hover:translate-x-1 group-hover:bg-teal">
                       &rarr;
                     </span>
                   </span>
@@ -263,7 +310,7 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
               </li>
             ))}
             {/* The last cell closes the grid whatever the number of towns: it spans what is left of the row. */}
-            <li className={"bg-navy text-on-navy " + (AREA_LINKS.length % 2 === 0 ? "sm:max-lg:col-span-2 " : "") + (AREA_LINKS.length % 3 === 1 ? "lg:col-span-2" : AREA_LINKS.length % 3 === 0 ? "lg:col-span-3" : "")}>
+            <li className={"bg-navy text-on-navy " + (AREA_LINKS.length % 2 === 0 ? "max-lg:col-span-2 " : "") + (AREA_LINKS.length % 3 === 1 ? "lg:col-span-2" : AREA_LINKS.length % 3 === 0 ? "lg:col-span-3" : "")}>
               <Link
                 href={registerHref("customer")}
                 className="group flex min-h-24 items-center justify-between gap-4 px-6 py-6 transition-colors duration-200 hover:bg-navy-800 sm:px-8 lg:min-h-28"
@@ -279,7 +326,7 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
             </li>
           </ul>
           <Link href={AREAS_LINK.href} className="mt-8 inline-block py-3 text-lg font-semibold text-navy-2 hover:text-navy">
-            What a Ping clean looks like in each town<span aria-hidden>&nbsp;&rarr;</span>
+            What a Ping clean looks like in each&nbsp;town<span aria-hidden>&nbsp;&rarr;</span>
           </Link>
         </div>
       </section>
@@ -309,9 +356,6 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
               />
             </div>
             <div className="hidden group-has-[[data-sent]]/register:block">
-              <p className="mt-5 font-display text-3xl font-semibold tracking-[-0.03em]">
-                You&rsquo;re in. <span className="block text-brand-gradient-navy">We&rsquo;ll take it from here.</span>
-              </p>
               <p className="mt-8 max-w-md text-xl text-on-navy-2">
                 Your postcode is on the list, and it counts towards where Ping opens first. The next thing you hear from us is the one message that says we&rsquo;re open near you.
               </p>
@@ -320,7 +364,7 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
                 tone="navy"
                 items={[
                   "Nothing to pay and nothing more to do",
-                  "Know someone who’d want Ping? Send them this page",
+                  "Share the page from your confirmation: every postcode counts",
                   interest.retentionMonths ? `Your details are deleted after ${interest.retentionMonths} months, or sooner if you ask` : "Your details are deleted whenever you ask",
                 ]}
               />
@@ -340,14 +384,14 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
       </section>
 
       {/* ------------------------------------------------------------ Questions */}
-      <section aria-labelledby="faq-title" className="bg-card">
+      <section aria-labelledby="faq-title" className="bg-mist">
         <div className="mx-auto grid max-w-[96rem] gap-12 px-5 py-20 sm:px-10 lg:grid-cols-12 lg:gap-x-10 lg:px-16 lg:py-32">
           <div className="lg:col-span-4">
             <Eyebrow>Questions</Eyebrow>
             <h2 id="faq-title" className="mt-5 text-3xl font-semibold">
-              Before you sign up.
+              Still wondering?
             </h2>
-            <p className="mt-6 max-w-sm text-lg text-navy-2">Ready? A postcode, one way to reach you and a tick, and you&rsquo;ll hear when Ping opens near you.</p>
+            <p className="mt-6 max-w-sm text-lg text-navy-2">The short answers are here. When you&rsquo;re ready, the list is one scroll up.</p>
             <div className="mt-8 flex flex-wrap gap-3">
               <ButtonLink href={registerHref("customer")} size="lg" variant="primary">
                 Register as a customer
@@ -360,8 +404,8 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
               Every question, answered <span aria-hidden>&rarr;</span>
             </Link>
           </div>
-          <div className="lg:col-span-8">
-            <FaqList items={LAUNCH_FAQ} />
+          <div className="rounded-xl bg-card shadow-card ring-1 ring-line/70 lg:col-span-8">
+            <FaqList items={LAUNCH_FAQ} tone="card" />
           </div>
         </div>
       </section>
@@ -431,5 +475,125 @@ function PingSequence({ className }: { className?: string }) {
       ))}
       <figcaption className="pl-1 text-lg text-on-navy-2">How a booking will work at launch.</figcaption>
     </figure>
+  );
+}
+
+/** One small engineered picture per fact, drawn from the tokens. Decorative: the words carry the meaning. */
+function FactVisual({ which }: { which: number }) {
+  if (which === 0) {
+    // One cleaner, every visit: eight visits all tied to the same person.
+    return (
+      <svg viewBox="0 0 320 72" aria-hidden className="w-full max-w-sm">
+        <path d="M20 54H300" fill="none" stroke="var(--color-line)" strokeWidth="2" />
+        {Array.from({ length: 8 }, (_, n) => (
+          <g key={n}>
+            <path d={`M160 14 L${20 + n * 40} 54`} fill="none" stroke="var(--color-teal-deep)" strokeWidth="1.5" strokeOpacity="0.45" />
+            <circle cx={20 + n * 40} cy="54" r="7" fill="var(--color-card)" stroke="var(--color-teal-deep)" strokeWidth="2.5" />
+          </g>
+        ))}
+        <circle cx="160" cy="14" r="12" fill="var(--color-blue)" />
+        <circle cx="160" cy="14" r="5" fill="var(--color-card)" />
+      </svg>
+    );
+  }
+  if (which === 1) {
+    // A block of eight: three done, five to come, then it ends.
+    return (
+      <div aria-hidden className="grid max-w-sm gap-3">
+        <div className="grid grid-cols-8 gap-1.5">
+          {Array.from({ length: 8 }, (_, n) => (
+            <span key={n} className={"h-3 rounded-full " + (n < 3 ? "bg-[linear-gradient(90deg,var(--color-blue),var(--color-teal))]" : "bg-mist ring-1 ring-inset ring-line")} />
+          ))}
+        </div>
+        <p className="flex justify-between text-base font-semibold text-navy-2 tabular">
+          <span>Clean 3 of 8</span>
+          <span>Then rebook, or don&rsquo;t</span>
+        </p>
+      </div>
+    );
+  }
+  // Booked, cleaned, then charged: the charge sits after the clean.
+  const steps = ["Booked", "Cleaned", "Charged"];
+  return (
+    <ol aria-hidden className="grid max-w-sm grid-cols-3">
+      {steps.map((label, n) => (
+        <li key={label} className="relative grid justify-items-start gap-3">
+          {n < 2 ? <span className="absolute left-4 right-0 top-[0.9rem] h-0.5 bg-line" /> : null}
+          <span className={"relative grid size-8 place-items-center rounded-full " + (n === 2 ? "bg-blue text-white" : "bg-teal-soft text-teal-ink")}>
+            <svg viewBox="0 0 20 20" className="size-4">
+              {n === 2 ? (
+                <path d="M3.5 6.5h13v8h-13zM3.5 9.5h13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+              ) : (
+                <path d="m5 10.5 3.2 3L15 6.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+              )}
+            </svg>
+          </span>
+          <span className="text-base font-semibold text-navy-2">{label}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** A small piece of the product beside each "With Ping" claim. Decorative. */
+function Fragment({ which }: { which: "checks" | "checklist" | "rate" | "cover" }) {
+  const tick = (
+    <svg viewBox="0 0 20 20" className="size-3.5">
+      <path d="m5 10.5 3.2 3L15 6.5" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+  if (which === "checks") {
+    return (
+      <ul aria-hidden className="grid grid-cols-2 gap-2.5">
+        {["DBS check", "Insurance", "Photo ID", "Right to work"].map((c) => (
+          <li key={c} className="flex min-h-14 items-center gap-2 whitespace-nowrap rounded-md bg-canvas px-3 text-base font-semibold ring-1 ring-inset ring-line">
+            <span className="grid size-6 shrink-0 place-items-center rounded-full bg-ok-soft text-ok">{tick}</span>
+            {c}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  if (which === "checklist") {
+    return (
+      <ul aria-hidden className="grid gap-2.5 rounded-md bg-canvas p-5 ring-1 ring-inset ring-line">
+        {STANDARD_CLEAN.slice(0, 3).map((r) => (
+          <li key={r.room} className="grid grid-cols-[1.5rem_1fr] items-start gap-3 text-base text-navy-2">
+            <span className="mt-0.5 grid size-6 place-items-center rounded-full bg-teal-soft text-teal-ink">{tick}</span>
+            {r.items[0]}
+          </li>
+        ))}
+        <li className="mt-1 border-t border-line pt-3 text-base font-semibold text-navy tabular">
+          {STANDARD_CLEAN_COUNT} of {STANDARD_CLEAN_COUNT} ticked
+        </li>
+      </ul>
+    );
+  }
+  if (which === "rate") {
+    return (
+      <ul aria-hidden className="grid gap-2.5">
+        {AREA_LINKS.slice(0, 3).map((t) => (
+          <li key={t.label} className="flex min-h-14 items-center justify-between gap-4 rounded-md bg-canvas px-4 text-base font-semibold ring-1 ring-inset ring-line">
+            {t.label}
+            <span className="rounded-full bg-teal-soft px-3 py-1 text-sm text-teal-ink">Same rate</span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return (
+    <div aria-hidden className="grid gap-3 rounded-md bg-canvas p-5 ring-1 ring-inset ring-line">
+      <p className="flex items-center gap-3 text-base font-semibold">
+        <span className="relative grid size-8 shrink-0 place-items-center rounded-full bg-navy text-teal">
+          <span className="ping-pulse absolute size-2.5 rounded-full bg-teal" />
+          <LogoMark colour="current" className="relative size-5" />
+        </span>
+        Back with cleaners near you
+      </p>
+      <p className="flex items-center gap-3 border-t border-line pt-3 text-base font-semibold">
+        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-ok-soft text-ok">{tick}</span>
+        Taken on: you&rsquo;ll see who&rsquo;s coming
+      </p>
+    </div>
   );
 }
