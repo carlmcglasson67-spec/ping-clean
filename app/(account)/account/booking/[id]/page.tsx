@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Route } from "next";
 import { notFound } from "next/navigation";
 import { Badge, ButtonLink, Card, ErrorState } from "@/components/ui";
 import { requireRole } from "@/lib/auth/session";
@@ -115,6 +115,11 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
           <ButtonLink href="/account" size="lg" variant="ink">
             Go to My cleans
           </ButtonLink>
+          {s.status !== "ended" ? (
+            <ButtonLink href={`/account/booking/${s.id}/cancel` as Route} size="lg" variant="ghost">
+              Cancel the rest of my cleans
+            </ButtonLink>
+          ) : null}
         </div>
 
         {s.status !== "ended" || cleans.length > 0 ? (

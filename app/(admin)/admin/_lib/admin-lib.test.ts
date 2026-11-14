@@ -28,6 +28,8 @@ describe("alerts", () => {
       expect(alertKind(k)).toBe(k);
       expect(ALERT_KIND[alertKind(k)!].todo.length).toBeGreaterThan(20);
     }
+    expect(ALERT_KIND[alertKind("visit_cancelled_late")!].urgent).toBe(true);
+    expect(ALERT_KIND[alertKind("visit_cancelled_late")!].todo).toMatch(/cleaner/);
     expect(alertKind("something_new")).toBeNull();
   });
 });

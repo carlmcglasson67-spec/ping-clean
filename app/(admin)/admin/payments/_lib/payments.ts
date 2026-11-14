@@ -31,13 +31,17 @@ export const REFUND_STATUS: Record<string, { label: string; tone: Tone }> = {
   failed: { label: "Didn't go through", tone: "bad" },
 };
 
+// `on`: what the reason can be given for. The database enforces the same pairing (admin_refund).
 export const REFUND_REASONS = [
-  { value: "clean_quality", label: "The clean wasn't right", shared: true },
-  { value: "no_show", label: "The cleaner didn't come", shared: true },
-  { value: "ping_error", label: "Ping's mistake", shared: false },
-  { value: "goodwill", label: "Goodwill", shared: false },
-  { value: "other", label: "Something else", shared: false },
+  { value: "clean_quality", label: "The clean wasn't right", shared: true, on: "clean" },
+  { value: "no_show", label: "The cleaner didn't come", shared: true, on: "clean" },
+  { value: "fee_waived", label: "Fee waived", shared: true, on: "fee" },
+  { value: "ping_error", label: "Ping's mistake", shared: false, on: "both" },
+  { value: "goodwill", label: "Goodwill", shared: false, on: "both" },
+  { value: "other", label: "Something else", shared: false, on: "both" },
 ] as const;
+/** The reasons offered for a clean's payment, or for a late-cancellation fee. */
+export const reasonsFor = (kind: "visit" | "late_cancel") => REFUND_REASONS.filter((r) => r.on === "both" || r.on === (kind === "late_cancel" ? "fee" : "clean"));
 export type RefundReason = (typeof REFUND_REASONS)[number]["value"];
 export const REASON_LABEL: Record<string, string> = Object.fromEntries(REFUND_REASONS.map((r) => [r.value, r.label]));
 

@@ -245,14 +245,14 @@ Track A will likely need the same for checkout; worth merging this first.
 - **Until it lands:** delete asks the admin to say how the request arrived and tick that the sender
   matches the masked contact, then confirm.
 
-### C-3. Admin wording in lib/db/errors.ts
+### C-3. Admin wording in lib/db/errors.ts. **Done in the small-fixes PR** (`pingErrorMessage(error, { audience: "admin" })`).
 - **What:** `pingErrorMessage(error, { audience: "admin" })`, with admin wording for PC001 ("That cleaner
   isn't active any more"), PC002, PC004 and 22023, and the new PC040–PC042.
 - **Why:** the shared messages are written for cleaners ("That job isn't available to you"), which reads
   wrong when an admin assigns. The console keeps a small override in `app/(admin)/admin/_lib/errors.ts`
   until this lands, then deletes it.
 
-### C-4. AppShell: "Sign out" wraps onto two lines at 390px (components/ui/app-shell.tsx)
+### C-4. AppShell: "Sign out" wraps onto two lines at 390px. **Done in the small-fixes PR.**
 - **What:** add `whitespace-nowrap` to the sign-out button. Seen on every admin screen on a phone.
 
 ### C-5. A late-cancellation split helper in lib/money

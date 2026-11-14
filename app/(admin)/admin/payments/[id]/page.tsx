@@ -19,8 +19,8 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
   const supabase = await createClient();
 
   const pay = await supabase.from("payments")
-    .select("id, visit_id, customer_id, amount_pence, application_fee_pence, cleaner_amount_pence, refunded_pence, status, last_error_code, created_at")
-    .eq("id", id.data).eq("kind", "visit").maybeSingle();
+    .select("id, visit_id, customer_id, amount_pence, application_fee_pence, cleaner_amount_pence, refunded_pence, status, kind, last_error_code, created_at")
+    .eq("id", id.data).in("kind", ["visit", "late_cancel"]).maybeSingle();
   if (pay.error) return <ErrorState>This payment didn&rsquo;t load. Refresh to try again.</ErrorState>;
   const p = pay.data;
   if (!p) notFound();
@@ -40,6 +40,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
   const payout = payouts.data?.[0] ?? null;
   const onItsWay = (refunds.data ?? []).some((r) => r.status === "pending");
   const left = p.amount_pence - p.refunded_pence;
+  const isFee = p.kind === "late_cancel";
   const cleanerName = v?.cleaner_id ? (nameById.get(v.cleaner_id) ?? "The cleaner") : "The cleaner";
 
   return (
@@ -47,7 +48,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
       <p className="mb-4">
         <Link href="/admin/payments" className="inline-flex min-h-12 items-center font-semibold text-navy underline decoration-line decoration-2 underline-offset-4 hover:decoration-navy">All payments</Link>
       </p>
-      <PageHeader eyebrow={v ? `Clean on ${formatDay(v.scheduled_date, now)}` : "Payment"} title={`${nameById.get(p.customer_id) ?? "A customer"}: ${formatPence(p.amount_pence)}.`}
+      <PageHeader eyebrow={v ? `${isFee ? "Late cancellation fee, clean" : "Clean"} on ${formatDay(v.scheduled_date, now)}` : "Payment"} title={`${nameById.get(p.customer_id) ?? "A customer"}: ${formatPence(p.amount_pence)}.`}
         action={<Badge tone={status.tone} className="px-4 py-2 text-sm">{status.label}</Badge>} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start lg:gap-8">
@@ -56,14 +57,14 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
             <h2 className="text-xl font-semibold">How it was split.</h2>
             <dl className="grid gap-4">
               <div className="flex items-baseline justify-between gap-4"><dt className="text-navy-2">The customer paid</dt><dd className="font-display text-xl font-semibold tabular">{formatPence(p.amount_pence)}</dd></div>
-              <div className="flex items-baseline justify-between gap-4"><dt className="text-navy-2">{cleanerName}&rsquo;s earnings</dt><dd className="font-display text-xl font-semibold tabular">{formatPence(p.cleaner_amount_pence)}</dd></div>
-              <div className="flex items-baseline justify-between gap-4"><dt className="text-navy-2">Ping&rsquo;s fee</dt><dd className="font-display text-xl font-semibold tabular">{formatPence(p.application_fee_pence)}</dd></div>
+              <div className="flex items-baseline justify-between gap-4"><dt className="text-navy-2">{cleanerName}&rsquo;s {isFee ? "part" : "earnings"}</dt><dd className="font-display text-xl font-semibold tabular">{formatPence(p.cleaner_amount_pence)}</dd></div>
+              <div className="flex items-baseline justify-between gap-4"><dt className="text-navy-2">Ping&rsquo;s {isFee ? "part" : "fee"}</dt><dd className="font-display text-xl font-semibold tabular">{formatPence(p.application_fee_pence)}</dd></div>
               <div className="flex items-baseline justify-between gap-4 border-t border-line pt-4"><dt className="font-semibold">Refunded so far</dt><dd className="font-display text-xl font-semibold tabular" data-refunded>{formatPence(p.refunded_pence)}</dd></div>
             </dl>
           </Card>
 
           <Card className="grid gap-3">
-            <h2 className="text-xl font-semibold">{cleanerName}&rsquo;s pay for this clean.</h2>
+            <h2 className="text-xl font-semibold">{cleanerName}&rsquo;s {isFee ? "part of this fee" : "pay for this clean"}.</h2>
             {payout ? (
               <>
                 <p className="font-display text-2xl font-semibold tabular" data-payout-amount>{formatPence(payout.amount_pence)}</p>
@@ -84,27 +85,27 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
         <div className="grid gap-6">
           <Card className="grid gap-6">
             <div className="grid gap-2">
-              <h2 className="text-xl font-semibold">Refund this clean.</h2>
+              <h2 className="text-xl font-semibold">{isFee ? "Refund this fee." : "Refund this clean."}</h2>
               {canRefund(p.status) && !onItsWay ? <p className="text-navy-2">{formatPence(left)} is left to refund. The reason decides who carries it.</p> : null}
             </div>
             {onItsWay ? (
-              <p role="status" className="rounded-md bg-warn-soft px-5 py-4 font-medium">A refund for this clean is on its way. Another can be made once it&rsquo;s finished.</p>
+              <p role="status" className="rounded-md bg-warn-soft px-5 py-4 font-medium">A refund for this {isFee ? "fee" : "clean"} is on its way. Another can be made once it&rsquo;s finished.</p>
             ) : canRefund(p.status) && left > 0 ? (
               <RefundForm payment={{ id: p.id, amount_pence: p.amount_pence, application_fee_pence: p.application_fee_pence, refunded_pence: p.refunded_pence }}
-                cleanerPaid={payout?.status === "in_batch" || payout?.status === "paid"} />
+                cleanerPaid={payout?.status === "in_batch" || payout?.status === "paid"} kind={isFee ? "late_cancel" : "visit"} />
             ) : (
               <p className="rounded-md bg-mist px-5 py-4 text-navy-2">
-                {p.status === "refunded" ? "This clean has been refunded in full."
+                {p.status === "refunded" ? `This ${isFee ? "fee" : "clean"} has been refunded in full.`
                   : p.status === "disputed" ? "The customer's bank has disputed this payment. It can't be refunded while that's open: answer the chargeback in Stripe."
                   : p.status === "dispute_lost" ? "This payment was lost to a chargeback. The customer's bank has already taken it back."
-                  : "Only a clean the customer has paid for can be refunded."}
+                  : isFee ? "Only a fee the customer has paid can be refunded." : "Only a clean the customer has paid for can be refunded."}
               </p>
             )}
           </Card>
 
           {(refunds.data ?? []).length > 0 ? (
             <Card className="grid gap-5">
-              <h2 className="text-xl font-semibold">Refunds on this clean.</h2>
+              <h2 className="text-xl font-semibold">Refunds on this {isFee ? "fee" : "clean"}.</h2>
               <ol className="grid gap-4">
                 {(refunds.data ?? []).map((r) => {
                   const s = REFUND_STATUS[r.status] ?? { label: r.status, tone: "neutral" as const };

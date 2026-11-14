@@ -18,7 +18,7 @@ const input = z.object({
 });
 
 /**
- * Refunds all or part of a paid clean. The database (public.admin_refund) checks the caller
+ * Refunds all or part of a paid clean, or of a paid late-cancellation fee. The database (public.admin_refund) checks the caller
  * is an admin, that the money is there to refund, and works out who carries it from the
  * reason; nothing about the split comes from the browser. Then it's sent to Stripe once.
  */

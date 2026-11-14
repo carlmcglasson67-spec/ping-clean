@@ -16,12 +16,12 @@ export default async function PaymentsPage() {
   await requireRole("admin", "/admin/payments");
   const supabase = await createClient();
   const pay = await supabase.from("payments")
-    .select("id, visit_id, customer_id, amount_pence, refunded_pence, status, created_at")
-    .eq("kind", "visit").order("created_at", { ascending: false }).limit(SHOWN);
+    .select("id, visit_id, customer_id, amount_pence, refunded_pence, status, kind, created_at")
+    .in("kind", ["visit", "late_cancel"]).order("created_at", { ascending: false }).limit(SHOWN);
 
   const header = (
     <PageHeader eyebrow="Payments" title="Every clean's money."
-      lede="What each customer paid for each clean, and where it stands. Open one to refund all or part of it." />
+      lede="What each customer paid for each clean, and any late-cancellation fee, and where it stands. Open one to refund all or part of it." />
   );
   if (pay.error) return (<>{header}<ErrorState>The payments didn&rsquo;t load. Refresh to try again.</ErrorState></>);
   const rows = pay.data ?? [];
@@ -73,7 +73,7 @@ export default async function PaymentsPage() {
               const status = PAYMENT_STATUS[r.status] ?? { label: r.status, tone: "neutral" as const };
               return (
                 <li key={r.id}>
-                  <Link href={`/admin/payments/${r.id}` as Route} data-payment={r.id}
+                  <Link href={`/admin/payments/${r.id}` as Route} data-payment={r.id} data-kind={r.kind}
                     className="group grid gap-3 rounded-lg bg-card p-5 shadow-card ring-1 ring-line/70 transition-[box-shadow,transform] duration-200 ease-out-soft hover:-translate-y-0.5 hover:shadow-lift sm:grid-cols-[1fr_auto] sm:items-center sm:gap-6 sm:p-6">
                     <div className="grid gap-2">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -81,8 +81,8 @@ export default async function PaymentsPage() {
                         <Badge tone={status.tone}>{status.label}</Badge>
                       </div>
                       <p className="text-navy-2">
-                        {v ? `Clean on ${formatDay(v.scheduled_date, now)}` : "Clean"}
-                        {v?.cleaner_id ? ` by ${nameById.get(v.cleaner_id) ?? "a cleaner"}` : ""}
+                        {r.kind === "late_cancel" ? "Late cancellation fee for the clean" : "Clean"}{v ? ` on ${formatDay(v.scheduled_date, now)}` : ""}
+                        {v?.cleaner_id ? `${r.kind === "late_cancel" ? ", kept by" : " by"} ${nameById.get(v.cleaner_id) ?? "a cleaner"}` : ""}
                         {r.refunded_pence > 0 ? `. ${formatPence(r.refunded_pence)} refunded` : ""}.
                       </p>
                     </div>
