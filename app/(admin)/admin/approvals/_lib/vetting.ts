@@ -52,3 +52,23 @@ export const reviewInput = z.discriminatedUnion("decision", [
   z.object({ decision: z.literal("verify"), documentId: z.string(), expected: z.enum(["pending", "rejected"]) }),
   z.object({ decision: z.literal("reject"), documentId: z.string(), expected: z.enum(["pending", "verified"]), reason }),
 ]);
+
+const tier = z.enum(["new", "approved", "top"]);
+/** Optional note: empty is fine, but if given it follows the same rule as a reason. */
+const note = z.string().trim().max(300, "Keep it to 300 characters.").optional();
+
+/** A decision on a cleaner. The database checks the move fits where they stand now (PC053 if not). */
+export const decisionInput = z.discriminatedUnion("decision", [
+  z.object({ decision: z.literal("approve"), cleanerId: z.string(), tier, note }),
+  z.object({ decision: z.literal("decline"), cleanerId: z.string(), reason }),
+  z.object({ decision: z.literal("suspend"), cleanerId: z.string(), reason }),
+  z.object({ decision: z.literal("reactivate"), cleanerId: z.string(), note }),
+  z.object({ decision: z.literal("tier"), cleanerId: z.string(), tier, reason }),
+]);
+export type DecisionInput = z.infer<typeof decisionInput>;
+
+/** "dbs,insurance" (the database's PC052 detail) → the kinds, ignoring anything unknown. */
+export function waitingKinds(detail: string | null | undefined): DocKind[] {
+  const known = new Set<string>(REQUIRED_DOCS);
+  return (detail ?? "").split(",").map((k) => k.trim()).filter((k): k is DocKind => known.has(k));
+}

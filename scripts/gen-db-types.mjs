@@ -205,6 +205,14 @@ out += `${ind(2)}};
         Args: { p_visit: string; p_shown_fee_pence: number };
         Returns: "cancelled" | "cancelled_late" | "cancelled_with_fee";
       };
+      admin_review_cleaner: {
+        Args: { p_cleaner: string; p_decision: string; p_tier: Database["public"]["Enums"]["cleaner_tier"] | null; p_reason: string | null };
+        Returns: undefined;
+      };
+      admin_set_cleaner_tier: {
+        Args: { p_cleaner: string; p_tier: Database["public"]["Enums"]["cleaner_tier"]; p_reason: string };
+        Returns: undefined;
+      };
       cancel_block_quote: {
         Args: { p_series: string };
         Returns: { can_cancel: boolean; cleans: number; late: number; fee_pence: number; under_way: number }[];

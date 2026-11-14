@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isOutOfDate, latestByKind, readiness, reviewInput, type DocRow } from "./vetting";
+import { decisionInput, isOutOfDate, latestByKind, readiness, reviewInput, waitingKinds, type DocRow } from "./vetting";
 
 const doc = (kind: DocRow["kind"], status: DocRow["status"], created_at: string, expires_on: string | null = null): DocRow => ({
   id: `${kind}-${created_at}`, cleaner_id: "c", kind, status, expires_on, created_at,
@@ -38,5 +38,27 @@ describe("vetting", () => {
     expect(reviewInput.safeParse({ decision: "verify", documentId: "x", expected: "expired" }).success).toBe(false);
     expect(reviewInput.safeParse({ decision: "verify", documentId: "x", expected: "verified" }).success).toBe(false);
     expect(reviewInput.safeParse({ decision: "reject", documentId: "x", expected: "rejected", reason: "Again please" }).success).toBe(false);
+  });
+});
+
+describe("decisions", () => {
+  const cleanerId = "00000000-0000-4000-a000-000000000006";
+  it("declining, suspending and a tier change need a real reason; approving and reactivating don't", () => {
+    expect(decisionInput.safeParse({ decision: "decline", cleanerId, reason: "!!!" }).success).toBe(false);
+    expect(decisionInput.safeParse({ decision: "suspend", cleanerId, reason: "" }).success).toBe(false);
+    expect(decisionInput.safeParse({ decision: "tier", cleanerId, tier: "top" }).success).toBe(false);
+    expect(decisionInput.safeParse({ decision: "suspend", cleanerId, reason: "Two no-shows" }).success).toBe(true);
+    expect(decisionInput.safeParse({ decision: "approve", cleanerId, tier: "new", note: "" }).success).toBe(true);
+    expect(decisionInput.safeParse({ decision: "reactivate", cleanerId }).success).toBe(true);
+  });
+  it("only real tiers and known decisions get through", () => {
+    expect(decisionInput.safeParse({ decision: "approve", cleanerId, tier: "gold" }).success).toBe(false);
+    expect(decisionInput.safeParse({ decision: "promote", cleanerId }).success).toBe(false);
+    expect(decisionInput.safeParse({ decision: "approve", cleanerId, tier: "new", note: "x".repeat(301) }).success).toBe(false);
+  });
+  it("reads the database's list of checks still waiting, ignoring anything it doesn't know", () => {
+    expect(waitingKinds("dbs,insurance")).toEqual(["dbs", "insurance"]);
+    expect(waitingKinds("dbs, <script>")).toEqual(["dbs"]);
+    expect(waitingKinds(null)).toEqual([]);
   });
 });

@@ -6,7 +6,8 @@ import { todayInLondon } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
 import { adminErrorMessage, NOT_SAVED, type ActionResult } from "../_lib/errors";
 import { pgUuid } from "../_lib/ids";
-import { isOutOfDate, reviewInput } from "./_lib/vetting";
+import { DOCUMENT_KIND } from "@/lib/labels";
+import { decisionInput, isOutOfDate, reviewInput, waitingKinds } from "./_lib/vetting";
 
 /**
  * Verify a document, or send it back with a reason the cleaner will read.
@@ -57,4 +58,49 @@ export async function reviewDocument(raw: unknown): Promise<ActionResult> {
   if (!data?.length) return { ok: false, message: "Someone on the team has just reviewed that document. Refresh to see where it stands." };
   revalidatePath("/admin/approvals", "layout");
   return { ok: true, message: input.decision === "verify" ? "Verified." : "Sent back. The cleaner will see your reason." };
+}
+
+const DONE = {
+  approve: "Approved. They can see and take jobs now.",
+  decline: "Declined. They've been told nothing by Ping: let them know yourself.",
+  suspend: "Suspended. They can't see jobs or addresses any more. Their blocks are flagged on the overview: sort those next.",
+  reactivate: "Back on. They can see and take jobs again.",
+  tier: "Tier changed.",
+} as const;
+
+/**
+ * Approve, decline, suspend, reactivate or change tier. The database makes the decision
+ * (admin_review_cleaner / admin_set_cleaner_tier): it checks the caller is an admin, that
+ * the four checks are verified and in date, and that the move fits where the cleaner
+ * stands, then logs who decided and why. Nothing here is trusted from the browser but the
+ * choice itself.
+ */
+export async function decideCleaner(raw: unknown): Promise<ActionResult> {
+  await requireRole("admin", "/admin/approvals");
+  const parsed = decisionInput.safeParse(raw);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? NOT_SAVED };
+  const id = pgUuid.safeParse(parsed.data.cleanerId);
+  if (!id.success) return { ok: false, message: "That cleaner wasn't found." };
+
+  const input = parsed.data;
+  const supabase = await createClient();
+  const { error } =
+    input.decision === "tier"
+      ? await supabase.rpc("admin_set_cleaner_tier", { p_cleaner: id.data, p_tier: input.tier, p_reason: input.reason })
+      : await supabase.rpc("admin_review_cleaner", {
+          p_cleaner: id.data,
+          p_decision: input.decision,
+          p_tier: input.decision === "approve" ? input.tier : null,
+          p_reason: ("reason" in input ? input.reason : input.note) || null,
+        });
+
+  if (error) {
+    if (error.code === "PC052") {
+      const kinds = waitingKinds(error.details).map((k) => DOCUMENT_KIND[k]);
+      return { ok: false, message: kinds.length ? `Not yet: still waiting on ${kinds.join(", ")}. Each needs a verified, in-date document.` : adminErrorMessage(error) };
+    }
+    return { ok: false, message: adminErrorMessage(error) };
+  }
+  revalidatePath("/admin/approvals", "layout");
+  return { ok: true, message: DONE[input.decision] };
 }
