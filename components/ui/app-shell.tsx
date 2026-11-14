@@ -44,8 +44,8 @@ export function AppShell({ area, who, children }: { area: Area; who: string; chi
                 type="submit"
                 className={
                   isAdmin
-                    ? "min-h-12 rounded-full px-4 text-sm font-semibold text-on-navy hover:bg-white/10"
-                    : "min-h-12 rounded-full px-4 text-sm font-semibold text-navy hover:bg-mist"
+                    ? "min-h-12 whitespace-nowrap rounded-full px-4 text-sm font-semibold text-on-navy hover:bg-white/10"
+                    : "min-h-12 whitespace-nowrap rounded-full px-4 text-sm font-semibold text-navy hover:bg-mist"
                 }
               >
                 Sign out

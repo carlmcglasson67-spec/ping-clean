@@ -61,6 +61,13 @@ export default async function AccountHome({ searchParams }: { searchParams: Prom
         }
       />
 
+      {cancelled === "block" || cancelled === "block-fee" ? (
+        <p role="status" data-cancelled={cancelled} className="mb-8 rounded-xl bg-ok-soft px-7 py-5 text-lg font-medium text-ok ring-1 ring-ok/20">
+          {cancelled === "block-fee"
+            ? "The rest of your cleans are cancelled and your block has ended. The late-cancellation fee will be charged to your card."
+            : "The rest of your cleans are cancelled and your block has ended. Nothing is charged."}
+        </p>
+      ) : null}
       {cancelled === "fee" || cancelled === "free" ? (
         <p role="status" data-cancelled={cancelled} className="mb-8 rounded-xl bg-ok-soft px-7 py-5 text-lg font-medium text-ok ring-1 ring-ok/20">
           {cancelled === "fee" ? "That clean is cancelled. The late-cancellation fee will be charged to your card." : "That clean is cancelled. Nothing is charged for it."}
