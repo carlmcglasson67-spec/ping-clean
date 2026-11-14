@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+import type { Metadata, Route } from "next";
+import Link from "next/link";
 import { Badge, Card, EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { requireRole } from "@/lib/auth/session";
 import { formatDay, formatStamp, formatWindow, todayInLondon, weekdayName } from "@/lib/dates";
@@ -23,7 +24,7 @@ export default async function JobsPage() {
 
   const [live, alerts, todays, upcoming, cleaners] = await Promise.all([
     supabase.from("series").select(SERIES_COLS).in("status", ["offering", "unclaimed", "claimed", "paused"]).order("starts_on"),
-    supabase.from("engine_alerts").select("id, kind, series_id, visit_id, message, created_at").is("resolved_at", null).order("created_at", { ascending: false }),
+    supabase.from("engine_alerts").select("id, kind, series_id, visit_id, cleaner_id, message, created_at").is("resolved_at", null).order("created_at", { ascending: false }),
     supabase.from("visits").select("id, series_id, cleaner_id, status, window_start, window_end").eq("scheduled_date", today).order("window_start"),
     // Every booked clean from today, in keyset pages (no 1,000-row cap), then by date.
     readAll((after) => {
@@ -41,7 +42,7 @@ export default async function JobsPage() {
   const series = [...(live.data ?? []), ...(extra.data ?? [])];
 
   const propIds = [...new Set(series.map((s) => s.property_id))];
-  const peopleIds = [...new Set([...series.map((s) => s.customer_id), ...series.map((s) => s.cleaner_id), ...(cleaners.data ?? []).map((c) => c.id), ...(todays.data ?? []).map((v) => v.cleaner_id)].filter((id): id is string => !!id))];
+  const peopleIds = [...new Set([...series.map((s) => s.customer_id), ...series.map((s) => s.cleaner_id), ...(cleaners.data ?? []).map((c) => c.id), ...(todays.data ?? []).map((v) => v.cleaner_id), ...(alerts.data ?? []).map((a) => a.cleaner_id)].filter((id): id is string => !!id))];
   const [props, people] = await Promise.all([
     propIds.length ? supabase.from("properties").select("id, town, postcode_district").in("id", propIds) : Promise.resolve({ data: [], error: null }),
     peopleIds.length ? supabase.from("profiles").select("id, full_name").in("id", peopleIds) : Promise.resolve({ data: [], error: null }),
@@ -148,7 +149,7 @@ export default async function JobsPage() {
 
       <Section id="alerts" title="Alerts" count={openAlerts.length}>
         {openAlerts.length === 0 ? (
-          <EmptyState title="No open alerts">When the engine needs a person (a missed clean, a stalled block, cover for today) it shows here.</EmptyState>
+          <EmptyState title="No open alerts">When something needs a person (a missed clean, a stalled block, cover for today, a cleaner&rsquo;s document running out) it shows here.</EmptyState>
         ) : (
           <ul className="grid gap-4">
             {openAlerts.map((a) => {
@@ -162,11 +163,16 @@ export default async function JobsPage() {
                     <div className="grid gap-2">
                       <div className="flex flex-wrap items-center gap-3">
                         <Badge tone={info?.urgent ? "bad" : "warn"}>{info?.label ?? a.kind}</Badge>
-                        <span className="text-sm text-navy-3">{formatStamp(a.created_at)}{s ? ` · ${place(s)}` : ""}</span>
+                        <span className="text-sm text-navy-3">{formatStamp(a.created_at)}{s ? ` · ${place(s)}` : ""}{a.cleaner_id ? ` · ${name.get(a.cleaner_id) ?? "Cleaner"}` : ""}</span>
                       </div>
                       <p className="font-semibold">{a.message}</p>
                       {info ? <p className="text-sm text-navy-2">{info.todo}</p> : null}
                       {isLive ? <a href={`#block-${s.id}`} className="inline-flex min-h-12 items-center text-sm font-semibold text-blue">Go to the block&rsquo;s actions</a> : null}
+                      {a.cleaner_id ? (
+                        <Link href={`/admin/approvals/${a.cleaner_id}` as Route} className="inline-flex min-h-12 items-center text-sm font-semibold text-blue">
+                          Open this cleaner&rsquo;s documents
+                        </Link>
+                      ) : null}
                     </div>
                     <div className="sm:justify-self-end"><ResolveAlert alertId={a.id} /></div>
                   </Card>

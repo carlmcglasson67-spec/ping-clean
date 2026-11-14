@@ -1,5 +1,5 @@
 // The engine's alerts in the Ping team's words: what happened and what to do about it.
-// Kinds come from the engine_alerts check constraint (supabase/migrations/…_blocks.sql).
+// Kinds come from the engine_alerts check constraint (latest: supabase/migrations/…_lapsed_checks.sql).
 
 export type AlertKind =
   | "visit_needs_cover"
@@ -19,7 +19,9 @@ export type AlertKind =
   | "refund_failed"
   | "refund_after_payout"
   | "payment_disputed"
-  | "visit_cancelled_late";
+  | "visit_cancelled_late"
+  | "cleaner_check_lapsed"
+  | "cleaner_check_expiring";
 
 export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo: string; urgent: boolean }> = {
   visit_needs_cover: {
@@ -129,6 +131,18 @@ export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo:
     short: "Late cancel",
     todo: "A customer cancelled a clean inside the notice period. Ring or text the cleaner so they don't travel: the clean has gone from their app, but nothing tells them.",
     urgent: true,
+  },
+  cleaner_check_lapsed: {
+    label: "Cleaner's checks lapsed",
+    short: "Checks lapsed",
+    todo: "A working cleaner is missing a verified, in-date document. Ask them to upload a new one, or suspend them until it's sorted. This closes by itself once the document is verified.",
+    urgent: true,
+  },
+  cleaner_check_expiring: {
+    label: "Document running out",
+    short: "Running out",
+    todo: "A working cleaner's document runs out within two weeks. Ask them to upload the renewal now. This closes by itself once the new one is verified.",
+    urgent: false,
   },
 };
 

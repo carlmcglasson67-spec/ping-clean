@@ -262,6 +262,7 @@ export type Database = {
           created_at: string;
           resolved_at: string | null;
           resolved_by: string | null;
+          cleaner_id: string | null;
         };
         Insert: {
           id?: string;
@@ -272,6 +273,7 @@ export type Database = {
           created_at?: string;
           resolved_at?: string | null;
           resolved_by?: string | null;
+          cleaner_id?: string | null;
         };
         Update: {
           id?: string;
@@ -282,6 +284,7 @@ export type Database = {
           created_at?: string;
           resolved_at?: string | null;
           resolved_by?: string | null;
+          cleaner_id?: string | null;
         };
         Relationships: [];
       };

@@ -30,6 +30,8 @@ describe("alerts", () => {
     }
     expect(ALERT_KIND[alertKind("visit_cancelled_late")!].urgent).toBe(true);
     expect(ALERT_KIND[alertKind("visit_cancelled_late")!].todo).toMatch(/cleaner/);
+    expect(ALERT_KIND[alertKind("cleaner_check_lapsed")!].urgent).toBe(true);
+    expect(ALERT_KIND[alertKind("cleaner_check_expiring")!].urgent).toBe(false);
     expect(alertKind("something_new")).toBeNull();
   });
 });
