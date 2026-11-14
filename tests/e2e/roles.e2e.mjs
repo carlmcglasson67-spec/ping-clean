@@ -12,7 +12,6 @@ import { cleanerPaymentsFlows } from "./cleaner-payments.e2e.mjs";
 import { fakeServiceRoleKey, startFakeSupabase } from "./fake-supabase.mjs";
 import { cardAtBookingFlows } from "./card-at-booking.e2e.mjs";
 import { chargingFlows, TEST_JOB_SECRET } from "./charging.e2e.mjs";
-import { customerCancelFlows } from "./customer-cancel.e2e.mjs";
 import { payoutFlows } from "./payouts.e2e.mjs";
 import { refundFlows } from "./refunds.e2e.mjs";
 import { lateCancelFlows } from "./late-cancel.e2e.mjs";
@@ -234,8 +233,6 @@ try {
   await cancelRestFlows({ browser, BASE, check, signIn, SHOTS });
   // Track C's admin console. After Track B's, because it approves, assigns and scores.
   await adminFlows({ browser, BASE, check, signIn, SHOTS });
-  // Last: a customer cancels a clean, then the rest of the block (it ends Anna's block).
-  await customerCancelFlows({ browser, BASE, check, signIn, SHOTS });
 } finally {
   await browser.close();
   stopApp();

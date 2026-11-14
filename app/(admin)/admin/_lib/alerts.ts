@@ -19,7 +19,7 @@ export type AlertKind =
   | "refund_failed"
   | "refund_after_payout"
   | "payment_disputed"
-  | "cancelled_late";
+  | "visit_cancelled_late";
 
 export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo: string; urgent: boolean }> = {
   visit_needs_cover: {
@@ -124,10 +124,10 @@ export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo:
     todo: "A customer's bank has disputed a payment. Answer it in Stripe before its deadline, with the clean's photos and checklist from QC.",
     urgent: true,
   },
-  cancelled_late: {
+  visit_cancelled_late: {
     label: "Cancelled at short notice",
     short: "Late cancel",
-    todo: "The customer cancelled inside the notice period. Ring the cleaner so they don't turn up. The message says whether a late fee is due.",
+    todo: "A customer cancelled a clean inside the notice period. Ring or text the cleaner so they don't travel: the clean has gone from their app, but nothing tells them.",
     urgent: true,
   },
 };

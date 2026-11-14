@@ -74,7 +74,7 @@ export async function adminFlows({ browser, BASE, check, signIn, SHOTS }) {
   await settle(page);
 
   await check("the overview shows today's numbers from the database", async () => {
-    const [{ today }] = await sql(`select count(*)::int as today from public.visits where scheduled_date = (now() at time zone 'Europe/London')::date`);
+    const [{ today }] = await sql(`select count(*)::int as today from public.visits where scheduled_date = (now() at time zone 'Europe/London')::date and status <> 'cancelled'`);
     const [{ unclaimed, offering }] = await sql(
       `select count(*) filter (where status = 'unclaimed')::int as unclaimed, count(*) filter (where status = 'offering')::int as offering
        from public.series`);
