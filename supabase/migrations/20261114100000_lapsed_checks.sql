@@ -9,14 +9,16 @@
 --                           more of the four checks (urgent)
 --   cleaner_check_expiring  a check's last valid document runs out within 14 days
 --
--- A check is in order while ANY verified, in-date document of that kind exists, so a
--- renewal uploaded early (still waiting for review) doesn't raise a false alarm. (Approving
--- and reactivating stay stricter: they go by the newest document.)
+-- A check is in order while a verified, in-date document of that kind exists and nothing
+-- of that kind has been sent back since. A renewal uploaded early (still waiting for
+-- review) doesn't raise a false alarm. (Approving and reactivating stay stricter: they go
+-- by the newest document.)
 --
 -- Checked every night, and at once whenever a document or the cleaner's status changes.
 -- Alerts close by themselves when the documents are back in order or the cleaner stops
 -- working. One open alert per cleaner and kind; if a person resolves one by hand while the
--- problem remains, it comes back after 7 days, not the next night.
+-- same problem remains, it comes back after 7 days, not the next night. A different problem
+-- (another document lapsing) raises a new alert at once.
 
 -- ---------------------------------------------------------------- alerts can point at a cleaner
 alter table public.engine_alerts add column cleaner_id uuid references public.cleaners (id) on delete cascade;
@@ -57,7 +59,8 @@ declare
   soonest date;
   msg text;
 begin
-  select c.status = 'active' into working from public.cleaners c where c.id = p_cleaner;
+  -- Key-share: a suspend or approval in flight finishes first, so this reads where they stand now.
+  select c.status = 'active' into working from public.cleaners c where c.id = p_cleaner for key share;
   if working is not true then
     -- Not working (applicant, suspended, left, or gone): nothing to warn about.
     update public.engine_alerts set resolved_at = now()
@@ -72,7 +75,11 @@ begin
            (select max(coalesce(d.expires_on, 'infinity'::date))
               from public.cleaner_documents d
              where d.cleaner_id = p_cleaner and d.kind = k.kind and d.status = 'verified'
-               and (d.expires_on is null or d.expires_on > today)) as good_until
+               and (d.expires_on is null or d.expires_on > today)
+               -- ...and nothing of that kind has been sent back since it was uploaded.
+               and not exists (select 1 from public.cleaner_documents r
+                                where r.cleaner_id = p_cleaner and r.kind = k.kind and r.status = 'rejected'
+                                  and (r.created_at, r.id) > (d.created_at, d.id))) as good_until
       from unnest(enum_range(null::public.document_kind)) as k (kind)
   )
   select coalesce(array_agg(kind order by kind) filter (where good_until is null), '{}'),
@@ -92,7 +99,8 @@ begin
      where cleaner_id = p_cleaner and kind = 'cleaner_check_lapsed' and resolved_at is null and message is distinct from msg;
     if not exists (select 1 from public.engine_alerts a
                     where a.cleaner_id = p_cleaner and a.kind = 'cleaner_check_lapsed'
-                      and (a.resolved_at is null or (a.resolved_by is not null and a.resolved_at > now() - interval '7 days'))) then
+                      and (a.resolved_at is null
+                           or (a.resolved_by is not null and a.message = msg and a.resolved_at > now() - interval '7 days'))) then
       insert into public.engine_alerts (kind, cleaner_id, message) values ('cleaner_check_lapsed', p_cleaner, msg)
       on conflict do nothing;
     end if;
@@ -109,7 +117,8 @@ begin
      where cleaner_id = p_cleaner and kind = 'cleaner_check_expiring' and resolved_at is null and message is distinct from msg;
     if not exists (select 1 from public.engine_alerts a
                     where a.cleaner_id = p_cleaner and a.kind = 'cleaner_check_expiring'
-                      and (a.resolved_at is null or (a.resolved_by is not null and a.resolved_at > now() - interval '7 days'))) then
+                      and (a.resolved_at is null
+                           or (a.resolved_by is not null and a.message = msg and a.resolved_at > now() - interval '7 days'))) then
       insert into public.engine_alerts (kind, cleaner_id, message) values ('cleaner_check_expiring', p_cleaner, msg)
       on conflict do nothing;
     end if;

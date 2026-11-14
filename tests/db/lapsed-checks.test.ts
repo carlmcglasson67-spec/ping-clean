@@ -48,6 +48,7 @@ describe("lapsing", () => {
       await q.rows(`update public.cleaner_documents set status = 'rejected', rejection_reason = 'Wrong name on it' where cleaner_id = $1 and kind = 'dbs'`, [U.tara]);
       const raised = await open(q, U.tara);
       const fresh = await doc(q, U.tara, "dbs", "pending", null);
+      await q.rows(`update public.cleaner_documents set created_at = now() + interval '1 minute' where id = $1`, [fresh]); // uploaded after the rejection
       const stillOpen = await open(q, U.tara);
       await q.rows(`update public.cleaner_documents set status = 'verified', reviewed_by = $2, reviewed_at = now() where id = $1`, [fresh, U.admin]);
       return { raised, stillOpen: stillOpen.length, closed: await open(q, U.tara) };
@@ -134,6 +135,37 @@ describe("who it's about", () => {
     });
     expect(r.quiet).toEqual([]);
     expect(r.back).toEqual(["cleaner_check_lapsed"]);
+  });
+});
+
+describe("what the review caught", () => {
+  it("resolved by hand, then a different check lapses: a new alert at once, not a week of silence", async () => {
+    const r = await as("superuser", async (q) => {
+      await allGood(q, U.tara);
+      await q.rows(`update public.cleaner_documents set status = 'rejected', rejection_reason = 'Unreadable' where cleaner_id = $1 and kind = 'right_to_work'`, [U.tara]);
+      await q.rows(`update public.engine_alerts set resolved_at = now(), resolved_by = $2 where cleaner_id = $1 and resolved_at is null`, [U.tara, U.admin]);
+      await q.rows(`select private.run_cleaner_checks()`);
+      const quiet = await open(q, U.tara);
+      await q.rows(`update public.cleaner_documents set status = 'rejected', rejection_reason = 'Out of date' where cleaner_id = $1 and kind = 'insurance'`, [U.tara]);
+      return { quiet, after: await open(q, U.tara) };
+    });
+    expect(r.quiet).toEqual([]);
+    expect(r.after.map((a) => a.kind)).toEqual(["cleaner_check_lapsed"]);
+    expect(r.after[0]!.message).toMatch(/for: public liability insurance, right to work\./);
+  });
+
+  it("an older verified document doesn't cover for a newer one that was sent back", async () => {
+    const r = await as("superuser", async (q) => {
+      await allGood(q, U.tara);
+      const newer = await doc(q, U.tara, "dbs", "pending", null);
+      await q.rows(`update public.cleaner_documents set created_at = now() + interval '1 minute' where id = $1`, [newer]);
+      const whilePending = await open(q, U.tara);
+      await q.rows(`update public.cleaner_documents set status = 'rejected', rejection_reason = 'Not theirs', reviewed_by = $2, reviewed_at = now() where id = $1`, [newer, U.admin]);
+      return { whilePending, after: await open(q, U.tara) };
+    });
+    expect(r.whilePending).toEqual([]);
+    expect(r.after.map((a) => a.kind)).toEqual(["cleaner_check_lapsed"]);
+    expect(r.after[0]!.message).toMatch(/for: DBS check\./);
   });
 });
 
