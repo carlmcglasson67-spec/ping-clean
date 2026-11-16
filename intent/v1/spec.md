@@ -40,7 +40,7 @@ then it goes to the hub as normal.
 - Cleaner drop-out: notice, series back on the board, tier impact. No-show: admin alert,
   customer offered replacement or refund.
 - Cleaners are self-employed: Ping never sets hours or forces work.
-- Live payments stay off until Kate signs off agent model, VAT and cleaner terms.
+- Live payments stay off until the accountant signs off the agent model, VAT and cleaner terms.
 
 ## Data model
 profiles, properties, cleaners, cleaner_documents, series, visits, job_offers,
@@ -62,4 +62,4 @@ Stripe + Connect Express, web push + SMS, postcodes.io.
 ## Open questions (must be answered before Phase 2)
 Price per hour and minimum hours; commission model; tier windows; cancellation notice
 and fee; drop-out penalties; who supplies products; launch postcodes; first customers
-to move; domain and logo; Kate sign-off date.
+to move; domain and logo; accountant sign-off date.

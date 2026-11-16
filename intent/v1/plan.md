@@ -38,7 +38,7 @@ tiered offer release, unclaimed alerts.
 
 ## Phase 5 — Money (ONE session)
 Charge after clean, Connect payouts, fee split, refunds. Touches every surface, so not
-split. Done: a test visit pays out the right pence. Live keys stay off until Kate signs off.
+split. Done: a test visit pays out the right pence. Live keys stay off until the accountant signs off.
 
 ## Phase 6 — Pilot
 A handful of Cumbria Bright regulars and 2–3 cleaners for two weeks.

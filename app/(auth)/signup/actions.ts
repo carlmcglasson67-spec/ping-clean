@@ -9,7 +9,7 @@ import { postLoginPath } from "@/lib/auth/roles";
 import { createClient } from "@/lib/db/server";
 import { hasSupabaseEnv } from "@/lib/env";
 
-// Versions of the terms and privacy notice the person agreed to. Bump when Carl and Kate
+// Versions of the terms and privacy notice the person agreed to. Bump when Carl and the accountant
 // publish new wording, so we always know which version each account accepted.
 const TERMS_VERSION = "draft-2026-11";
 const PRIVACY_VERSION = "draft-2026-11";

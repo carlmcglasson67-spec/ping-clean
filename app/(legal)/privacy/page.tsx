@@ -3,7 +3,7 @@ import { DraftLegalPage } from "../_components/draft-page";
 
 export const metadata: Metadata = { title: "Privacy notice (draft)", robots: { index: false } };
 
-// PLACEHOLDER. Carl and Kate write the real privacy notice (UK GDPR); this lists what it
+// PLACEHOLDER. Carl and the accountant write the real privacy notice (UK GDPR); this lists what it
 // must cover. Bump PRIVACY_VERSION in app/(auth)/signup/actions.ts when it's live.
 export default function PrivacyPage() {
   return (

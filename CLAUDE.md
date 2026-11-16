@@ -43,8 +43,10 @@ https://claude.ai/artifact/1WEp7QQgrj5dGn1wzooEWz (summary in intent/v1/spec.md)
 ## Brand (Carl's official brand, 7 Nov 2026)
 - What Ping sells: REGULAR DOMESTIC CLEANS ONLY at launch. Never list deep cleans, end of
   tenancy or Airbnb changeovers (those are Cumbria Bright, not Ping V1).
-- Price is not decided. Never write a price anywhere (the flyers' £22.50 is provisional);
-  the settings table is the only source.
+- Price (Carl, Nov 2026): £50 for a two-hour clean (£25/hr), two hours minimum. It is set in
+  the admin console settings on each database, never typed into code or pages: the settings
+  table is the only source. The /launch page shows no price by decision. The seed's £20/hr
+  is test data only.
 - Logo: `<Logo>`, `<LogoMark>`, `<Wordmark>` from components/ui. Never retype "PingClean"
   as text in place of it. Files in public/brand/ (full colour, white, navy, mark, icons,
   signal-waves.svg); Carl's original crop is pingclean-logo-original.png. Rebuild with

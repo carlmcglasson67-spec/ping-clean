@@ -12,7 +12,7 @@ import { INTEREST_FIELDS, normaliseEmail, normalisePostcode, normaliseUkMobile }
 export const LAUNCH_KINDS = ["customer", "cleaner"] as const;
 export type LaunchKind = (typeof LAUNCH_KINDS)[number];
 
-/** Stored with every row. Change it whenever the wording below changes. Draft until Carl and Kate approve it. */
+/** Stored with every row. Change it whenever the wording below changes. Draft until Carl and the accountant approve it. */
 export const LAUNCH_CONSENT_VERSION = "launch-draft-2026-11";
 
 /** The tick box. It must be ticked: unticked, nothing is stored. */
@@ -21,7 +21,7 @@ export const LAUNCH_NOTIFY_LABEL: Record<LaunchKind, string> = {
   cleaner: "Tell me when Ping is taking on cleaners near me",
 };
 
-/** The wording under the form (draft for Carl and Kate). `months` comes from settings, never typed in. */
+/** The wording under the form (draft for Carl and the accountant). `months` comes from settings, never typed in. */
 export function launchConsentText(kind: LaunchKind, months: number): string {
   return (
     (kind === "customer"

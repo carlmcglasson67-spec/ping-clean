@@ -3,7 +3,7 @@ import { DraftLegalPage } from "../_components/draft-page";
 
 export const metadata: Metadata = { title: "Terms of use (draft)", robots: { index: false } };
 
-// PLACEHOLDER. Carl and Kate (Crystal Clear Accountancy) write the real terms; this lists
+// PLACEHOLDER. Carl and the accountant write the real terms; this lists
 // what they need to cover. Bump TERMS_VERSION in app/(auth)/signup/actions.ts when it's live.
 export default function TermsPage() {
   return (
