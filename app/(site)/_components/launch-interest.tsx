@@ -102,7 +102,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
         data-sent
         tabIndex={-1}
         role="status"
-        className={cn("grid scroll-mt-28 content-start gap-8 rounded-xl bg-card p-8 text-navy shadow-lift focus:outline-none sm:p-12 lg:p-14", className)}
+        className={cn("grid min-w-0 scroll-mt-28 content-start gap-8 rounded-xl bg-card p-8 text-navy shadow-lift focus:outline-none sm:p-12 lg:p-14", className)}
       >
         <div className="flex flex-wrap items-center justify-between gap-4">
           <span className="grid size-16 place-items-center rounded-full bg-teal text-navy" aria-hidden>
@@ -129,7 +129,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
           ))}
         </ol>
 
-        <div className="grid gap-4 border-t border-line pt-8">
+        <div className="grid min-w-0 gap-4 border-t border-line pt-8">
           <p className="text-lg text-navy-2">
             {cleaner ? "Know another cleaner who’d want this? Every postcode counts." : "Know someone who’d want Ping? Every postcode counts."}
           </p>
@@ -518,9 +518,9 @@ function ShareLaunch() {
   const url = typeof window === "undefined" ? LAUNCH_URL : `${window.location.origin}/launch`;
   const shown = url.replace(/^https?:\/\//, "");
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 gap-3">
       {/* The link in a field of its own, with its copy button inside it. */}
-      <div className="flex items-center gap-2 rounded-md bg-canvas py-1.5 pl-4 pr-1.5 ring-1 ring-inset ring-navy-3/55">
+      <div className="flex min-w-0 items-center gap-2 rounded-md bg-canvas py-1.5 pl-4 pr-1.5 ring-1 ring-inset ring-navy-3/55">
         <span className="min-w-0 flex-1 truncate text-lg font-semibold tabular">{shown}</span>
         <Button
           type="button"
@@ -534,7 +534,7 @@ function ShareLaunch() {
           }}
           icon={
             copied === "copied" ? (
-              <svg viewBox="0 0 20 20" className="rise size-5" aria-hidden>
+              <svg viewBox="0 0 20 20" className="size-5" aria-hidden>
                 <path d="m5 10.5 3.2 3L15 6.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             ) : undefined

@@ -398,7 +398,7 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
               />
             </div>
           </div>
-          <div className="lg:col-span-7">
+          <div className="min-w-0 lg:col-span-7">
             {interest.retentionMonths === null ? (
               <div className="grid gap-4 rounded-xl bg-white/6 p-8 ring-1 ring-inset ring-white/15 sm:p-12">
                 <p className="font-display text-2xl font-semibold">We&rsquo;re not taking names just now.</p>
@@ -574,14 +574,14 @@ function FactVisual({ which }: { which: number }) {
 /** A designed stand-in for a photograph the cleaner will take: never an invented photo. */
 function PhotoSlot({ label, tone }: { label: string; tone: "mist" | "teal" }) {
   return (
-    <div className={"relative grid aspect-[4/3] place-items-center overflow-hidden rounded-md ring-1 ring-inset ring-line " + (tone === "mist" ? "bg-mist" : "bg-teal-soft")}>
+    <div className={"relative grid aspect-[5/4] place-items-center sm:aspect-[4/3] overflow-hidden rounded-md ring-1 ring-inset ring-line " + (tone === "mist" ? "bg-mist" : "bg-teal-soft")}>
       {/* fine hatch, so the slot reads as a held place rather than a blank fill */}
       <span className="absolute inset-0 bg-[repeating-linear-gradient(135deg,transparent_0_10px,color-mix(in_srgb,var(--color-navy)_6%,transparent)_10px_11px)]" />
-      <svg viewBox="0 0 24 24" className={"relative size-8 " + (tone === "mist" ? "text-navy-3" : "text-teal-ink")}>
+      <svg viewBox="0 0 24 24" className={"relative size-8 max-sm:-translate-y-3 " + (tone === "mist" ? "text-navy-3" : "text-teal-ink")}>
         <path d="M4 8.5h3l1.5-2h7l1.5 2h3v10H4z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
         <circle cx="12" cy="13.2" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.6" />
       </svg>
-      <span className="absolute bottom-2.5 left-2.5 rounded-full bg-card px-3 py-1 text-base font-semibold text-navy-2">{label}</span>
+      <span className="absolute bottom-2 left-2 rounded-full bg-card px-2.5 py-0.5 text-sm font-semibold text-navy-2 sm:bottom-2.5 sm:left-2.5 sm:px-3 sm:py-1 sm:text-base">{label}</span>
     </div>
   );
 }

@@ -150,6 +150,17 @@ export async function launchFlows({ browser, BASE, check, shots }) {
     const box = await page.getByRole("status").boundingBox();
     // The receipt is taller than a phone screen, so what matters is that it starts on screen, under the header.
     assert.ok(box && box.y >= 0 && box.y <= 844 / 3, `the thanks card starts near the top of the phone screen (y=${box?.y})`);
+    // The thanks card holds the share link on one line: it must truncate, never push the
+    // card past the screen edge (design review, 16 Nov: the district chip was cut off).
+    const wideThanks = await page.evaluate(() => {
+      const max = document.documentElement.clientWidth;
+      return [...document.querySelectorAll("#register [data-sent], #register [data-sent] *")]
+        .filter((el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().right > max + 0.5)
+        .filter((el) => !el.closest("[aria-hidden]"))
+        .map((el) => `${el.tagName.toLowerCase()} "${(el.textContent ?? "").trim().slice(0, 40)}"`)
+        .slice(0, 5);
+    });
+    assert.deepEqual(wideThanks, [], "the thanks card fits a 390px screen");
     await page.screenshot({ path: `${shots}/launch-thanks-390.png` });
     await page.getByRole("link", { name: /See how cleaning with Ping works/ }).waitFor();
     const rows = await rowsFor("+447700900777");
