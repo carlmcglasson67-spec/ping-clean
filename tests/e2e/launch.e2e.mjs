@@ -83,7 +83,21 @@ export async function launchFlows({ browser, BASE, check, shots }) {
     // The long form has become a short card: it must be brought into view, not left above the fold.
     await page.waitForTimeout(900);
     const box = await page.getByRole("status").boundingBox();
-    assert.ok(box && box.y >= 0 && box.y + box.height <= 900 + 1, "the thanks card is fully on screen after sending");
+    assert.ok(box && box.y >= 0 && box.y <= 900 / 3, `the thanks card starts near the top of the screen after sending (y=${box?.y})`);
+    // Sent: the panel stops asking for what has just been done, and the header's action is the list.
+    const panel = await page.locator("#register").innerText();
+    assert.ok(panel.includes("now counts towards where Ping opens first") && !panel.includes("Be first in"), "the left column changes once the form is sent");
+    // The thanks card is a receipt: their district, what happens next, and a link that really copies.
+    const card = page.getByRole("status");
+    assert.match(await card.innerText(), /CA14 · customer/i);
+    assert.match(await card.innerText(), /Your postcode, CA14, is counted/);
+    assert.match(await card.innerText(), /Now[\s\S]*Next[\s\S]*Then/);
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await card.getByRole("button", { name: "Copy the link" }).click();
+    await card.getByRole("button", { name: "Link copied" }).waitFor();
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), `${BASE}/launch`);
+    assert.equal(await page.getByRole("banner").getByRole("link", { name: "Register interest" }).count(), 1, "the header's action on /launch is the list");
+    assert.equal(await page.getByRole("banner").getByRole("link", { name: "Get your price" }).count(), 0, "no 'Get your price' on a page with no price");
     await page.screenshot({ path: `${shots}/launch-thanks-1440.png` });
     const rows = await rowsFor("launch.customer@example.com");
     assert.equal(rows.length, 1);
@@ -101,14 +115,8 @@ export async function launchFlows({ browser, BASE, check, shots }) {
     await page.waitForURL((u) => u.searchParams.get("as") === "cleaner");
     const form = page.locator("#register form");
     await form.getByText("A few quick questions about your work").waitFor();
-    // On a phone the send button rides the bottom of the screen while the form is in view
-    // (design review BLOCK): with the first question at the top, the button is still on screen.
-    await form.getByText("How much cleaning experience do you have?").scrollIntoViewIfNeeded();
-    await page.evaluate(() => document.querySelector("#register legend + div")?.scrollIntoView({ block: "start" }));
-    await page.waitForTimeout(400);
-    const send = await form.locator("[data-send]").boundingBox();
-    assert.ok(send && send.y > 844 / 2 && send.y + send.height <= 844, `the send button is pinned near the bottom of the phone screen (y=${send?.y})`);
-    await page.screenshot({ path: `${shots}/launch-form-sticky-390.png` });
+    // Before the required three are in, the send button stays in its place (never over a field).
+    assert.equal(await form.locator("[data-send]").getAttribute("data-docked"), null, "the send bar is not docked on an empty form");
     await form.getByLabel("Your postcode").fill("CA28 6AA");
     await form.getByText("Text message").click();
     await form.getByLabel("UK mobile number").fill("07700 900777");
@@ -116,6 +124,13 @@ export async function launchFlows({ browser, BASE, check, shots }) {
     await form.getByText("Weekends", { exact: true }).click();
     await form.getByText("Evenings", { exact: true }).click();
     await form.getByText("Tell me when Ping is taking on cleaners near me").click();
+    // Postcode, contact and tick are in: on a phone the send bar docks to the bottom of the
+    // screen while the form is in view (design review BLOCK), so sending is one tap away.
+    await form.getByText("How much cleaning experience do you have?").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
+    const send = await form.locator("[data-send]").boundingBox();
+    assert.ok(send && Math.abs(send.y + send.height - 844) <= 2, `the send bar is docked to the bottom of the phone screen (bottom=${send ? send.y + send.height : "none"})`);
+    await page.screenshot({ path: `${shots}/launch-form-sticky-390.png` });
     await settle(page);
     // Nothing in the register panel may be wider than the phone: the panel clips what overflows,
     // so an over-wide button or chip would silently cut the card off (design review BLOCK).
@@ -133,7 +148,19 @@ export async function launchFlows({ browser, BASE, check, shots }) {
     await page.getByText(THANKS).waitFor();
     await page.waitForTimeout(900);
     const box = await page.getByRole("status").boundingBox();
-    assert.ok(box && box.y >= 0 && box.y + box.height <= 844 + 1, "the thanks card is fully on screen on a phone");
+    // The receipt is taller than a phone screen, so what matters is that it starts on screen, under the header.
+    assert.ok(box && box.y >= 0 && box.y <= 844 / 3, `the thanks card starts near the top of the phone screen (y=${box?.y})`);
+    // The thanks card holds the share link on one line: it must truncate, never push the
+    // card past the screen edge (design review, 16 Nov: the district chip was cut off).
+    const wideThanks = await page.evaluate(() => {
+      const max = document.documentElement.clientWidth;
+      return [...document.querySelectorAll("#register [data-sent], #register [data-sent] *")]
+        .filter((el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().right > max + 0.5)
+        .filter((el) => !el.closest("[aria-hidden]"))
+        .map((el) => `${el.tagName.toLowerCase()} "${(el.textContent ?? "").trim().slice(0, 40)}"`)
+        .slice(0, 5);
+    });
+    assert.deepEqual(wideThanks, [], "the thanks card fits a 390px screen");
     await page.screenshot({ path: `${shots}/launch-thanks-390.png` });
     await page.getByRole("link", { name: /See how cleaning with Ping works/ }).waitFor();
     const rows = await rowsFor("+447700900777");

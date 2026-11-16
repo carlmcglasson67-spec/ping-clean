@@ -80,7 +80,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
   useEffect(() => {
     if (!sent || !thanksRef.current) return;
     const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    thanksRef.current.scrollIntoView({ block: "center", behavior: calm ? "auto" : "smooth" });
+    thanksRef.current.scrollIntoView({ block: "start", behavior: calm ? "auto" : "smooth" }); // its top, just under the header
     thanksRef.current.focus({ preventScroll: true });
   }, [sent]);
 
@@ -88,24 +88,54 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
 
   if (state.status === "thanks") {
     const cleaner = state.kind === "cleaner";
+    // Their own postcode district, from what they typed: "CA14 3XX" → "CA14".
+    const district = postcode.trim().toUpperCase().replace(/\s+/g, "").slice(0, -3);
+    const hasDistrict = /^[A-Z]{1,2}[0-9][A-Z0-9]?$/.test(district);
+    const next = [
+      hasDistrict ? `Your postcode, ${district}, is counted` : "Your postcode is counted",
+      "We open one town at a time",
+      cleaner ? "One message when we’re taking on cleaners near you" : "One message when booking opens near you",
+    ];
     return (
       <div
         ref={thanksRef}
+        data-sent
         tabIndex={-1}
         role="status"
-        className={cn("grid content-center gap-6 rounded-xl bg-card p-8 text-navy shadow-lift focus:outline-none sm:p-12 lg:min-h-[30rem] lg:p-16", className)}
+        className={cn("grid min-w-0 scroll-mt-28 content-start gap-8 rounded-xl bg-card p-8 text-navy shadow-lift focus:outline-none sm:p-12 lg:p-14", className)}
       >
-        <span className="grid size-16 place-items-center rounded-full bg-teal text-navy" aria-hidden>
-          <svg viewBox="0 0 20 20" className="size-8">
-            <path d="m5 10.5 3.2 3L15 6.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-        <p className="font-display text-3xl font-semibold">Thanks. You&rsquo;re on the list.</p>
-        <p className="max-w-xl text-lg text-navy-2">
-          {cleaner
-            ? "We’ll send you one message when Ping is taking on cleaners near you. Until then, there’s nothing more you need to do."
-            : "We’ll send you one message when booking opens near you. Until then, there’s nothing more you need to do."}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <span className="grid size-16 place-items-center rounded-full bg-teal text-navy" aria-hidden>
+            <svg viewBox="0 0 20 20" className="size-8">
+              <path d="m5 10.5 3.2 3L15 6.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          {hasDistrict ? (
+            <p className="rounded-full bg-teal-soft px-5 py-2.5 text-lg font-semibold text-teal-ink tabular">
+              {district} · {cleaner ? "cleaner" : "customer"}
+            </p>
+          ) : null}
+        </div>
+        <p className="font-display text-3xl font-semibold tracking-[-0.03em]">
+          Thanks. <span className="text-brand-gradient">You&rsquo;re on the list.</span>
         </p>
+
+        <ol className="grid gap-px overflow-hidden rounded-lg bg-line ring-1 ring-line sm:grid-cols-3">
+          {next.map((step, n) => (
+            <li key={step} className={cn("grid content-start gap-3 p-5 sm:p-6", n === 0 ? "bg-teal-soft" : "bg-canvas")}>
+              <span className="font-display text-xl font-semibold text-teal-ink tabular">{n === 0 ? "Now" : n === 1 ? "Next" : "Then"}</span>
+              <span className="text-lg font-semibold">{step}</span>
+            </li>
+          ))}
+        </ol>
+
+        <div className="grid min-w-0 gap-4 border-t border-line pt-8">
+          <p className="text-lg text-navy-2">
+            {cleaner ? "Know another cleaner who’d want this? Every postcode counts." : "Know someone who’d want Ping? Every postcode counts."}
+          </p>
+          <ShareLaunch />
+        </div>
+
         <Link
           href={cleaner ? "/clean-for-ping" : "/#how"}
           className="inline-block w-fit py-3 text-lg font-semibold text-blue underline decoration-blue/30 underline-offset-4 hover:decoration-blue"
@@ -122,6 +152,8 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
   const questions = LAUNCH_QUESTIONS[kind];
   const mine = answers[kind];
   const answered = questions.filter((q) => (mine[q.key]?.length ?? 0) > 0).length;
+  // Postcode, one way to reach them and the tick: once those are in, sending is always in reach on a phone.
+  const ready = postcode.trim() !== "" && (contact === "email" ? email.trim() !== "" : phone.trim() !== "") && notify;
 
   const pick = (q: LaunchQuestion, value: string) =>
     setAnswers((all) => {
@@ -322,31 +354,35 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
             </p>
             <div aria-hidden className="h-2 overflow-hidden rounded-full bg-mist">
               <div
-                className="h-full rounded-full bg-[linear-gradient(90deg,var(--color-blue)_0%,var(--color-teal)_100%)] transition-[width] duration-500 ease-out-soft"
+                className="h-full rounded-full bg-blue transition-[width] duration-500 ease-out-soft"
                 style={{ width: `${(answered / questions.length) * 100}%` }}
               />
             </div>
           </div>
         </div>
 
-        {questions.map((q) => {
+        {questions.map((q, index) => {
           const chosen = mine[q.key] ?? [];
           const max = q.max ?? q.options.length;
           const full = q.pick === "many" && chosen.length >= max;
           return (
-            <fieldset key={`${kind}-${q.key}`} className="grid min-w-0 gap-4">
-              <legend className="mb-4 text-lg font-semibold">
+            <fieldset key={`${kind}-${q.key}`} className="min-w-0 rounded-lg bg-canvas p-5 ring-1 ring-inset ring-line/70 sm:p-7">
+              {/* float + full width keeps the legend inside the panel instead of on its edge */}
+              <legend className="float-left mb-5 grid w-full grid-cols-[2.25rem_1fr] gap-x-3 text-lg font-semibold">
+                <span aria-hidden className="font-display text-teal-ink tabular">{String(index + 1).padStart(2, "0")}</span>
+                <span>
                 {q.label}
                 {q.pick === "many" ? <span className="mt-1 block text-base font-normal text-navy-2 lg:text-lg">{max < q.options.length ? `Pick up to ${max}.` : "Pick all that apply."}</span> : null}
+                </span>
               </legend>
-              <div className="flex flex-wrap gap-2.5">
+              <div className="clear-both flex flex-wrap gap-2.5 sm:pl-12">
                 {q.options.map((o) => {
                   const on = chosen.includes(o.value);
                   return (
                     <label
                       key={o.value}
                       className={cn(
-                        "inline-flex min-h-12 min-w-14 max-w-full cursor-pointer select-none items-center justify-center gap-2 rounded-full px-5 py-2.5 text-left text-base font-semibold leading-snug lg:text-lg transition-[background-color,color,box-shadow,transform] duration-200 ease-out-soft active:scale-[0.97] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue has-[:focus-visible]:ring-offset-2",
+                        "inline-flex min-h-12 min-w-14 max-w-full cursor-pointer select-none items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-left text-base font-semibold leading-snug lg:text-lg transition-[background-color,color,box-shadow,transform] duration-200 ease-out-soft active:scale-[0.97] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue has-[:focus-visible]:ring-offset-2",
                         on ? "bg-blue text-white shadow-card" : "bg-card text-navy shadow-card ring-1 ring-inset ring-navy-3/55 hover:ring-navy",
                         !on && full && "cursor-not-allowed opacity-50 shadow-none hover:ring-navy-3/55",
                       )}
@@ -413,10 +449,18 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
         <hr className="border-line" />
       )}
 
-      {/* On a phone the questions make a long form. This is a direct child of the form, so it
-          rides the bottom of the screen for as long as the form is in view, then settles into
-          its place at the end: sending is always one tap away. */}
-      <div data-send className="max-sm:sticky max-sm:bottom-3 max-sm:z-10 max-sm:-mx-2 max-sm:rounded-full max-sm:bg-card/85 max-sm:p-1.5 max-sm:shadow-lift max-sm:backdrop-blur">
+      {/* On a phone the questions make a long form. Once the three required things are in, this
+          bar (a direct child of the form) docks to the bottom of the screen for as long as the
+          form is in view, then settles into its place at the end. Until then it stays put, so it
+          never sits over a field that still needs filling. */}
+      <div
+        data-send
+        data-docked={ready || undefined}
+        className={cn(
+          ready &&
+            "max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:-mx-6 max-sm:border-t max-sm:border-line max-sm:bg-card max-sm:px-6 max-sm:pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-sm:pt-3 max-sm:shadow-card",
+        )}
+      >
         <Button type="submit" size="xl" variant="primary" pending={pending} className="w-full max-sm:px-6">
           {KIND_CHOICE[kind].submit}
         </Button>
@@ -424,7 +468,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
 
       <p className="text-base text-navy-2 lg:text-lg">
         {launchConsentText(kind, setup.retentionMonths)}{" "}
-        <Link href="/privacy" className="font-semibold text-blue underline decoration-blue/30 underline-offset-4 hover:decoration-blue">
+        <Link href="/privacy" className="-my-3 inline-block py-3 font-semibold text-blue underline decoration-blue/30 underline-offset-4 hover:decoration-blue">
           Privacy notice
         </Link>
       </p>
@@ -457,6 +501,64 @@ function LightField({ id, label, optional, error, children }: { id: string; labe
           {error}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+const LAUNCH_URL = "https://pingclean.co.uk/launch";
+
+/**
+ * "Send them this page", for real: the phone's share sheet where there is one, and a copy
+ * button everywhere. Both run from a tap, and say so if the browser refuses.
+ */
+function ShareLaunch() {
+  const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
+  // Only ever rendered in the browser, after the form has been sent, so this is safe to read here.
+  const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+  const url = typeof window === "undefined" ? LAUNCH_URL : `${window.location.origin}/launch`;
+  const shown = url.replace(/^https?:\/\//, "");
+  return (
+    <div className="grid min-w-0 gap-3">
+      {/* The link in a field of its own, with its copy button inside it. */}
+      <div className="flex min-w-0 items-center gap-2 rounded-md bg-canvas py-1.5 pl-4 pr-1.5 ring-1 ring-inset ring-navy-3/55">
+        <span className="min-w-0 flex-1 truncate text-lg font-semibold tabular">{shown}</span>
+        <Button
+          type="button"
+          variant={copied === "copied" ? "ink" : "primary"}
+          className="shrink-0"
+          onClick={() => {
+            navigator.clipboard.writeText(url).then(
+              () => setCopied("copied"),
+              () => setCopied("failed"),
+            );
+          }}
+          icon={
+            copied === "copied" ? (
+              <svg viewBox="0 0 20 20" className="size-5" aria-hidden>
+                <path d="m5 10.5 3.2 3L15 6.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : undefined
+          }
+        >
+          {copied === "copied" ? "Link copied" : "Copy the link"}
+        </Button>
+      </div>
+      {canShare ? (
+        <Button
+          type="button"
+          size="lg"
+          variant="secondary"
+          className="w-fit max-sm:w-full"
+          onClick={() => {
+            navigator.share({ title: "Ping Clean", text: "Regular home cleaning for West Cumbria. Put your postcode on the list.", url }).catch(() => {});
+          }}
+        >
+          Share this page
+        </Button>
+      ) : null}
+      <p className="text-base text-bad lg:text-lg" aria-live="polite">
+        {copied === "failed" ? "Couldn’t copy it for you. Press and hold the link to copy it." : ""}
+      </p>
     </div>
   );
 }

@@ -58,7 +58,7 @@ export const LAUNCH_QUESTIONS: Record<LaunchKind, LaunchQuestion[]> = {
       options: [o("yes_would_change", "Yes, but I’d change"), o("used_to", "I used to"), o("never", "Never had one")] },
     { key: "priorities", label: "What matters most to you?", pick: "many", max: 3,
       options: [o("same_cleaner", "The same cleaner each time"), o("reliable", "Turning up when they say"),
-        o("checked", "Knowing they’ve been checked"), o("proof", "Proof it’s been done"),
+        o("checked", "Checked cleaners"), o("proof", "Proof it’s been done"),
         o("easy_booking", "Easy to book and pay"), o("no_contract", "No contract")] },
     { key: "start", label: "When would you want to start?", pick: "one",
       options: [o("at_launch", "As soon as you launch"), o("few_months", "In the next few months"), o("just_looking", "Just looking for now")] },
@@ -76,7 +76,7 @@ export const LAUNCH_QUESTIONS: Record<LaunchKind, LaunchQuestion[]> = {
       options: [o("yes", "Yes"), o("no", "No")] },
     { key: "priorities", label: "What matters most to you in cleaning work?", pick: "many", max: 3,
       options: [o("own_hours", "Choosing my own hours"), o("paid_on_time", "Being paid on time"), o("close_to_home", "Work close to home"),
-        o("regulars", "Regular customers"), o("see_pay_first", "Seeing the pay before I say yes"), o("own_boss", "Being my own boss")] },
+        o("regulars", "Regular customers"), o("see_pay_first", "Seeing the pay first"), o("own_boss", "Being my own boss")] },
   ],
 };
 
