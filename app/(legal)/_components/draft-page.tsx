@@ -3,7 +3,7 @@ import { Wordmark } from "@/components/ui";
 
 /**
  * Placeholder legal page. The headings say what the final page must cover; the wording is
- * Carl's and Kate's to write. Clearly marked as a draft so nobody mistakes it for the real thing.
+ * Carl's and the accountant's to write. Clearly marked as a draft so nobody mistakes it for the real thing.
  */
 export function DraftLegalPage({ title, intro, sections }: { title: string; intro: ReactNode; sections: { heading: string; points: string[] }[] }) {
   return (
@@ -15,7 +15,7 @@ export function DraftLegalPage({ title, intro, sections }: { title: string; intr
         <div className="mx-auto grid max-w-[96rem] gap-8 px-5 py-16 text-on-navy sm:px-10 lg:grid-cols-12 lg:px-16 lg:py-24">
           <div className="lg:col-span-7">
             <p className="mb-6 inline-flex items-center gap-3 rounded-full bg-warn-soft px-4 py-1.5 text-sm font-bold uppercase tracking-[0.12em] text-warn">
-              Draft for Carl and Kate to finalise
+              Draft, not yet final
             </p>
             <h1 className="text-3xl font-semibold">{title}</h1>
           </div>

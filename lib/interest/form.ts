@@ -8,7 +8,7 @@ export type InterestSource = (typeof INTEREST_SOURCES)[number];
 
 /**
  * The consent wording's version, stored with every row. Change it whenever the wording
- * below changes. Draft until Carl and Kate approve it.
+ * below changes. Draft until Carl and the accountant approve it.
  */
 export const INTEREST_CONSENT_VERSION = "draft-2026-11";
 
@@ -16,7 +16,7 @@ export const INTEREST_CONSENT_VERSION = "draft-2026-11";
 export const INTEREST_NOTIFY_LABEL = "Tell me when booking opens near me";
 
 /**
- * The wording under the form (draft for Carl and Kate). `months` comes from
+ * The wording under the form (draft for Carl and the accountant). `months` comes from
  * settings.interest_retention_months, via interestFormSetup() — never typed in.
  */
 export function interestConsentText(months: number): string {
