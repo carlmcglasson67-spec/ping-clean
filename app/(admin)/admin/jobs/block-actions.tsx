@@ -5,7 +5,7 @@ import { useId, useState, useTransition } from "react";
 import { Button } from "@/components/ui";
 import { cn } from "@/components/ui/cn";
 import { NOT_SAVED, type ActionResult } from "../_lib/errors";
-import { assignBlock, endBlock, reopenBlock, resolveAlert } from "./actions";
+import { assignBlock, endBlock, reopenBlock, resolveAlert, settleClean } from "./actions";
 
 export type CleanerOption = { id: string; label: string; fits: boolean };
 type Mode = "assign" | "reopen" | "end" | null;
@@ -122,8 +122,59 @@ export function ResolveAlert({ alertId }: { alertId: string }) {
   );
 }
 
-function Panel({ children }: { children: React.ReactNode }) {
-  return <div className="grid gap-3 rounded-md bg-mist/70 p-4 ring-1 ring-inset ring-line">{children}</div>;
+/**
+ * A missed or unfinished clean: was it done or not? Either answer needs a few words on what
+ * happened and a second tap that spells out what it does to the money. `charge` and `pay`
+ * are already formatted (the clean's own price and the cleaner's share), or null when the
+ * clean costs nothing.
+ */
+export function SettleClean({ visitId, started, summary, charge, pay, canBeDone }: {
+  visitId: string; started: boolean; summary: string; charge: string | null; pay: string | null; canBeDone: boolean;
+}) {
+  const [mode, setMode] = useState<"done" | "not_done" | null>(null);
+  const [reason, setReason] = useState("");
+  const { result, setResult, pending, run } = useRun();
+  const reasonId = useId();
+  const open = (m: "done" | "not_done" | null) => { setMode(m); setResult(null); };
+  const settle = () => run(() => settleClean({ visitId, outcome: mode, reason }), () => { setMode(null); setReason(""); });
+
+  return (
+    <div className="grid gap-3">
+      {!mode ? (
+        <div className="flex flex-wrap gap-2">
+          {canBeDone ? <Button variant="primary" onClick={() => open("done")}>It was done</Button> : null}
+          <Button variant="secondary" onClick={() => open("not_done")}>It wasn&rsquo;t done</Button>
+        </div>
+      ) : (
+        <Panel className="max-w-3xl">
+          <p className="font-semibold">{mode === "done" ? `Mark ${summary} as done?` : `Mark ${summary} as not done?`}</p>
+          <p className="max-w-prose text-sm text-navy-2">
+            {mode === "done"
+              ? charge
+                ? `The customer is charged ${charge} and the cleaner is paid ${pay} after the usual check period, exactly as if the cleaner had finished it in the app. This can't be undone: a wrong charge is put right with a refund.`
+                : "It counts as a finished clean. There's nothing to charge for it. This can't be undone."
+              : started
+                ? "The clean is cancelled. Nobody is charged and the cleaner isn't paid. This can't be undone."
+                : "It stays as a missed clean. Nobody is charged and the cleaner isn't paid. If it turns out the clean did happen, you can still mark it as done."}
+          </p>
+          <label htmlFor={reasonId} className="text-sm font-semibold">What happened? Kept on the clean, seen only by the Ping team.</label>
+          <textarea id={reasonId} rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)}
+            className="w-full rounded-md bg-card px-4 py-3 text-base ring-1 ring-inset ring-line focus:outline-none focus:ring-2 focus:ring-blue" />
+          <Row>
+            <Button variant={mode === "done" ? "primary" : "danger"} pending={pending} disabled={!reason.trim()} onClick={settle}>
+              {mode === "done" ? (charge ? `Yes, done: charge ${charge}` : "Yes, it was done") : "Yes, it wasn't done"}
+            </Button>
+            <Button variant="ghost" disabled={pending} onClick={() => open(null)}>Cancel</Button>
+          </Row>
+        </Panel>
+      )}
+      {result ? <Message result={result} /> : null}
+    </div>
+  );
+}
+
+function Panel({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={cn("grid gap-3 rounded-md bg-mist/70 p-4 ring-1 ring-inset ring-line", className)}>{children}</div>;
 }
 
 function Row({ children }: { children: React.ReactNode }) {

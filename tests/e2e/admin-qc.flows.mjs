@@ -97,4 +97,24 @@ export default async function qcFlows({ page, BASE, check, dir, sql, settle, sho
     await settle(page);
     await page.getByText("Page 2 of 2 · 13 to score").waitFor();
   });
+
+  await check("a clean the team marked as done by hand says so, with the reason, and never \"Everything ticked\"", async () => {
+    // As admin_settle_visit leaves it: completed just now, nothing ticked or photographed in the app.
+    const [v] = await sql(
+      `insert into public.visits (series_id, customer_id, cleaner_id, scheduled_date, window_start, window_end, duration_minutes, status, started_at, completed_at, price_pence, cleaner_earnings_pence, ping_fee_pence)
+       select v.series_id, v.customer_id, v.cleaner_id, v.scheduled_date - 300, v.window_start, v.window_end, v.duration_minutes, 'completed', now(), now(), v.price_pence, v.cleaner_earnings_pence, v.ping_fee_pence
+       from public.visits v where v.id = $1 returning id`, [ANNA_TODAY]);
+    await sql(
+      `insert into public.visit_settlements (visit_id, outcome, was_status, reason, actor_id)
+       values ($1, 'done', 'no_show', 'e2e: Tara had no signal at the house. Anna confirmed it was done.', $2)`, [v.id, ADMIN]);
+    await page.goto(`${BASE}/admin/qc`);
+    await settle(page);
+    const byHand = page.getByRole("region", { name: /To score/ }).locator(":scope > ul > li").filter({ hasText: "Marked done by the Ping team" });
+    const text = await byHand.innerText();
+    assert.match(text, /The cleaner didn.t finish this one in the app\. The team marked it as done:/);
+    assert.match(text, /Tara had no signal at the house\. Anna confirmed it was done\./);
+    assert.match(text, /No checklist: this clean was never started in the app\./);
+    assert.ok(!/Everything ticked/.test(text), "no evidence is never shown as a full checklist");
+    await shoot(page, dir, "admin-qc-by-hand");
+  });
 }
