@@ -163,7 +163,7 @@ export default function CleanForPingPage() {
                 {/* A job card as it appears on the cleaner's board: the shape, never real data. */}
                 <div className="absolute inset-x-6 top-1/2 -translate-y-1/2 rounded-lg bg-card p-6 text-navy shadow-lift ring-1 ring-line/70 sm:inset-x-10">
                   <p className="text-sm font-semibold uppercase tracking-[0.14em] text-teal-ink">New regular near you</p>
-                  <p className="mt-3 font-display text-2xl font-semibold">Workington CA14</p>
+                  <p className="mt-3 font-display text-2xl font-semibold">Carlisle CA2</p>
                   <p className="mt-1 text-base text-navy-2">3 bedrooms · 8 cleans · Every week · Thursdays</p>
                   <div className="mt-5 flex items-center justify-between gap-4 border-t border-line pt-4">
                     <span className="text-base font-semibold text-navy-2">You see your earnings here</span>

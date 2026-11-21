@@ -9,7 +9,7 @@ import { Eyebrow } from "../_components/blocks";
 import { FaqList } from "../_components/faq-list";
 import { LaunchInterest } from "../_components/launch-interest";
 import { STANDARD_CLEAN, STANDARD_CLEAN_COUNT } from "../_content/checklist";
-import { AREA_LINKS, AREAS_LINK } from "../_content/nav";
+import { AREA_GROUPS, AREAS_LINK } from "../_content/nav";
 import type { Faq } from "../_content/faq";
 
 export const metadata: Metadata = {
@@ -269,7 +269,7 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
                   <dl className="mt-6 grid grid-cols-2 gap-3 border-t border-line pt-5 text-base lg:text-lg">
                     <div>
                       <dt className="text-navy-2">Where</dt>
-                      <dd className="font-semibold">Workington, CA14</dd>
+                      <dd className="font-semibold">Carlisle, CA2</dd>
                     </div>
                     <div>
                       <dt className="text-navy-2">Home</dt>
@@ -319,40 +319,50 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
               We&rsquo;re opening one town at a time. The postcodes left on this list, by customers and by cleaners, help decide which come first.
             </p>
           </div>
-          <ul className="mt-14 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-line ring-1 ring-line lg:mt-20 lg:grid-cols-3">
-            {AREA_LINKS.map((t) => (
-              <li key={t.label} className="bg-card">
-                <Link
-                  href={t.href}
-                  className="group flex min-h-24 items-center justify-between gap-x-4 gap-y-1 px-4 py-5 transition-colors duration-200 hover:bg-teal-soft max-sm:flex-col max-sm:items-start max-sm:justify-center sm:px-8 lg:min-h-28"
-                >
-                  <span className="min-w-0 font-display text-lg font-semibold tracking-[-0.03em] sm:text-xl">{t.label}</span>
-                  <span className="flex shrink-0 items-center gap-4 text-lg font-semibold text-teal-ink tabular">
-                    {t.districts.join(", ")}
-                    <span aria-hidden className="sm:hidden">&rarr;</span>
-                    <span aria-hidden className="grid size-10 place-items-center max-sm:hidden rounded-full bg-canvas text-navy ring-1 ring-line transition-[transform,background-color] duration-300 ease-out-soft group-hover:translate-x-1 group-hover:bg-teal">
-                      &rarr;
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-            {/* The last cell closes the grid whatever the number of towns: it spans what is left of the row. */}
-            <li className={"bg-navy text-on-navy " + (AREA_LINKS.length % 2 === 0 ? "max-lg:col-span-2 " : "") + (AREA_LINKS.length % 3 === 1 ? "lg:col-span-2" : AREA_LINKS.length % 3 === 0 ? "lg:col-span-3" : "")}>
-              <Link
-                href={registerHref("customer")}
-                className="group flex min-h-24 items-center justify-between gap-4 px-6 py-6 transition-colors duration-200 hover:bg-navy-800 sm:px-8 lg:min-h-28"
-              >
-                <span className="min-w-0">
-                  <span className="block font-display text-xl font-semibold tracking-[-0.03em]">Your town not here?</span>
-                  <span className="mt-1 block text-lg text-on-navy-2">Leave your postcode anyway. It tells us where to look next.</span>
-                </span>
-                <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-full bg-teal text-navy transition-transform duration-300 ease-out-soft group-hover:translate-x-1">
-                  &rarr;
-                </span>
-              </Link>
-            </li>
-          </ul>
+          {AREA_GROUPS.map((g, gi) => (
+            <div key={g.id} className={gi === 0 ? "mt-14 lg:mt-20" : "mt-10 lg:mt-14"}>
+              <p className="mb-4 flex items-baseline justify-between gap-6 text-sm font-semibold uppercase tracking-[0.16em] text-navy-2">
+                <span>{g.name}</span>
+                <span className="normal-case tracking-normal text-navy-3 max-sm:hidden">{g.line}</span>
+              </p>
+              <ul className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-line ring-1 ring-line lg:grid-cols-3">
+                {g.links.map((t) => (
+                  <li key={t.label} className="bg-card">
+                    <Link
+                      href={t.href}
+                      className="group flex min-h-24 items-center justify-between gap-x-4 gap-y-1 px-4 py-5 transition-colors duration-200 hover:bg-teal-soft max-sm:flex-col max-sm:items-start max-sm:justify-center sm:px-8 lg:min-h-28"
+                    >
+                      <span className="min-w-0 font-display text-lg font-semibold tracking-[-0.03em] sm:text-xl">{t.label}</span>
+                      <span className="flex shrink-0 items-center gap-4 text-lg font-semibold text-teal-ink tabular">
+                        {t.districts.join(", ")}
+                        <span aria-hidden className="sm:hidden">&rarr;</span>
+                        <span aria-hidden className="grid size-10 place-items-center max-sm:hidden rounded-full bg-canvas text-navy ring-1 ring-line transition-[transform,background-color] duration-300 ease-out-soft group-hover:translate-x-1 group-hover:bg-teal">
+                          &rarr;
+                        </span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+                {/* After the last region, a cell that closes the grid whatever the number of towns: it spans what is left of the row. */}
+                {gi === AREA_GROUPS.length - 1 ? (
+                  <li className={"bg-navy text-on-navy " + (g.links.length % 2 === 0 ? "max-lg:col-span-2 " : "") + (g.links.length % 3 === 1 ? "lg:col-span-2" : g.links.length % 3 === 0 ? "lg:col-span-3" : "")}>
+                    <Link
+                      href={registerHref("customer")}
+                      className="group flex min-h-24 items-center justify-between gap-4 px-6 py-6 transition-colors duration-200 hover:bg-navy-800 sm:px-8 lg:min-h-28"
+                    >
+                      <span className="min-w-0">
+                        <span className="block font-display text-xl font-semibold tracking-[-0.03em]">Your town not here?</span>
+                        <span className="mt-1 block text-lg text-on-navy-2">Leave your postcode anyway. It tells us where to look next.</span>
+                      </span>
+                      <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-full bg-teal text-navy transition-transform duration-300 ease-out-soft group-hover:translate-x-1">
+                        &rarr;
+                      </span>
+                    </Link>
+                  </li>
+                ) : null}
+              </ul>
+            </div>
+          ))}
           <Link href={AREAS_LINK.href} className="mt-8 inline-block py-3 text-lg font-semibold text-navy-2 hover:text-navy">
             What a Ping clean looks like in each&nbsp;town<span aria-hidden>&nbsp;&rarr;</span>
           </Link>

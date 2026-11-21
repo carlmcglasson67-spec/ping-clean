@@ -223,7 +223,7 @@ export default async function Home() {
               Carlisle and the west&nbsp;coast.
             </h2>
             <p className="mt-6 max-w-sm text-lg text-navy-2">
-              {townCount()} and the villages between them, from Carlisle out to Brampton and down the west coast to Seascale. Ping cleaners choose the areas they cover, so the one who takes on your home wants to be there.
+              {townCount()}, from Carlisle out to Brampton and down the west coast to Seascale. Ping cleaners choose the areas they cover, so the one who takes on your home wants to be there.
             </p>
           </div>
           <div className="grid min-w-0 content-start gap-14 lg:col-span-8">

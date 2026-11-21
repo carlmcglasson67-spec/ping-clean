@@ -168,8 +168,8 @@ export function SiteHeader() {
           <div className="col-span-4 grid content-between gap-8 rounded-lg bg-mist p-9">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-navy-2">Where Ping cleans</p>
             <div>
-              <p className="font-display text-2xl font-semibold leading-tight">Carlisle, and West Cumbria from the Solway to Seascale.</p>
-              <p className="mt-4 text-navy-2">{townCount()} and the villages around them. Pick yours to see what a regular clean looks like there.</p>
+              <p className="font-display text-2xl font-semibold leading-tight">Carlisle, the Solway and the west coast to Seascale.</p>
+              <p className="mt-4 text-navy-2">{townCount()}. Pick yours to see what a regular clean looks like there.</p>
               <Link href={AREAS_LINK.href} onClick={close} className="mt-6 inline-flex min-h-12 items-center gap-2 rounded-full bg-navy px-5 text-base font-semibold text-on-navy hover:bg-navy-800">
                 {AREAS_LINK.label} <span aria-hidden>&rarr;</span>
               </Link>

@@ -48,7 +48,7 @@ export const TOWNS: Town[] = [
     line: "Villages on the Eden, just east of the city.",
     intro:
       "Wetheral, Scotby and the villages along the Eden are a few minutes from Carlisle but feel a world away. A regular Ping clean fits around commuting and school runs: pick the day and time window, leave a key if you’ll be out, and come home to photos of the finished job.",
-    around: ["Scotby", "Cumwhinton", "Warwick Bridge", "Great Corby", "Cotehill"],
+    around: ["Cumwhinton", "Warwick Bridge", "Great Corby", "Cotehill"],
     near: ["carlisle", "brampton"],
   },
   {
@@ -56,7 +56,7 @@ export const TOWNS: Town[] = [
     name: "Dalston",
     region: "carlisle",
     districts: ["CA5"],
-    line: "South-west of the city, towards the Caldew valley.",
+    line: "South-west of the city, in the Caldew valley.",
     intro:
       "Dalston and the villages out towards the Solway are spread out, and it can be hard to find a cleaner who’ll come regularly. Ping cleaners choose the areas they cover, so the one who takes on your home is the one who wants to be there.",
     around: ["Burgh by Sands", "Thursby", "Raughton Head"],

@@ -105,7 +105,7 @@ export const homeFields = z.object({
     .transform((v, ctx) => {
       const p = parsePostcode(v);
       if (p.kind !== "full") {
-        ctx.addIssue({ code: "custom", message: "Enter your full postcode, like CA14 3XX" });
+        ctx.addIssue({ code: "custom", message: "Enter your full postcode, like CA1 2XX" });
         return z.NEVER;
       }
       return p.postcode;

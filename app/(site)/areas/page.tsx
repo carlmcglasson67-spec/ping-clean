@@ -42,7 +42,7 @@ export default function AreasPage() {
           </div>
           <div className="rise grid content-end gap-6 [animation-delay:120ms] lg:col-span-4 lg:pb-4">
             <p className="text-xl text-navy-2">
-              {townCount()} and the villages between them: Carlisle and out to Wigton, Longtown and Brampton, then the west coast from Maryport to Seascale. Pick yours to see what a regular clean looks like there.
+              {townCount()}: Carlisle and out to Wigton, Longtown and Brampton, then the west coast from Maryport to Seascale. Pick yours to see what a regular clean looks like there.
             </p>
           </div>
         </div>

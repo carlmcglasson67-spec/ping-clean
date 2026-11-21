@@ -30,6 +30,6 @@ describe("area content", () => {
   });
 
   it("counts towns in words for the copy", () => {
-    expect(townCount()).toBe("Sixteen towns");
+    expect(townCount()).toBe("Sixteen towns and villages");
   });
 });

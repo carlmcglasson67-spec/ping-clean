@@ -30,10 +30,10 @@ export const AREA_GROUPS: { id: Region; name: string; line: string; links: AreaL
   links: townsIn(r.id).map((t) => ({ href: areaHref(t.slug), label: t.name, districts: t.districts })),
 }));
 
-/** "Sixteen towns", counted rather than typed, so adding a town keeps the wording true. */
+/** "Sixteen towns and villages", counted rather than typed, so adding one keeps the wording true. */
 export function townCount(): string {
   const words = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen", "Twenty"];
-  return `${words[TOWNS.length] ?? TOWNS.length} towns`;
+  return `${words[TOWNS.length] ?? TOWNS.length} towns and villages`;
 }
 
 export const CLEANERS_LINK: NavLink = { href: "/clean-for-ping", label: "Clean for Ping" };
