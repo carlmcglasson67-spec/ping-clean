@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { resetReturnUrl } from "@/lib/auth/links";
-import { CAPTCHA_MESSAGE, captchaToken, isCaptchaError } from "@/lib/auth/captcha";
+import { captchaMessage, captchaToken, isCaptchaError } from "@/lib/auth/captcha";
 import { createClient } from "@/lib/db/server";
 import { hasSupabaseEnv } from "@/lib/env";
 
@@ -24,6 +24,8 @@ export async function requestReset(_prev: ForgotState, formData: FormData): Prom
     redirectTo: resetReturnUrl(),
     captchaToken: captchaToken(formData),
   });
-  if (isCaptchaError(error)) return { email, captcha: CAPTCHA_MESSAGE };
+  if (isCaptchaError(error)) {
+    return formData.has("cf-turnstile-response") ? { email, captcha: captchaMessage(formData) } : { email, error: captchaMessage(formData) };
+  }
   return { sent: parsed.data };
 }

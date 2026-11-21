@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { captchaToken, isCaptchaError } from "./captcha";
+import { CAPTCHA_MESSAGE, CAPTCHA_NO_WIDGET, captchaMessage, captchaToken, isCaptchaError } from "./captcha";
 
 describe("auth captcha", () => {
   it("reads the widget's token from the form", () => {
@@ -16,5 +16,12 @@ describe("auth captcha", () => {
     expect(isCaptchaError({ message: "captcha verification process failed" })).toBe(true);
     expect(isCaptchaError({ code: "invalid_credentials", message: "Invalid login credentials" })).toBe(false);
     expect(isCaptchaError(null)).toBe(false);
+  });
+
+  it("asks for a refresh when the page sent no token at all", () => {
+    const f = new FormData();
+    expect(captchaMessage(f)).toBe(CAPTCHA_NO_WIDGET);
+    f.set("cf-turnstile-response", "abc");
+    expect(captchaMessage(f)).toBe(CAPTCHA_MESSAGE);
   });
 });

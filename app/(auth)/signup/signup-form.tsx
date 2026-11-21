@@ -104,6 +104,7 @@ function CheckEmail({ email, next }: { email: string; next?: string }) {
         <Button type="submit" variant="secondary" size="lg" pending={pending} className="w-full">
           Send it again
         </Button>
+        {state.captcha && !siteKey ? <p role="alert" className="text-base font-medium text-bad">{state.captcha}</p> : null}
         {state.done ? <p role="status" className="text-sm text-teal-ink">If that address can have an account, a fresh link is on its way.</p> : null}
       </form>
       <p className="text-sm text-navy-3">

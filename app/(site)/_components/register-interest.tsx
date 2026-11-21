@@ -220,7 +220,7 @@ export function RegisterInterest({
         )}
       </div>
 
-      {setup.turnstileSiteKey ? <Turnstile siteKey={setup.turnstileSiteKey} error={fe.captcha} /> : null}
+      {setup.turnstileSiteKey ? <Turnstile siteKey={setup.turnstileSiteKey} error={fe.captcha} resetOn={state} /> : null}
 
       <Button type="submit" size="xl" variant="signal" pending={pending} className="w-full">
         Let me know
@@ -259,4 +259,3 @@ function NavyField({ id, label, error, children }: { id: string; label: string; 
   );
 }
 
-export { Turnstile };

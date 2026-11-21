@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { CAPTCHA_MESSAGE, captchaToken, isCaptchaError } from "@/lib/auth/captcha";
+import { captchaMessage, captchaToken, isCaptchaError } from "@/lib/auth/captcha";
 import { emailReturnUrl, tidyPhone } from "@/lib/auth/links";
 import { safeNext } from "@/lib/auth/next";
 import { passwordProblem } from "@/lib/auth/password";
@@ -86,7 +86,9 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
   });
 
   if (error) {
-    if (isCaptchaError(error)) return { values, fieldErrors: { captcha: CAPTCHA_MESSAGE } };
+    if (isCaptchaError(error)) {
+      return formData.has("cf-turnstile-response") ? { values, fieldErrors: { captcha: captchaMessage(formData) } } : { values, error: captchaMessage(formData) };
+    }
     // Email-sending limits apply per address, so only to addresses that already exist:
     // answer exactly as for a new address. (The per-IP request limit says nothing about
     // any address, so that one can be shown.)
@@ -130,6 +132,6 @@ export async function resendConfirmation(_prev: ResendState, formData: FormData)
     },
   });
   // The human check isn't about the address, so that one refusal can be shown.
-  if (isCaptchaError(error)) return { captcha: CAPTCHA_MESSAGE };
+  if (isCaptchaError(error)) return { captcha: captchaMessage(formData) };
   return { done: true };
 }

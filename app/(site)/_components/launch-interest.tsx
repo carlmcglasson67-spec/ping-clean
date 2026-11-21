@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { startTransition, useActionState, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Button, cn } from "@/components/ui";
+import { Button, Turnstile, cn } from "@/components/ui";
 import { registerLaunchInterest } from "@/lib/interest/actions";
 import {
   LAUNCH_FIELDS,
@@ -17,7 +17,7 @@ import {
   type LaunchKind,
   type LaunchQuestion,
 } from "@/lib/interest/launch";
-import { Turnstile, type InterestSetup } from "./register-interest";
+import { type InterestSetup } from "./register-interest";
 
 const KIND_CHOICE: Record<LaunchKind, { title: string; note: string; submit: string }> = {
   customer: { title: "I want a cleaner", note: "Register as a customer", submit: "Put me on the list" },
@@ -443,7 +443,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
       {/* ---------------------------------------------------------- send */}
       {setup.turnstileSiteKey ? (
         <div className="border-t border-line pt-10">
-          <Turnstile siteKey={setup.turnstileSiteKey} error={fe.captcha} theme="light" />
+          <Turnstile siteKey={setup.turnstileSiteKey} error={fe.captcha} theme="light" resetOn={state} />
         </div>
       ) : (
         <hr className="border-line" />
