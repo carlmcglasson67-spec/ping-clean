@@ -260,6 +260,9 @@ export function SettleClean({ info, only }: { info: SettleInfo; only?: "done" })
             <p id={hintId} className="text-sm text-navy-3">Needed before you can confirm.</p>
           </div>
 
+          {/* What went wrong is said here, by the field and the button it is about. */}
+          {result ? <Message result={result} /> : null}
+
           <div className="grid gap-3 sm:flex sm:flex-wrap">
             <Button variant={mode === "done" ? "primary" : info.started ? "danger" : "ink"} pending={pending} disabled={!reason.trim()} onClick={send}>
               {mode === "done" ? (info.money ? `Yes, charge ${info.money.charge}` : "Yes, it was done") : info.started ? "Yes, cancel the clean" : "Yes, leave it as missed"}
@@ -268,7 +271,7 @@ export function SettleClean({ info, only }: { info: SettleInfo; only?: "done" })
           </div>
         </div>
       )}
-      {result ? <div className="sm:col-span-2"><Message result={result} /></div> : null}
+      {!mode && result ? <div className="sm:col-span-2"><Message result={result} /></div> : null}
     </div>
   );
 }

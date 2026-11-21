@@ -8,6 +8,7 @@ const HOME = "00000000-0000-4000-b000-0000000000e1";
 const BLOCK = "00000000-0000-4000-c000-0000000000e1";
 const BLOCK2 = "00000000-0000-4000-c000-0000000000e2";
 const BLOCK3 = "00000000-0000-4000-c000-0000000000e3";
+const BLOCK4 = "00000000-0000-4000-c000-0000000000e4";
 
 /** An unclaimed block at a new home of Ben's in Whitehaven (CA28, which Alex covers). */
 async function unclaimedBlock(sql, id, weeksAhead) {
@@ -19,7 +20,7 @@ async function unclaimedBlock(sql, id, weeksAhead) {
     [id, HOME, BEN, weeksAhead * 7]);
 }
 
-export default async function jobsFlows({ page, BASE, check, dir, sql, settle, shoot }) {
+export default async function jobsFlows({ page, BASE, check, dir, sql, settle, shoot, browser, signIn }) {
   console.log("e2e: admin console, jobs (Track C)");
   await sql(
     `insert into public.properties (id, customer_id, address_line1, town, postcode, bedrooms, bathrooms)
@@ -168,6 +169,7 @@ export default async function jobsFlows({ page, BASE, check, dir, sql, settle, s
     await missedItem.getByLabel(/What happened/).fill("??");
     await missedItem.getByRole("button", { name: "Yes, leave it as missed" }).click();
     await missedItem.getByText("Say what happened, in a few words.").waitFor();
+    await shoot(page, dir, "admin-jobs-settle-missed");
     await missedItem.getByLabel(/What happened/).fill("Alex was ill and told nobody. Ben agreed to skip it.");
     await missedItem.getByRole("button", { name: "Yes, leave it as missed" }).click();
     await missedItem.waitFor({ state: "detached" });
@@ -189,6 +191,7 @@ export default async function jobsFlows({ page, BASE, check, dir, sql, settle, s
     await shoot(page, dir, "admin-jobs-not-done");
     await kept.getByRole("button", { name: "It was done after all" }).click();
     assert.equal(await kept.getByRole("button", { name: /wasn.t done/ }).count(), 0, "only the one way back is offered");
+    await shoot(page, dir, "admin-jobs-settle-after-all");
     await kept.getByLabel(/What happened/).fill("Alex sent her photos: she did the clean on the day.");
     await kept.getByRole("button", { name: "Yes, charge £40.00" }).click();
     await kept.waitFor({ state: "detached" });
@@ -206,6 +209,25 @@ export default async function jobsFlows({ page, BASE, check, dir, sql, settle, s
     await sql(`insert into public.visit_qc (visit_id, score, notes, reviewed_by) values ($1, 8, 'e2e: settled by hand', $2)`, [missed.id, ADMIN]);
   });
 
+  await check("the cleaner is told the office marked it as done, never that every item was ticked", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "en-GB", timezoneId: "Europe/London", deviceScaleFactor: 2 });
+    try {
+      const phone = await ctx.newPage();
+      await signIn(phone, "alex.cleaner");
+      await phone.waitForURL(`${BASE}/work`);
+      await phone.goto(`${BASE}/work/visit/${missed.id}`);
+      await phone.getByText("Done. Thank you.").waitFor();
+      const text = await phone.locator("main").innerText();
+      assert.match(text, /The Ping office marked this clean as done for you, so it has no checklist or photos in the app\./);
+      assert.ok(!/Every item ticked|The customer can see your checklist/.test(text), "nothing is claimed that didn't happen");
+      assert.ok(!/Alex sent her photos|Alex was ill/.test(text), "the office's reason stays with the office");
+      await phone.evaluate(() => document.fonts.ready);
+      await phone.screenshot({ path: `${dir}/work-visit-done-by-office-390.png`, fullPage: true });
+    } finally {
+      await ctx.close();
+    }
+  });
+
   await check("someone else settles it while the step is open: nothing is done twice, and the page says so", async () => {
     const [second] = await sql(`select id from public.visits where series_id = $1 and status = 'scheduled' order by scheduled_date limit 1`, [BLOCK3]);
     await sql(`update public.visits set scheduled_date = (now() at time zone 'Europe/London')::date - 2, status = 'no_show' where id = $1`, [second.id]);
@@ -218,17 +240,69 @@ export default async function jobsFlows({ page, BASE, check, dir, sql, settle, s
     await item.getByRole("button", { name: "It was done" }).click();
     await item.getByLabel(/What happened/).fill("Ben says it was done.");
     await asAdmin(`select public.admin_settle_visit('${second.id}', 'not_done', 'e2e: a colleague got there first')`);
+    // Hours ago, with this page left open since: the line below is still shown, however old.
+    await sql(`update public.visit_settlements set created_at = now() - interval '2 hours' where visit_id = $1`, [second.id]);
     await item.getByRole("button", { name: "Yes, charge £40.00" }).click();
     await item.waitFor({ state: "detached" });
-    const said = await page.getByRole("region", { name: /^Alerts/ }).getByRole("status").innerText();
+    const line = page.getByRole("region", { name: /^Alerts/ }).getByRole("status");
+    const said = await line.innerText();
     assert.match(said, /^Someone on the team had already dealt with this one\. Whitehaven CA28, .*: marked as not done\./);
+    assert.match(await line.getAttribute("class"), /warn/, "amber, not the green of something that went through");
     const [{ n: charges }] = await sql(`select count(*)::int as n from public.payments where visit_id = $1`, [second.id]);
     const [{ n: records }] = await sql(`select count(*)::int as n from public.visit_settlements where visit_id = $1`, [second.id]);
     assert.deepEqual({ charges, records }, { charges: 0, records: 1 });
+    await shoot(page, dir, "admin-jobs-settle-late");
   });
 
-  // Leave nothing of this block on Alex's calendar for the flows that follow.
+  await check("a clean that was started and never finished: the step says what the cleaner couldn't do, and \"wasn't done\" cancels it", async () => {
+    // A block of its own, later than the last one so the two never share a slot.
+    await unclaimedBlock(sql, BLOCK4, 8);
+    await asAdmin(`select public.admin_assign_series('${BLOCK4}', '${ALEX}')`);
+    const [third] = await sql(`select id from public.visits where series_id = $1 order by scheduled_date limit 1`, [BLOCK4]);
+    await sql(`update public.visits set scheduled_date = (now() at time zone 'Europe/London')::date - 3, status = 'in_progress', started_at = now() - interval '3 days' where id = $1`, [third.id]);
+    await sql(
+      `insert into public.checklist_items (visit_id, item_key, room, label, position, done, skipped_reason)
+       values ($1, 'kitchen.sink', 'Kitchen', 'Sink and taps cleaned and polished', 0, true, null),
+              ($1, 'bins.empty', 'Whole home', 'Bins emptied and bags replaced', 1, false, 'Bins already collected')`, [third.id]);
+    await sql(
+      `insert into public.engine_alerts (kind, series_id, visit_id, message)
+       values ('visit_unfinished', $1, $2, 'A clean was started but never marked complete. Check it and settle it by hand.')`, [BLOCK4, third.id]);
+    await page.goto(`${BASE}/admin/jobs`);
+    await settle(page);
+    const alerts = page.getByRole("region", { name: /^Alerts/ });
+    const item = alerts.locator("li").filter({ hasText: "Clean never finished" }).filter({ hasText: "Whitehaven CA28" });
+    const text = await item.innerText();
+    assert.match(text, /A clean was started but never marked complete\.\s+Ask the cleaner what happened, then say whether it was done\./);
+    assert.ok(!/settle it by hand/.test(text), "the engine's own instruction gives way to the two answers");
+
+    // "Done" says what the cleaner couldn't do before anything is charged.
+    await item.getByRole("button", { name: "It was done" }).click();
+    await item.getByText("Alex Test marked 1 item “couldn’t do” before stopping. It’s charged in full all the same.").waitFor();
+    await shoot(page, dir, "admin-jobs-settle-unfinished");
+    await item.getByRole("button", { name: "Cancel" }).click();
+
+    // "Wasn't done" cancels a started clean, and the button says so.
+    await item.getByRole("button", { name: "It wasn’t done" }).click();
+    await item.getByText("The clean is cancelled. Nobody is charged and Alex Test isn’t paid. This can’t be undone.").waitFor();
+    await item.getByLabel(/What happened/).fill("Alex was called away after ten minutes. Ben agreed it doesn’t count.");
+    await shoot(page, dir, "admin-jobs-settle-cancel");
+    await item.getByRole("button", { name: "Yes, cancel the clean" }).click();
+    await item.waitFor({ state: "detached" });
+    assert.match(await alerts.getByRole("status").innerText(), /^Whitehaven CA28, .*: marked as not done\. The clean is cancelled and nobody is charged\.$/);
+    const [v] = await sql(`select status::text, cancel_reason, cancelled_by from public.visits where id = $1`, [third.id]);
+    const [{ n: charges }] = await sql(`select count(*)::int as n from public.payments where visit_id = $1`, [third.id]);
+    assert.deepEqual({ v, charges }, { v: { status: "cancelled", cancel_reason: "admin", cancelled_by: ADMIN }, charges: 0 });
+    // A cancelled clean is final: only the missed one a colleague settled is kept for a way back.
+    assert.equal(await page.getByRole("group", { name: "Marked as not done" }).locator("li").count(), 1);
+    // The block carries on: its other clean is still booked.
+    const [b] = await sql(`select status::text from public.series where id = $1`, [BLOCK4]);
+    assert.equal(b.status, "claimed");
+  });
+
+  // Leave nothing of these blocks on Alex's calendar for the flows that follow.
   await asAdmin(`select public.admin_end_block('${BLOCK3}', 'e2e: settle flow finished')`);
+  // (The second block only exists if the check above got as far as making it.)
+  await asAdmin(`select public.admin_end_block('${BLOCK4}', 'e2e: settle flow finished')`).catch(() => {});
 
   await page.goto(`${BASE}/admin/jobs`);
   await shoot(page, dir, "admin-jobs");
