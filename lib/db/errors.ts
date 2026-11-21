@@ -56,6 +56,7 @@ export const PING_ERRORS = {
   // Settling a clean by hand (the Ping team)
   PC056: "That clean isn't waiting to be settled any more. Refresh to see where it stands.",
   PC057: "That clean had no cleaner, so it can't be marked as done.",
+  PC058: "That clean was waiting for cover, so the cleaner named on it isn't the one who did it. Mark it as not done, and pay whoever covered outside Ping.",
 } as const;
 
 export type PingErrorCode = keyof typeof PING_ERRORS;

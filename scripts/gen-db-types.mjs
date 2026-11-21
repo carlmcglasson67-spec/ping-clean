@@ -132,7 +132,7 @@ out += `${ind(2)}};
         Returns: undefined;
       };
       admin_settle_visit: {
-        Args: { p_visit: string; p_outcome: string; p_reason: string };
+        Args: { p_visit: string; p_outcome: string; p_reason: string; p_was_not_done?: boolean };
         Returns: undefined;
       };
       start_visit: {

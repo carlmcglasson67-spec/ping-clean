@@ -239,6 +239,9 @@ pages are live. So the sign-in settings and the email sender come first.
   them match (Vercel → Settings → Build and Deployment → Node.js Version → 22.x).
 - **Secrets never go in the repository, a pull request or a chat.** Paste them into Vercel
   and Supabase directly.
+- **Never run `private.generate_visits()` by hand on the live database.** The scheduled job
+  calls a form of it that commits between steps. Run by hand, it can lock against a cleaner
+  finishing a clean or the office settling one (the reviewer reproduced the deadlock).
 - **The tests have never met the real thing.** They run on Postgres 16 with a stand-in for
   Supabase and Stripe; live is Postgres 17 with real scheduled jobs, storage and Stripe.
   Steps 2, 9 and 16 are where that gets found out.

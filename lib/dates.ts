@@ -58,6 +58,17 @@ export function formatWindow(start: string, end: string): string {
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 
+/** The moment `days` days ago, as a timestamp the database can compare with. */
+export function daysAgo(days: number, now: Date = new Date()): string {
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+/** True when the timestamp is no older than `ms` milliseconds (and not in the future by more than a minute). */
+export function withinLast(iso: string, ms: number, now: Date = new Date()): boolean {
+  const age = now.getTime() - new Date(iso).getTime();
+  return age < ms && age > -60_000;
+}
+
 /** ISO weekday (Mon = 1) → "Monday". */
 export function weekdayName(iso: number): string {
   const name = WEEKDAYS[iso - 1];

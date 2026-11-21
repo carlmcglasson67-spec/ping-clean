@@ -2,13 +2,14 @@ import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { Badge, Card, cn, EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { requireRole } from "@/lib/auth/session";
-import { formatDay, formatStamp, formatWindow, todayInLondon, weekdayName } from "@/lib/dates";
+import { daysAgo, formatDay, formatStamp, formatWindow, todayInLondon, weekdayName, withinLast } from "@/lib/dates";
 import { createClient } from "@/lib/db/server";
 import { readAll, ROW_CAP } from "../_lib/read-all";
 import { FREQUENCY, TIER, VISIT_STATUS } from "@/lib/labels";
 import { formatDuration, formatPence } from "@/lib/money";
-import { ALERT_KIND, ALERT_ORDER, alertKind, todoBeyond } from "../_lib/alerts";
-import { BlockActions, ResolveAlert, SettleClean, type CleanerOption } from "./block-actions";
+import { ALERT_KIND, ALERT_ORDER, alertKind, firstSentence, todoBeyond } from "../_lib/alerts";
+import { pgUuid } from "../_lib/ids";
+import { BlockActions, ResolveAlert, SettleClean, type CleanerOption, type SettleInfo } from "./block-actions";
 
 export const metadata: Metadata = { title: "Jobs" };
 
@@ -17,12 +18,23 @@ const SERIES_COLS =
 
 type Slot = { day: number };
 
-export default async function JobsPage() {
+const none = () => Promise.resolve({ data: [], error: null });
+/** How far back "Marked as not done" looks, and how long a "settled" confirmation is worth showing. */
+const NOT_DONE_DAYS = 30;
+const JUST_NOW_MS = 10 * 60 * 1000;
+
+export default async function JobsPage({ searchParams }: { searchParams: Promise<{ settled?: string; late?: string }> }) {
   await requireRole("admin", "/admin/jobs");
   const supabase = await createClient();
   const today = todayInLondon();
+  // The clean the team has just settled (the settle control sends them back here with it);
+  // "late" when someone else on the team had settled it first.
+  const query = await searchParams;
+  const settledParam = pgUuid.safeParse(query.settled);
+  const settledId = settledParam.success ? settledParam.data : null;
+  const beatenToIt = query.late === "1";
 
-  const [live, alerts, todays, upcoming, cleaners] = await Promise.all([
+  const [live, alerts, todays, upcoming, cleaners, notDone, justSettled] = await Promise.all([
     supabase.from("series").select(SERIES_COLS).in("status", ["offering", "unclaimed", "claimed", "paused"]).order("starts_on"),
     supabase.from("engine_alerts").select("id, kind, series_id, visit_id, cleaner_id, message, created_at").is("resolved_at", null).order("created_at", { ascending: false }),
     supabase.from("visits").select("id, series_id, cleaner_id, status, window_start, window_end").eq("scheduled_date", today).order("window_start"),
@@ -32,30 +44,43 @@ export default async function JobsPage() {
       return after ? q.gt("id", after) : q;
     }, "id").then((r) => ({ ...r, data: r.data?.sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date)) ?? null })),
     supabase.from("cleaners").select("id, tier, areas, availability").eq("status", "active"),
+    // Missed cleans the team said weren't done: kept in reach in case one did happen after all.
+    supabase.from("visit_settlements").select("visit_id, reason, created_at")
+      .eq("outcome", "not_done").eq("was_status", "no_show")
+      .gte("created_at", daysAgo(NOT_DONE_DAYS))
+      .order("created_at", { ascending: false }).limit(50),
+    settledId
+      ? supabase.from("visit_settlements").select("visit_id, outcome, was_status, created_at").eq("visit_id", settledId).order("created_at", { ascending: false }).limit(1)
+      : none(),
   ]);
-  const failed = live.error || alerts.error || todays.error || upcoming.error || cleaners.error;
+  const failed = live.error || alerts.error || todays.error || upcoming.error || cleaners.error || notDone.error || justSettled.error;
 
-  // Blocks that alerts point at but that aren't live any more (closed, ended).
-  const liveIds = new Set((live.data ?? []).map((s) => s.id));
-  const extraIds = [...new Set((alerts.data ?? []).map((a) => a.series_id).filter((id): id is string => !!id && !liveIds.has(id)))];
-  // The cleans behind "missed" and "never finished" alerts: the team settles those here.
-  const settleIds = [...new Set((alerts.data ?? []).filter((a) => a.visit_id && (a.kind === "visit_no_show" || a.kind === "visit_unfinished")).map((a) => a.visit_id!))];
-  const [extra, toSettle] = await Promise.all([
-    extraIds.length ? supabase.from("series").select(SERIES_COLS).in("id", extraIds) : Promise.resolve({ data: [], error: null }),
-    settleIds.length
-      ? supabase.from("visits").select("id, scheduled_date, status, cleaner_id, price_pence, cleaner_earnings_pence").in("id", settleIds)
-      : Promise.resolve({ data: [], error: null }),
+  // The cleans behind "missed" and "never finished" alerts (the team settles those here),
+  // the ones already marked as not done, and the one just settled.
+  const settleIds = [...new Set((alerts.data ?? []).filter((a) => a.visit_id && isSettleKind(a.kind)).map((a) => a.visit_id!))];
+  const cleanIds = [...new Set([...settleIds, ...(notDone.data ?? []).map((n) => n.visit_id), ...(justSettled.data ?? []).map((j) => j.visit_id)])];
+  const [cleans, skips] = await Promise.all([
+    cleanIds.length
+      ? supabase.from("visits").select("id, series_id, customer_id, cleaner_id, scheduled_date, status, price_pence, cleaner_earnings_pence, ping_fee_pence").in("id", cleanIds)
+      : none(),
+    // Eleven rows a clean at most, and only for cleans waiting to be settled.
+    settleIds.length ? supabase.from("checklist_items").select("visit_id, skipped_reason").in("visit_id", settleIds) : none(),
   ]);
+
+  // Blocks that alerts and those cleans point at but that aren't live any more (closed, ended).
+  const liveIds = new Set((live.data ?? []).map((s) => s.id));
+  const extraIds = [...new Set([...(alerts.data ?? []).map((a) => a.series_id), ...(cleans.data ?? []).map((v) => v.series_id)].filter((id): id is string => !!id && !liveIds.has(id)))];
+  const extra = extraIds.length ? await supabase.from("series").select(SERIES_COLS).in("id", extraIds) : { data: [], error: null };
   const series = [...(live.data ?? []), ...(extra.data ?? [])];
 
   const propIds = [...new Set(series.map((s) => s.property_id))];
-  const peopleIds = [...new Set([...series.map((s) => s.customer_id), ...series.map((s) => s.cleaner_id), ...(cleaners.data ?? []).map((c) => c.id), ...(todays.data ?? []).map((v) => v.cleaner_id), ...(alerts.data ?? []).map((a) => a.cleaner_id), ...(toSettle.data ?? []).map((v) => v.cleaner_id)].filter((id): id is string => !!id))];
+  const peopleIds = [...new Set([...series.map((s) => s.customer_id), ...series.map((s) => s.cleaner_id), ...(cleaners.data ?? []).map((c) => c.id), ...(todays.data ?? []).map((v) => v.cleaner_id), ...(alerts.data ?? []).map((a) => a.cleaner_id), ...(cleans.data ?? []).flatMap((v) => [v.customer_id, v.cleaner_id])].filter((id): id is string => !!id))];
   const [props, people] = await Promise.all([
     propIds.length ? supabase.from("properties").select("id, town, postcode_district").in("id", propIds) : Promise.resolve({ data: [], error: null }),
     peopleIds.length ? supabase.from("profiles").select("id, full_name").in("id", peopleIds) : Promise.resolve({ data: [], error: null }),
   ]);
 
-  if (failed || extra.error || toSettle.error || props.error || people.error) {
+  if (failed || cleans.error || skips.error || extra.error || props.error || people.error) {
     return (
       <>
         <PageHeader eyebrow="Jobs" title="Every block, and what needs a hand." />
@@ -67,7 +92,9 @@ export default async function JobsPage() {
   const prop = new Map((props.data ?? []).map((p) => [p.id, p]));
   const name = new Map((people.data ?? []).map((p) => [p.id, p.full_name?.trim() || "No name"]));
   const byId = new Map(series.map((s) => [s.id, s]));
-  const settleable = new Map((toSettle.data ?? []).map((v) => [v.id, v]));
+  const cleanById = new Map((cleans.data ?? []).map((v) => [v.id, v]));
+  const skipped = new Map<string, number>();
+  for (const row of skips.data ?? []) if (row.skipped_reason) skipped.set(row.visit_id, (skipped.get(row.visit_id) ?? 0) + 1);
   const next = new Map<string, string>();
   for (const v of upcoming.data ?? []) if (!next.has(v.series_id)) next.set(v.series_id, v.scheduled_date);
 
@@ -96,6 +123,46 @@ export default async function JobsPage() {
     const ka = alertKind(a.kind), kb = alertKind(b.kind);
     return Number(kb ? ALERT_KIND[kb].urgent : 0) - Number(ka ? ALERT_KIND[ka].urgent : 0) || ALERT_ORDER.indexOf(ka!) - ALERT_ORDER.indexOf(kb!);
   });
+
+  // Everything the settle step shows about a clean: who is charged, who is paid, how much.
+  type Clean = NonNullable<ReturnType<typeof cleanById.get>>;
+  const where = (v: Clean) => { const s = byId.get(v.series_id); return s ? place(s) : "Home"; };
+  const settleInfo = (v: Clean): SettleInfo => ({
+    visitId: v.id,
+    started: v.status === "in_progress",
+    summary: `the ${where(v)} clean of ${formatDay(v.scheduled_date)}`,
+    customer: name.get(v.customer_id) ?? "The customer",
+    cleaner: v.cleaner_id ? name.get(v.cleaner_id) ?? "the cleaner" : null,
+    money: v.price_pence > 0
+      ? { charge: formatPence(v.price_pence), pay: formatPence(v.cleaner_earnings_pence), fee: formatPence(v.ping_fee_pence) }
+      : null,
+    couldntDo: skipped.get(v.id) ?? 0,
+    onHold: byId.get(v.series_id)?.status === "paused",
+  });
+  // A missed or unfinished clean from a day that has gone can be settled.
+  const canSettle = (v: Clean | undefined): v is Clean => !!v && (v.status === "in_progress" || v.status === "no_show") && v.scheduled_date < today;
+
+  // Missed cleans marked as not done and still missed: the way back if one did happen.
+  const openVisits = new Set(openAlerts.filter((a) => isSettleKind(a.kind)).map((a) => a.visit_id));
+  const notDoneCleans = (notDone.data ?? [])
+    .filter((n, i, all) => all.findIndex((x) => x.visit_id === n.visit_id) === i) // newest per clean
+    .map((n) => ({ ...n, clean: cleanById.get(n.visit_id) }))
+    .filter((n): n is typeof n & { clean: Clean } => !!n.clean && n.clean.status === "no_show" && !!n.clean.cleaner_id && !openVisits.has(n.visit_id));
+
+  // What the team just did, said by the page: the alert's own card has gone with the alert.
+  const last = (justSettled.data ?? [])[0];
+  const lastClean = last ? cleanById.get(last.visit_id) : undefined;
+  const settledNote = last && lastClean && withinLast(last.created_at, JUST_NOW_MS)
+    ? (beatenToIt ? "Someone on the team had already dealt with this one. " : "") +
+      `${where(lastClean)}, ${formatDay(lastClean.scheduled_date)}: marked as ${last.outcome === "done" ? "done" : "not done"}. ` +
+      (last.outcome === "done"
+        ? lastClean.price_pence > 0
+          ? `${name.get(lastClean.customer_id) ?? "The customer"}’s card is charged ${formatPence(lastClean.price_pence)}; ${lastClean.cleaner_id ? name.get(lastClean.cleaner_id) ?? "the cleaner" : "the cleaner"} is paid ${formatPence(lastClean.cleaner_earnings_pence)} after the check period.`
+          : "There was nothing to charge."
+        : last.was_status === "in_progress"
+          ? "The clean is cancelled and nobody is charged."
+          : "Nobody is charged. It’s kept under “Marked as not done”, below, in case it did happen.")
+    : null;
 
   return (
     <>
@@ -156,6 +223,9 @@ export default async function JobsPage() {
       </Section>
 
       <Section id="alerts" title="Alerts" count={openAlerts.length}>
+        {settledNote ? (
+          <p role="status" className="rounded-md bg-ok-soft px-5 py-4 font-semibold text-ok ring-1 ring-inset ring-ok/25">{settledNote}</p>
+        ) : null}
         {openAlerts.length === 0 ? (
           <EmptyState title="No open alerts">When something needs a person (a missed clean, a stalled block, cover for today, a cleaner&rsquo;s document running out) it shows here.</EmptyState>
         ) : (
@@ -163,26 +233,27 @@ export default async function JobsPage() {
             {openAlerts.map((a) => {
               const k = alertKind(a.kind);
               const info = k ? ALERT_KIND[k] : null;
-              const todo = info ? todoBeyond(a.message, info.todo) : "";
               const s = a.series_id ? byId.get(a.series_id) : undefined;
               const isLive = s && ["offering", "unclaimed", "claimed", "paused"].includes(s.status);
-              // A missed or unfinished clean from a day that has gone is settled, not just hidden.
-              const v = a.visit_id ? settleable.get(a.visit_id) : undefined;
-              const settle = v && (v.status === "in_progress" || v.status === "no_show") && v.scheduled_date < today ? v : undefined;
+              // A missed or unfinished clean is settled (done, or not done), not just hidden.
+              const v = a.visit_id && isSettleKind(a.kind) ? cleanById.get(a.visit_id) : undefined;
+              const settle = canSettle(v) ? v : undefined;
+              // The engine's words, then what to do, minus any sentence the first already said.
+              // For a clean to settle, the engine's own instruction gives way to the two answers.
+              const said = settle ? firstSentence(a.message) : a.message;
+              const todo = info ? todoBeyond(said, info.todo) : "";
               return (
                 <li key={a.id}>
-                  {/* A clean to settle keeps one column: its confirm step needs the card's full width. */}
-                  <Card className={cn("grid gap-4", info?.urgent && "ring-bad/40", !settle && "sm:grid-cols-[1fr_auto]")}>
+                  <Card className={cn("grid gap-4 sm:grid-cols-[1fr_auto]", info?.urgent && "ring-bad/40")}>
                     <div className="grid gap-2">
                       <div className="flex flex-wrap items-center gap-3">
                         <Badge tone={info?.urgent ? "bad" : "warn"}>{info?.label ?? a.kind}</Badge>
                         <span className="text-sm text-navy-3">
                           {formatStamp(a.created_at)}{s ? ` · ${place(s)}` : ""}{a.cleaner_id ? ` · ${name.get(a.cleaner_id) ?? "Cleaner"}` : ""}
-                          {settle ? ` · booked for ${formatDay(settle.scheduled_date)}${settle.cleaner_id ? ` with ${name.get(settle.cleaner_id) ?? "its cleaner"}` : ", no cleaner"}` : ""}
                         </span>
                       </div>
-                      {/* The engine's words, then what to do, minus any sentence the first already said. */}
-                      <p className="font-semibold">{a.message}</p>
+                      {settle ? <p className="text-sm font-semibold text-navy-2">{cleanLine(settle, name)}</p> : null}
+                      <p className="font-semibold">{said}</p>
                       {todo ? <p className="text-sm text-navy-2">{todo}</p> : null}
                       {isLive ? <a href={`#block-${s.id}`} className="inline-flex min-h-12 items-center text-sm font-semibold text-blue">Go to the block&rsquo;s actions</a> : null}
                       {a.cleaner_id ? (
@@ -191,26 +262,38 @@ export default async function JobsPage() {
                         </Link>
                       ) : null}
                     </div>
-                    <div className={settle ? undefined : "sm:justify-self-end"}>
-                      {settle ? (
-                        <SettleClean
-                          visitId={settle.id}
-                          started={settle.status === "in_progress"}
-                          summary={`the ${s ? place(s) : "home"} clean of ${formatDay(settle.scheduled_date)}`}
-                          charge={settle.price_pence > 0 ? formatPence(settle.price_pence) : null}
-                          pay={settle.price_pence > 0 ? formatPence(settle.cleaner_earnings_pence) : null}
-                          canBeDone={!!settle.cleaner_id}
-                        />
-                      ) : (
-                        <ResolveAlert alertId={a.id} />
-                      )}
-                    </div>
+                    {settle ? <SettleClean info={settleInfo(settle)} /> : <div className="sm:justify-self-end"><ResolveAlert alertId={a.id} /></div>}
                   </Card>
                 </li>
               );
             })}
           </ul>
         )}
+
+        {notDoneCleans.length ? (
+          <div className="mt-6 grid gap-3" role="group" aria-labelledby="not-done-title">
+            <div className="grid gap-1">
+              <h3 id="not-done-title" className="text-lg font-semibold">Marked as not done</h3>
+              <p className="max-w-prose text-sm text-navy-2">
+                Missed cleans the team said weren&rsquo;t done, from the last {NOT_DONE_DAYS} days. If one turns out to have happened, mark it as done here and it&rsquo;s charged and paid as usual.
+              </p>
+            </div>
+            <ul className="grid gap-3">
+              {notDoneCleans.map((n) => (
+                <li key={n.visit_id}>
+                  <Card className="grid gap-4 sm:grid-cols-[1fr_auto]">
+                    <div className="grid gap-1">
+                      <p className="font-semibold">{where(n.clean)}, {formatDay(n.clean.scheduled_date)}</p>
+                      <p className="text-sm text-navy-2">{cleanLine(n.clean, name)}</p>
+                      <p className="text-sm text-navy-2">Marked as not done {formatStamp(n.created_at)}: &ldquo;{n.reason}&rdquo;</p>
+                    </div>
+                    <SettleClean info={settleInfo(n.clean)} only="done" />
+                  </Card>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </Section>
 
       <Section id="held" title="Held blocks" count={held.length}>
@@ -236,6 +319,16 @@ export default async function JobsPage() {
       </Section>
     </>
   );
+}
+
+/** The two alerts a person answers by settling the clean: missed, and started but never finished. */
+function isSettleKind(kind: string): boolean {
+  return kind === "visit_no_show" || kind === "visit_unfinished";
+}
+
+/** "Booked for Friday 20 November · Ben Test’s home · with Alex Test": whose clean, at a glance. */
+function cleanLine(v: { scheduled_date: string; customer_id: string; cleaner_id: string | null }, name: Map<string, string>): string {
+  return `Booked for ${formatDay(v.scheduled_date)} · ${name.get(v.customer_id) ?? "Customer"}’s home · ${v.cleaner_id ? `with ${name.get(v.cleaner_id) ?? "its cleaner"}` : "no cleaner"}`;
 }
 
 function Section({ id, title, count, children }: { id: string; title: string; count: number; children: React.ReactNode }) {

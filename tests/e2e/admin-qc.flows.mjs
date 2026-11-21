@@ -111,10 +111,12 @@ export default async function qcFlows({ page, BASE, check, dir, sql, settle, sho
     await settle(page);
     const byHand = page.getByRole("region", { name: /To score/ }).locator(":scope > ul > li").filter({ hasText: "Marked done by the Ping team" });
     const text = await byHand.innerText();
-    assert.match(text, /The cleaner didn.t finish this one in the app\. The team marked it as done:/);
-    assert.match(text, /Tara had no signal at the house\. Anna confirmed it was done\./);
-    assert.match(text, /No checklist: this clean was never started in the app\./);
-    assert.ok(!/Everything ticked/.test(text), "no evidence is never shown as a full checklist");
+    // Who said so and when, their reason, and what there is to score it on.
+    assert.match(text, /The cleaner didn’t finish this one in the app\. Jo Test marked it as done [^:]+:/);
+    assert.match(text, /“e2e: Tara had no signal at the house\. Anna confirmed it was done\.”/);
+    assert.match(text, /It has no photos and no checklist, so score it on what the customer and the cleaner told you\./);
+    assert.ok(!/Everything ticked|No (before|after) photo|Every item/.test(text), "no evidence is never shown as a full checklist, or as empty boxes");
+    assert.equal(await byHand.locator("img").count(), 0);
     await shoot(page, dir, "admin-qc-by-hand");
   });
 }

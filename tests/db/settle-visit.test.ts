@@ -8,6 +8,8 @@ afterAll(() => pool.end());
 
 const clean = IDS.visitToday; // Anna's clean today, Tara's (seed): moved to yesterday below
 const SETTLE = `select public.admin_settle_visit($1, $2, $3)`;
+/** The way back: the caller says it knows the team already marked this clean as not done. */
+const SETTLE_AFTER_ALL = `select public.admin_settle_visit($1, $2, $3, true)`;
 const WHY = "Tara had no signal at the house. Anna confirmed the clean was done.";
 
 const su = (q: Query) => q.rows(`reset role`);
@@ -144,6 +146,23 @@ describe("it was done", () => {
     expect(r.record).toMatchObject([{ outcome: "done", was_status: "in_progress" }]);
   });
 
+  it("can't be said of a clean that was left needing cover, until the team has said cover was found", async () => {
+    const r = await as("superuser", async (q) => {
+      await yesterday(q, "missed");
+      // As admin_reopen_series leaves it when the cleaner comes off the block on the day.
+      await q.rows(`insert into public.engine_alerts (kind, series_id, visit_id, message) values ('visit_needs_cover', $1, $2, 'Arrange cover.')`, [IDS.annaSeries, clean]);
+      await q.actAs(U.admin);
+      const stillOpen = await q.attempt(SETTLE, [clean, "done", WHY]);
+      await su(q);
+      const untouched = { clean: (await state(q)).status, payments: (await payments(q)).length, record: (await record(q)).length };
+      await q.rows(`update public.engine_alerts set resolved_at = now(), resolved_by = $2 where visit_id = $1 and kind = 'visit_needs_cover'`, [clean, U.admin]);
+      await q.actAs(U.admin);
+      const coverFound = await q.attempt(SETTLE, [clean, "done", WHY]);
+      return { stillOpen, untouched, coverFound };
+    });
+    expect(r).toEqual({ stillOpen: "PC058", untouched: { clean: "no_show", payments: 0, record: 0 }, coverFound: "ok" });
+  });
+
   it("can't be said of a clean that had no cleaner", async () => {
     const r = await as("superuser", async (q) => {
       await yesterday(q, "missed");
@@ -185,16 +204,52 @@ describe("it wasn't done", () => {
       const between = { clean: (await state(q)).status, payments: (await payments(q)).length, alerts: await alerts(q) };
       await q.actAs(U.admin);
       const notDoneAgain = await q.attempt(SETTLE, [clean, "not_done", "Anna says nobody came."]);
-      const doneAfterAll = await q.attempt(SETTLE, [clean, "done", "Tara sent her photos: the clean was done."]);
+      const notDoneAgainKnowing = await q.attempt(SETTLE_AFTER_ALL, [clean, "not_done", "Anna says nobody came."]);
+      const doneAfterAll = await q.attempt(SETTLE_AFTER_ALL, [clean, "done", "Tara sent her photos: the clean was done."]);
+      const doneTwice = await q.attempt(SETTLE_AFTER_ALL, [clean, "done", "Tara sent her photos: the clean was done."]);
       await su(q);
-      return { notDone, between, notDoneAgain, doneAfterAll, clean: (await state(q)).status, payments: (await payments(q)).map((p) => p.status),
-               record: (await record(q)).map((s) => s.outcome) };
+      return { notDone, between, notDoneAgain, notDoneAgainKnowing, doneAfterAll, doneTwice, clean: (await state(q)).status,
+               payments: (await payments(q)).map((p) => p.status), record: (await record(q)).map((s) => s.outcome) };
     });
     expect(r).toEqual({
       notDone: "ok",
       between: { clean: "no_show", payments: 0, alerts: [{ kind: "visit_no_show", open: false, by: U.admin }] },
-      notDoneAgain: "PC056", doneAfterAll: "ok", clean: "completed", payments: ["pending"], record: ["not_done", "done"],
+      notDoneAgain: "PC056", notDoneAgainKnowing: "PC056", doneAfterAll: "ok", doneTwice: "PC056",
+      clean: "completed", payments: ["pending"], record: ["not_done", "done"],
     });
+  });
+
+  // Two of the team with the same alert open. One says it wasn't done; the other, still
+  // looking at the unsettled alert, says it was. The second is refused, not charged.
+  it("won't mark a clean as done on a page that hasn't seen a colleague mark it as not done", async () => {
+    const r = await as("superuser", async (q) => {
+      const before = await done(q);
+      await yesterday(q, "missed");
+      await q.actAs(U.admin);
+      const colleague = await q.attempt(SETTLE, [clean, "not_done", "Anna says nobody came."]);
+      const stale = await q.attempt(SETTLE, [clean, "done", WHY]);
+      await su(q);
+      return { colleague, stale, clean: (await state(q)).status, payments: (await payments(q)).length, counted: (await done(q)) - before,
+               record: (await record(q)).map((s) => s.outcome) };
+    });
+    expect(r).toEqual({ colleague: "ok", stale: "PC056", clean: "no_show", payments: 0, counted: 0, record: ["not_done"] });
+  });
+
+  it("won't take the way back for a clean nobody has marked as not done", async () => {
+    const r = await as("superuser", async (q) => {
+      const before = await done(q);
+      await yesterday(q, "missed");
+      await q.actAs(U.admin);
+      const missed = await q.attempt(SETTLE_AFTER_ALL, [clean, "done", WHY]);
+      await su(q);
+      await q.rows(`update public.visits set status = 'in_progress', started_at = now() - interval '1 day' where id = $1`, [clean]);
+      await q.actAs(U.admin);
+      const unfinished = await q.attempt(SETTLE_AFTER_ALL, [clean, "done", WHY]);
+      await su(q);
+      return { missed, unfinished, clean: (await state(q)).status, payments: (await payments(q)).length, record: (await record(q)).length,
+               counted: (await done(q)) - before };
+    });
+    expect(r).toEqual({ missed: "PC056", unfinished: "PC056", clean: "in_progress", payments: 0, record: 0, counted: 0 });
   });
 });
 
@@ -215,8 +270,38 @@ describe("the record of what the team decided", () => {
         await q.actAs(U[who]); // the customer and the cleaner of this very clean
         others[who] = await q.count("public.visit_settlements");
       }
-      return { admin, others };
+      // The app's own server (the service role) has no business here either.
+      await su(q);
+      await q.rows(`set local role service_role`);
+      const server = {
+        reads: await q.attempt(`select 1 from public.visit_settlements`),
+        writes: await q.attempt(`insert into public.visit_settlements (visit_id, outcome, was_status, reason, actor_id) values ($1, 'done', 'no_show', 'By hand', $2)`, [clean, U.admin]),
+        edits: await q.attempt(`update public.visit_settlements set reason = 'changed'`),
+        deletes: await q.attempt(`delete from public.visit_settlements`),
+      };
+      return { admin, others, server };
     });
-    expect(r).toEqual({ admin: { sees: 1, writes: DENIED, edits: DENIED, deletes: DENIED }, others: { anna: 0, tara: 0 } });
+    expect(r).toEqual({
+      admin: { sees: 1, writes: DENIED, edits: DENIED, deletes: DENIED }, others: { anna: 0, tara: 0 },
+      server: { reads: DENIED, writes: DENIED, edits: DENIED, deletes: DENIED },
+    });
+  });
+
+  it("keeps its clean from being deleted, and shows in the audit log if anyone changes or removes it from outside the app", async () => {
+    const r = await as("superuser", async (q) => {
+      await yesterday(q, "missed");
+      await q.actAs(U.admin);
+      await q.rows(SETTLE, [clean, "not_done", "Anna says nobody came."]);
+      await su(q);
+      const deleteClean = await q.attempt(`delete from public.visits where id = $1`, [clean]);
+      await q.rows(`update public.visit_settlements set reason = 'Rewritten afterwards' where visit_id = $1`, [clean]);
+      await q.rows(`delete from public.visit_settlements where visit_id = $1`, [clean]);
+      const log = await q.rows<{ action: string; detail: { reason?: unknown } }>(
+        `select action, detail from public.audit_log where entity = 'visit_settlements' order by id`);
+      return { deleteClean, actions: log.map((l) => l.action), text: JSON.stringify(log) };
+    });
+    expect(r.deleteClean).toBe("23503"); // foreign key: the record holds the clean in place
+    expect(r.actions).toEqual(["insert", "update", "delete"]);
+    expect(r.text).not.toMatch(/nobody came|Rewritten/);
   });
 });
