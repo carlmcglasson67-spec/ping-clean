@@ -6,9 +6,22 @@
 #   3. applies every migration in order, then supabase/seed.sql
 #   4. runs tests/db/*.test.ts, which log in as each seeded role and check what it can see
 #      (argument "types": regenerate lib/db/types.ts instead; "e2e": run the app end to end)
-# Set PING_TEST_DATABASE_URL to reuse an existing empty database instead (CI does this).
+# Set PING_TEST_DATABASE_URL to reuse an existing empty database on THIS machine instead.
+# It is refused for any other host: this script loads logins with a published password
+# (one an admin) and drops and recreates a database called ping_bare.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+if [ -n "${PING_TEST_DATABASE_URL:-}" ]; then
+  node -e '
+    const u = new URL(process.argv[1]);
+    // libpq also takes the host from ?host= (a socket folder here) and ?hostaddr=.
+    const q = u.searchParams.get("host");
+    const named = ["localhost", "127.0.0.1", "[::1]", ""].includes(u.hostname);
+    const ok = named && !u.searchParams.has("hostaddr") && (q === null ? u.hostname !== "" : q.startsWith("/"));
+    process.exit(ok ? 0 : 1);
+  ' "$PING_TEST_DATABASE_URL" || { echo "PING_TEST_DATABASE_URL must be a database on this machine. Refusing to load test logins anywhere else."; exit 1; }
+fi
 
 cleanup() { :; }
 if [ -z "${PING_TEST_DATABASE_URL:-}" ]; then
@@ -34,13 +47,32 @@ PSQL=(psql "$PING_TEST_DATABASE_URL" -X -q -v ON_ERROR_STOP=1)
 for f in supabase/migrations/*.sql; do
   "${PSQL[@]}" -f "$f" || { echo "Migration failed: $f"; exit 1; }
 done
-"${PSQL[@]}" -f supabase/seed.sql
+# The seed only runs for a session that says it is a test database (see the top of the file).
+"${PSQL[@]}" -c "set ping.seed_ok = 'local-test-only'" -f supabase/seed.sql
 echo "db: $(ls supabase/migrations/*.sql | wc -l) migrations + seed applied"
+
+# A second database with every migration and NO seed: exactly what the live database starts
+# as. tests/db/from-empty.test.ts walks a brand-new customer and cleaner through a whole
+# clean on it, so anything that only ever existed in the seed is caught here, not on launch day.
+bare_db() {
+  "${PSQL[@]}" -c "drop database if exists ping_bare" -c "create database ping_bare"
+  PING_BARE_DATABASE_URL=$(node -e 'const u = new URL(process.argv[1]); u.pathname = "/ping_bare"; console.log(u.toString())' "$PING_TEST_DATABASE_URL")
+  export PING_BARE_DATABASE_URL
+  local bare=(psql "$PING_BARE_DATABASE_URL" -X -q -v ON_ERROR_STOP=1)
+  # Roles belong to the whole server and the first database already made them.
+  sed '/^create role /d' tests/db/supabase-stub.sql | "${bare[@]}" -f -
+  local log; log=$(mktemp)
+  for f in supabase/migrations/*.sql; do
+    "${bare[@]}" -f "$f" >"$log" 2>&1 || { echo "Migration failed on the empty database: $f"; grep -v NOTICE "$log" | tail -20; exit 1; }
+  done
+  rm -f "$log"
+}
 
 if [ "${1:-}" = "types" ]; then
   mkdir -p lib/db && node scripts/gen-db-types.mjs
 elif [ "${1:-}" = "e2e" ]; then
   node tests/e2e/roles.e2e.mjs
 else
+  bare_db
   npx vitest run --config vitest.db.config.ts
 fi
