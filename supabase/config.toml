@@ -18,5 +18,5 @@ major_version = 17
 # supabase/seed.sql is LOCAL TEST DATA: six logins that share one published password, one
 # of them an admin. It must never reach a database a real person uses, so the CLI and the
 # integration are told not to run it at all. The test scripts load it themselves
-# (scripts/db-test.sh), and the file refuses to run anywhere else.
+# (scripts/db-test.sh), and run any other way the file writes nothing.
 enabled = false

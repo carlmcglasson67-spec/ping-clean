@@ -1,5 +1,5 @@
--- Ping Clean — LOCAL TEST DATA ONLY. Loaded by `supabase db reset` and by the DB tests.
--- Never run against production.
+-- Ping Clean — LOCAL TEST DATA ONLY. Loaded by the test scripts (scripts/db-test.sh) and by
+-- nothing else. Never run against production.
 --
 -- Test logins (password for all: ping-test-2026)
 --   admin@ping.test               admin
@@ -18,6 +18,13 @@
 -- own session (ping.seed_ok); nothing else does, and supabase/config.toml tells the Supabase
 -- CLI and the GitHub integration not to run seed files at all. Two locks, because one of
 -- these logins is an admin and the password is written at the top of this file.
+--
+-- The whole file is one transaction, opened before the check. A plain `psql -f` carries on
+-- after an error, so without it the check would complain and the logins would be written
+-- anyway. With it, the failed check poisons the transaction: every statement after it is
+-- refused and the commit at the end undoes the lot.
+begin;
+
 do $$
 begin
   if coalesce(current_setting('ping.seed_ok', true), '') <> 'local-test-only' then
@@ -181,3 +188,5 @@ update public.payouts set status = 'paid', paid_at = now() - interval '5 days' w
 insert into public.messages (series_id, sender_id, body, created_at) values
   ('00000000-0000-4000-c000-000000000001', '00000000-0000-4000-a000-000000000002', 'Hi Tara, could you do the oven door this week? Thank you!', now() - interval '2 days'),
   ('00000000-0000-4000-c000-000000000001', '00000000-0000-4000-a000-000000000004', 'No problem at all, see you Monday.', now() - interval '2 days' + interval '20 minutes');
+
+commit;

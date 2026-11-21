@@ -5,7 +5,10 @@
 // checklist existed only in the seed, and no clean could have been started.
 //
 // ping-money-rules: "write a test that books, completes, charges and pays out one visit,
-// and show the three amounts it produced". This is that test, from an empty database.
+// and show the three amounts it produced". This is that test from an empty database, as far
+// as the cleaner's share waiting out its check period. It does not cover the bank payout
+// itself, rebooking, cancelling, refunds, failed payments or the nightly jobs: those have
+// their own files, on the seeded database.
 import { afterAll, describe, expect, it } from "vitest";
 import pg from "pg";
 

@@ -11,7 +11,7 @@ https://claude.ai/artifact/1WEp7QQgrj5dGn1wzooEWz (summary in intent/v1/spec.md)
 - Lint/types: npm run lint && npm run typecheck (run before every commit)
 - DB: npx supabase start | npx supabase db reset | npm run db:types (regenerates lib/db/types.ts).
   The test logins in supabase/seed.sql load only through the test scripts (scripts/db-test.sh):
-  the file refuses to run anywhere else, and `db reset` leaves the tables empty.
+  run any other way the file writes nothing, and `db reset` leaves the tables empty.
 - Guardrails: bash scripts/check-secrets.sh && bash scripts/check-rls.sh
 
 ## Architecture
