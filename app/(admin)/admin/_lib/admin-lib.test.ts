@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALERT_KIND, alertKind, todoBeyond } from "./alerts";
+import { ALERT_KIND, alertKind, firstSentence, todoBeyond } from "./alerts";
 import { auditEntity, auditSummary } from "./audit";
 import { adminErrorMessage } from "./errors";
 import { missingSettings, REQUIRED_SETTINGS } from "./required-settings";
@@ -40,7 +40,13 @@ describe("alerts", () => {
     const missed = "A booked clean passed without being started. Check with the cleaner and the customer.";
     const unfinished = "A clean was started but never marked complete. Check it and settle it by hand.";
     expect(todoBeyond(missed, ALERT_KIND.visit_no_show.todo)).toBe("Then say whether it was done.");
-    expect(todoBeyond(unfinished, ALERT_KIND.visit_unfinished.todo)).toBe("Check what happened with the cleaner, then say whether it was done.");
+    expect(todoBeyond(unfinished, ALERT_KIND.visit_unfinished.todo)).toBe("Ask the cleaner what happened, then say whether it was done.");
+    // A clean the team settles shows only what happened, then one instruction: the engine's
+    // own "settle it by hand" gives way to the two answers on the card.
+    expect(firstSentence(unfinished)).toBe("A clean was started but never marked complete.");
+    expect(todoBeyond(firstSentence(unfinished), ALERT_KIND.visit_unfinished.todo)).toBe("Ask the cleaner what happened, then say whether it was done.");
+    expect(todoBeyond(firstSentence(missed), ALERT_KIND.visit_no_show.todo)).toBe("Check with the cleaner and the customer. Then say whether it was done.");
+    expect(firstSentence("No full stop here")).toBe("No full stop here");
     // Nothing in common: the advice is shown whole. All said already: nothing more is shown.
     expect(todoBeyond("e2e: a test alert", ALERT_KIND.generate_failed.todo)).toBe(ALERT_KIND.generate_failed.todo);
     expect(todoBeyond("One thing. Two things.", "One thing. Two things.")).toBe("");

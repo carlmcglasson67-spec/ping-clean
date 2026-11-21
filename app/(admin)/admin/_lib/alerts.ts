@@ -39,7 +39,7 @@ export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo:
   visit_unfinished: {
     label: "Clean never finished",
     short: "Unfinished",
-    todo: "A clean was started but never marked complete. Check what happened with the cleaner, then say whether it was done.",
+    todo: "A clean was started but never marked complete. Ask the cleaner what happened, then say whether it was done.",
     urgent: true,
   },
   block_stalled: {
@@ -161,6 +161,11 @@ export function todoBeyond(message: string, todo: string): string {
   let i = 0;
   while (i < advice.length && i < said.length && advice[i]!.trim() === said[i]) i++;
   return advice.slice(i).join("").trim();
+}
+
+/** An alert's opening sentence: what happened, without the engine's own instruction after it. */
+export function firstSentence(message: string): string {
+  return (message.match(/[^.!?]+[.!?]+/)?.[0] ?? message).trim();
 }
 
 export function alertKind(kind: string): AlertKind | null {

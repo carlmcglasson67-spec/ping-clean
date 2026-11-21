@@ -75,15 +75,25 @@ export default async function VisitPage({ params }: { params: Promise<{ id: stri
   }
 
   if (v.status === "completed") {
+    // Said from the checklist itself, not assumed: a clean the Ping office marked as done
+    // (a missed tap, no signal) may have no ticks at all, or only some.
+    const { data: ticks } = await supabase.from("checklist_items").select("done, skipped_reason").eq("visit_id", v.id);
+    const total = ticks?.length ?? 0;
+    const ticked = (ticks ?? []).filter((i) => i.done).length;
+    const couldnt = v.couldnt_do_count;
     return (
       <>
         {header}
         <section className="grid gap-4 rounded-lg bg-ok-soft p-7 ring-1 ring-ok/25 sm:p-9">
           <p className="font-display text-3xl font-semibold text-ok">Done. Thank you.</p>
           <p className="text-navy-2">
-            {v.couldnt_do_count
-              ? `${v.couldnt_do_count} item${v.couldnt_do_count === 1 ? "" : "s"} marked “couldn't do”: the customer can see your reasons.`
-              : "Every item ticked. The customer can see your checklist and photos."}
+            {total === 0
+              ? "The Ping office marked this clean as done for you, so it has no checklist or photos in the app."
+              : ticked + couldnt < total
+                ? `The Ping office marked this clean as done for you. ${ticked} of its ${total} items were ticked in the app.`
+                : couldnt
+                  ? `${couldnt} item${couldnt === 1 ? "" : "s"} marked “couldn't do”: the customer can see your reasons.`
+                  : "Every item ticked. The customer can see your checklist and photos."}
           </p>
           <Link href="/work/today" className={buttonClass("ink", "lg", "w-full sm:w-auto sm:justify-self-start")}>Back to today</Link>
         </section>

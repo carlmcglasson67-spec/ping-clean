@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDay, formatStamp, formatTime, formatWindow, monthStartInLondon, relativeDay, todayInLondon, weekdayName } from "./dates";
+import { daysAgo, formatDay, formatStamp, formatTime, formatWindow, monthStartInLondon, relativeDay, todayInLondon, weekdayName, withinLast } from "./dates";
 
 // In summer (BST) London is an hour ahead of UTC, so late at night the London date
 // is already tomorrow while a UTC server still thinks it's today.
@@ -34,5 +34,17 @@ describe("dates", () => {
     expect(weekdayName(1)).toBe("Monday");
     expect(weekdayName(7)).toBe("Sunday");
     expect(() => weekdayName(0)).toThrow(RangeError);
+  });
+
+  it("counts back in days, and knows what happened just now", () => {
+    const now = new Date("2026-11-21T14:00:00Z");
+    expect(daysAgo(30, now)).toBe("2026-10-22T14:00:00.000Z");
+    expect(daysAgo(0, now)).toBe(now.toISOString());
+    const tenMinutes = 10 * 60 * 1000;
+    expect(withinLast("2026-11-21T13:55:00Z", tenMinutes, now)).toBe(true);
+    expect(withinLast("2026-11-21T13:50:00Z", tenMinutes, now)).toBe(false); // exactly ten minutes old
+    expect(withinLast("2026-11-21T13:00:00Z", tenMinutes, now)).toBe(false);
+    expect(withinLast("2026-11-21T14:00:30Z", tenMinutes, now)).toBe(true); // clocks a few seconds apart
+    expect(withinLast("2026-11-21T15:00:00Z", tenMinutes, now)).toBe(false); // the future isn't "just now"
   });
 });

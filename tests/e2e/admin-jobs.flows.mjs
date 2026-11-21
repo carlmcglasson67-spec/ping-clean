@@ -139,31 +139,40 @@ export default async function jobsFlows({ page, BASE, check, dir, sql, settle, s
   await settle(page);
   const missedItem = page.getByRole("region", { name: /^Alerts/ }).locator("li").filter({ hasText: "Clean missed" }).filter({ hasText: "Whitehaven CA28" });
 
-  await check("a missed clean is settled, not just hidden: the choices say what happens to the money", async () => {
+  await check("a missed clean is settled, not just hidden: the step names who is charged, who is paid and how much", async () => {
     const text = await missedItem.innerText();
-    assert.match(text, /booked for [\s\S]* with Alex Test/);
-    assert.match(text, /Then say whether it was done/);
+    assert.match(text, /Booked for [\s\S]* · Ben Test’s home · with Alex Test/);
+    assert.match(text, /Check with the cleaner and the customer\. Then say whether it was done\./);
     assert.equal(text.match(/A booked clean passed without being started/g).length, 1, "the alert says it once");
     assert.equal(await missedItem.getByRole("button", { name: "Mark resolved" }).count(), 0);
     await missedItem.getByRole("button", { name: "It was done" }).click();
+    const step = missedItem.getByRole("group", { name: /Mark the Whitehaven CA28 clean of .* as done\?/ });
     // Seed price: 2 hours at £20, the cleaner keeps 75%.
-    await missedItem.getByText(/The customer is charged £40\.00 and the cleaner is paid £30\.00 after the usual check period/).waitFor();
-    assert.ok(await missedItem.getByRole("button", { name: "Yes, done: charge £40.00" }).isDisabled(), "nothing is sent without a reason");
+    assert.match(await step.innerText(), /Charged to Ben Test’s card, now\s+£40\.00\s+Paid to Alex Test, after the check period\s+£30\.00\s+Ping’s fee\s+£10\.00/);
+    await step.getByText("This can’t be undone. If the charge is wrong, refund it from Payments.").waitFor();
+    // The keyboard moves into the step when it opens...
+    await page.waitForFunction(() => /^Mark the Whitehaven CA28 clean/.test(document.activeElement?.textContent ?? ""), null, { timeout: 5000 });
+    assert.ok(await step.getByRole("button", { name: "Yes, charge £40.00" }).isDisabled(), "nothing is sent without a reason");
+    await step.getByText("Needed before you can confirm.").waitFor();
     await shoot(page, dir, "admin-jobs-settle");
-    await missedItem.getByRole("button", { name: "Cancel" }).click();
+    await step.getByRole("button", { name: "Cancel" }).click();
+    // ...and back to the button that opened it when it closes.
+    await page.waitForFunction(() => document.activeElement?.textContent === "It was done", null, { timeout: 5000 });
     const [v] = await sql(`select status::text from public.visits where id = $1`, [missed.id]);
     assert.equal(v.status, "no_show");
   });
 
-  await check("\"it wasn't done\" needs a real reason; then nobody is charged and the alert closes", async () => {
+  await check("\"it wasn't done\" needs a real reason; then nobody is charged, the alert closes and the page says what happened", async () => {
     await missedItem.getByRole("button", { name: "It wasn’t done" }).click();
-    await missedItem.getByText(/It stays as a missed clean\. Nobody is charged/).waitFor();
+    await missedItem.getByText(/It stays as a missed clean and this alert closes\. Nobody is charged and Alex Test isn’t paid\./).waitFor();
     await missedItem.getByLabel(/What happened/).fill("??");
-    await missedItem.getByRole("button", { name: "Yes, it wasn't done" }).click();
+    await missedItem.getByRole("button", { name: "Yes, leave it as missed" }).click();
     await missedItem.getByText("Say what happened, in a few words.").waitFor();
     await missedItem.getByLabel(/What happened/).fill("Alex was ill and told nobody. Ben agreed to skip it.");
-    await missedItem.getByRole("button", { name: "Yes, it wasn't done" }).click();
+    await missedItem.getByRole("button", { name: "Yes, leave it as missed" }).click();
     await missedItem.waitFor({ state: "detached" });
+    const said = await page.getByRole("region", { name: /^Alerts/ }).getByRole("status").innerText();
+    assert.match(said, /^Whitehaven CA28, .*: marked as not done\. Nobody is charged\. It’s kept under “Marked as not done”, below, in case it did happen\.$/);
     const [v] = await sql(`select status::text from public.visits where id = $1`, [missed.id]);
     const [{ n: charges }] = await sql(`select count(*)::int as n from public.payments where visit_id = $1`, [missed.id]);
     const [rec] = await sql(`select outcome, was_status::text, reason, actor_id from public.visit_settlements where visit_id = $1`, [missed.id]);
@@ -172,6 +181,50 @@ export default async function jobsFlows({ page, BASE, check, dir, sql, settle, s
       status: "no_show", charges: 0, by: ADMIN,
       rec: { outcome: "not_done", was_status: "no_show", reason: "Alex was ill and told nobody. Ben agreed to skip it.", actor_id: ADMIN },
     });
+  });
+
+  await check("it did happen after all: the way back charges the customer once and pays the cleaner", async () => {
+    const kept = page.getByRole("group", { name: "Marked as not done" }).locator("li").filter({ hasText: "Whitehaven CA28" });
+    assert.match(await kept.innerText(), /Ben Test’s home · with Alex Test[\s\S]*“Alex was ill and told nobody\. Ben agreed to skip it\.”/);
+    await shoot(page, dir, "admin-jobs-not-done");
+    await kept.getByRole("button", { name: "It was done after all" }).click();
+    assert.equal(await kept.getByRole("button", { name: /wasn.t done/ }).count(), 0, "only the one way back is offered");
+    await kept.getByLabel(/What happened/).fill("Alex sent her photos: she did the clean on the day.");
+    await kept.getByRole("button", { name: "Yes, charge £40.00" }).click();
+    await kept.waitFor({ state: "detached" });
+    const said = await page.getByRole("region", { name: /^Alerts/ }).getByRole("status").innerText();
+    assert.match(said, /^Whitehaven CA28, .*: marked as done\. Ben Test’s card is charged £40\.00; Alex Test is paid £30\.00 after the check period\.$/);
+    const [v] = await sql(`select status::text, completed_at is not null as done from public.visits where id = $1`, [missed.id]);
+    const pays = await sql(`select status::text, amount_pence, application_fee_pence, cleaner_amount_pence from public.payments where visit_id = $1`, [missed.id]);
+    const recs = await sql(`select outcome from public.visit_settlements where visit_id = $1 order by created_at`, [missed.id]);
+    assert.deepEqual({ v, pays, recs: recs.map((r) => r.outcome) }, {
+      v: { status: "completed", done: true },
+      pays: [{ status: "pending", amount_pence: 4000, application_fee_pence: 1000, cleaner_amount_pence: 3000 }],
+      recs: ["not_done", "done"],
+    });
+    // Scored here, so the QC flow that follows finds its queue as it expects.
+    await sql(`insert into public.visit_qc (visit_id, score, notes, reviewed_by) values ($1, 8, 'e2e: settled by hand', $2)`, [missed.id, ADMIN]);
+  });
+
+  await check("someone else settles it while the step is open: nothing is done twice, and the page says so", async () => {
+    const [second] = await sql(`select id from public.visits where series_id = $1 and status = 'scheduled' order by scheduled_date limit 1`, [BLOCK3]);
+    await sql(`update public.visits set scheduled_date = (now() at time zone 'Europe/London')::date - 2, status = 'no_show' where id = $1`, [second.id]);
+    await sql(
+      `insert into public.engine_alerts (kind, series_id, visit_id, message)
+       values ('visit_no_show', $1, $2, 'A booked clean passed without being started. Check with the cleaner and the customer.')`, [BLOCK3, second.id]);
+    await page.goto(`${BASE}/admin/jobs`);
+    await settle(page);
+    const item = page.getByRole("region", { name: /^Alerts/ }).locator("li").filter({ hasText: "Clean missed" }).filter({ hasText: "Whitehaven CA28" });
+    await item.getByRole("button", { name: "It was done" }).click();
+    await item.getByLabel(/What happened/).fill("Ben says it was done.");
+    await asAdmin(`select public.admin_settle_visit('${second.id}', 'not_done', 'e2e: a colleague got there first')`);
+    await item.getByRole("button", { name: "Yes, charge £40.00" }).click();
+    await item.waitFor({ state: "detached" });
+    const said = await page.getByRole("region", { name: /^Alerts/ }).getByRole("status").innerText();
+    assert.match(said, /^Someone on the team had already dealt with this one\. Whitehaven CA28, .*: marked as not done\./);
+    const [{ n: charges }] = await sql(`select count(*)::int as n from public.payments where visit_id = $1`, [second.id]);
+    const [{ n: records }] = await sql(`select count(*)::int as n from public.visit_settlements where visit_id = $1`, [second.id]);
+    assert.deepEqual({ charges, records }, { charges: 0, records: 1 });
   });
 
   // Leave nothing of this block on Alex's calendar for the flows that follow.
