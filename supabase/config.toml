@@ -1,0 +1,22 @@
+# Read by the Supabase CLI and by Supabase's GitHub integration.
+#
+# How the live database changes: Supabase watches this repository. When a pull request is
+# merged to main, every migration in supabase/migrations that the live database hasn't had
+# yet is applied, in order. Nobody runs SQL against the live database by hand.
+# Set-up and the full go-live list: intent/go-live/plan.md.
+#
+# Deliberately short. The live project's Auth, API and email settings are set in the
+# Supabase dashboard (the integration ignores them here), and nothing below declares an
+# Edge Function or a storage bucket: the two buckets are made by a migration.
+
+project_id = "ping-clean"
+
+[db]
+major_version = 17
+
+[db.seed]
+# supabase/seed.sql is LOCAL TEST DATA: six logins that share one published password, one
+# of them an admin. It must never reach a database a real person uses, so the CLI and the
+# integration are told not to run it at all. The test scripts load it themselves
+# (scripts/db-test.sh), and the file refuses to run anywhere else.
+enabled = false

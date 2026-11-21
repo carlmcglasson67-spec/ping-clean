@@ -34,13 +34,30 @@ PSQL=(psql "$PING_TEST_DATABASE_URL" -X -q -v ON_ERROR_STOP=1)
 for f in supabase/migrations/*.sql; do
   "${PSQL[@]}" -f "$f" || { echo "Migration failed: $f"; exit 1; }
 done
-"${PSQL[@]}" -f supabase/seed.sql
+# The seed only runs for a session that says it is a test database (see the top of the file).
+"${PSQL[@]}" -c "set ping.seed_ok = 'local-test-only'" -f supabase/seed.sql
 echo "db: $(ls supabase/migrations/*.sql | wc -l) migrations + seed applied"
+
+# A second database with every migration and NO seed: exactly what the live database starts
+# as. tests/db/from-empty.test.ts walks a brand-new customer and cleaner through a whole
+# clean on it, so anything that only ever existed in the seed is caught here, not on launch day.
+bare_db() {
+  "${PSQL[@]}" -c "drop database if exists ping_bare" -c "create database ping_bare"
+  PING_BARE_DATABASE_URL=$(node -e 'const u = new URL(process.argv[1]); u.pathname = "/ping_bare"; console.log(u.toString())' "$PING_TEST_DATABASE_URL")
+  export PING_BARE_DATABASE_URL
+  local bare=(psql "$PING_BARE_DATABASE_URL" -X -q -v ON_ERROR_STOP=1)
+  # Roles belong to the whole server and the first database already made them.
+  sed '/^create role /d' tests/db/supabase-stub.sql | "${bare[@]}" -f -
+  for f in supabase/migrations/*.sql; do
+    "${bare[@]}" -f "$f" >/dev/null 2>&1 || { echo "Migration failed on the empty database: $f"; exit 1; }
+  done
+}
 
 if [ "${1:-}" = "types" ]; then
   mkdir -p lib/db && node scripts/gen-db-types.mjs
 elif [ "${1:-}" = "e2e" ]; then
   node tests/e2e/roles.e2e.mjs
 else
+  bare_db
   npx vitest run --config vitest.db.config.ts
 fi

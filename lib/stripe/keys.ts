@@ -1,6 +1,6 @@
 // Stripe keys and addresses: TEST MODE ONLY (ping-money-rules 8). Pure checks, no Stripe
 // client here, so they can be unit-tested and used before anything talks to Stripe.
-// Live keys stay off until Kate signs off the agent model, VAT and the cleaner terms.
+// Live keys stay off until Carl's accountant signs off the agent model, VAT and the cleaner terms.
 
 type Env = Record<string, string | undefined>;
 
@@ -11,7 +11,7 @@ const WEBHOOK_SECRET = /^whsec_[A-Za-z0-9+/=]{10,255}$/;
 /** Why a secret key can't be used (never echoes the key), or null when it's a test key. */
 export function secretKeyProblem(key: string | undefined): string | null {
   if (!key) return "STRIPE_SECRET_KEY is not set.";
-  if (/^(sk|rk)_live_/.test(key)) return "STRIPE_SECRET_KEY is a LIVE key. Ping only runs on Stripe test mode until Kate signs off.";
+  if (/^(sk|rk)_live_/.test(key)) return "STRIPE_SECRET_KEY is a LIVE key. Ping only runs on Stripe test mode until the accountant signs off.";
   if (!SECRET_TEST.test(key)) return "STRIPE_SECRET_KEY isn't a Stripe test key (sk_test_… or rk_test_…).";
   return null;
 }
