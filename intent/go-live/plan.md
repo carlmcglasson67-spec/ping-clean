@@ -209,8 +209,8 @@ pages are live. So the sign-in settings and the email sender come first.
   the second and third admins are made from the console and logged against a person.
 - **A second Supabase project for previews**, so pull requests can be tried with test
   logins before merging (#19 explains why previews can never share the live one).
-- **Settling a clean by hand**: the office marking a missed or unfinished clean as done or
-  not done. Today those alerts say "settle it by hand" and there is no button.
+- **No access** (the cleaner turned up and couldn't get in): recording it, and whether it
+  carries a fee. Waits for decision 7 above. Until then the office marks the clean "wasn't done".
 - The follow-ups in #12, #21 and #44.
 
 ## Things that will bite if forgotten

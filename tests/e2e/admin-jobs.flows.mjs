@@ -7,6 +7,7 @@ const ALEX = "00000000-0000-4000-a000-000000000005";
 const HOME = "00000000-0000-4000-b000-0000000000e1";
 const BLOCK = "00000000-0000-4000-c000-0000000000e1";
 const BLOCK2 = "00000000-0000-4000-c000-0000000000e2";
+const BLOCK3 = "00000000-0000-4000-c000-0000000000e3";
 
 /** An unclaimed block at a new home of Ben's in Whitehaven (CA28, which Alex covers). */
 async function unclaimedBlock(sql, id, weeksAhead) {
@@ -123,6 +124,58 @@ export default async function jobsFlows({ page, BASE, check, dir, sql, settle, s
     await item.getByRole("button", { name: "Yes, it’s sorted" }).click();
     await item.getByText("Someone on the team has already resolved that one.").waitFor();
   });
+
+  // A clean Alex was booked for and never started: yesterday, left as the night's job leaves it.
+  const asAdmin = (statement) =>
+    sql(`begin; select set_config('request.jwt.claims', '{"sub":"${ADMIN}","role":"authenticated"}', true); ${statement}; commit`);
+  await unclaimedBlock(sql, BLOCK3, 4);
+  await asAdmin(`select public.admin_assign_series('${BLOCK3}', '${ALEX}')`);
+  const [missed] = await sql(`select id from public.visits where series_id = $1 order by scheduled_date limit 1`, [BLOCK3]);
+  await sql(`update public.visits set scheduled_date = (now() at time zone 'Europe/London')::date - 1, status = 'no_show' where id = $1`, [missed.id]);
+  await sql(
+    `insert into public.engine_alerts (kind, series_id, visit_id, message)
+     values ('visit_no_show', $1, $2, 'A booked clean passed without being started. Check with the cleaner and the customer.')`, [BLOCK3, missed.id]);
+  await page.goto(`${BASE}/admin/jobs`);
+  await settle(page);
+  const missedItem = page.getByRole("region", { name: /^Alerts/ }).locator("li").filter({ hasText: "Clean missed" }).filter({ hasText: "Whitehaven CA28" });
+
+  await check("a missed clean is settled, not just hidden: the choices say what happens to the money", async () => {
+    const text = await missedItem.innerText();
+    assert.match(text, /booked for [\s\S]* with Alex Test/);
+    assert.match(text, /Then say whether it was done/);
+    assert.equal(text.match(/A booked clean passed without being started/g).length, 1, "the alert says it once");
+    assert.equal(await missedItem.getByRole("button", { name: "Mark resolved" }).count(), 0);
+    await missedItem.getByRole("button", { name: "It was done" }).click();
+    // Seed price: 2 hours at £20, the cleaner keeps 75%.
+    await missedItem.getByText(/The customer is charged £40\.00 and the cleaner is paid £30\.00 after the usual check period/).waitFor();
+    assert.ok(await missedItem.getByRole("button", { name: "Yes, done: charge £40.00" }).isDisabled(), "nothing is sent without a reason");
+    await shoot(page, dir, "admin-jobs-settle");
+    await missedItem.getByRole("button", { name: "Cancel" }).click();
+    const [v] = await sql(`select status::text from public.visits where id = $1`, [missed.id]);
+    assert.equal(v.status, "no_show");
+  });
+
+  await check("\"it wasn't done\" needs a real reason; then nobody is charged and the alert closes", async () => {
+    await missedItem.getByRole("button", { name: "It wasn’t done" }).click();
+    await missedItem.getByText(/It stays as a missed clean\. Nobody is charged/).waitFor();
+    await missedItem.getByLabel(/What happened/).fill("??");
+    await missedItem.getByRole("button", { name: "Yes, it wasn't done" }).click();
+    await missedItem.getByText("Say what happened, in a few words.").waitFor();
+    await missedItem.getByLabel(/What happened/).fill("Alex was ill and told nobody. Ben agreed to skip it.");
+    await missedItem.getByRole("button", { name: "Yes, it wasn't done" }).click();
+    await missedItem.waitFor({ state: "detached" });
+    const [v] = await sql(`select status::text from public.visits where id = $1`, [missed.id]);
+    const [{ n: charges }] = await sql(`select count(*)::int as n from public.payments where visit_id = $1`, [missed.id]);
+    const [rec] = await sql(`select outcome, was_status::text, reason, actor_id from public.visit_settlements where visit_id = $1`, [missed.id]);
+    const [al] = await sql(`select resolved_by from public.engine_alerts where visit_id = $1`, [missed.id]);
+    assert.deepEqual({ status: v.status, charges, rec, by: al.resolved_by }, {
+      status: "no_show", charges: 0, by: ADMIN,
+      rec: { outcome: "not_done", was_status: "no_show", reason: "Alex was ill and told nobody. Ben agreed to skip it.", actor_id: ADMIN },
+    });
+  });
+
+  // Leave nothing of this block on Alex's calendar for the flows that follow.
+  await asAdmin(`select public.admin_end_block('${BLOCK3}', 'e2e: settle flow finished')`);
 
   await page.goto(`${BASE}/admin/jobs`);
   await shoot(page, dir, "admin-jobs");

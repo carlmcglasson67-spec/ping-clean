@@ -33,13 +33,13 @@ export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo:
   visit_no_show: {
     label: "Clean missed",
     short: "Missed",
-    todo: "A booked clean passed without being started. Check with the cleaner and the customer.",
+    todo: "A booked clean passed without being started. Check with the cleaner and the customer. Then say whether it was done.",
     urgent: true,
   },
   visit_unfinished: {
     label: "Clean never finished",
     short: "Unfinished",
-    todo: "A clean was started but never marked complete. Check what happened with the cleaner.",
+    todo: "A clean was started but never marked complete. Check what happened with the cleaner, then say whether it was done.",
     urgent: true,
   },
   block_stalled: {
@@ -147,6 +147,21 @@ export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo:
 };
 
 export const ALERT_ORDER = Object.keys(ALERT_KIND) as AlertKind[];
+
+/**
+ * The part of an alert's "what to do" that its own message hasn't already said. The engine
+ * writes the message and this file writes the advice, and for some kinds they open with the
+ * same sentence: shown one under the other, the card said everything twice. Whole sentences
+ * only, so nothing is ever cut mid-thought.
+ */
+export function todoBeyond(message: string, todo: string): string {
+  const sentences = (s: string) => s.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) ?? [];
+  const said = sentences(message).map((s) => s.trim());
+  const advice = sentences(todo);
+  let i = 0;
+  while (i < advice.length && i < said.length && advice[i]!.trim() === said[i]) i++;
+  return advice.slice(i).join("").trim();
+}
 
 export function alertKind(kind: string): AlertKind | null {
   return kind in ALERT_KIND ? (kind as AlertKind) : null;

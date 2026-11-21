@@ -46,13 +46,15 @@ export default async function QcPage({ searchParams }: { searchParams: Promise<{
   const ids = queue.map((v) => v.id);
 
   const seriesIds = [...new Set((details.data ?? []).map((v) => v.series_id))];
-  const [photos, items, reviews, series] = await Promise.all([
+  const [photos, items, reviews, series, settled] = await Promise.all([
     ids.length ? supabase.from("visit_photos").select("id, visit_id, kind, room, storage_path, taken_at").in("visit_id", ids).order("taken_at") : empty(),
     ids.length ? supabase.from("checklist_items").select("visit_id, room, label, position, done, skipped_reason").in("visit_id", ids).order("position") : empty(),
     ids.length ? supabase.from("reviews").select("visit_id, rating, comment").in("visit_id", ids) : empty(),
     seriesIds.length ? supabase.from("series").select("id, property_id").in("id", seriesIds) : empty(),
+    // Cleans the Ping team marked as done by hand (Jobs → Alerts): no app evidence to score against.
+    ids.length ? supabase.from("visit_settlements").select("visit_id, reason").eq("outcome", "done").in("visit_id", ids) : empty(),
   ]);
-  if (photos.error || items.error || reviews.error || series.error) return <Failed />;
+  if (photos.error || items.error || reviews.error || series.error || settled.error) return <Failed />;
 
   const propIds = [...new Set((series.data ?? []).map((s) => s.property_id))];
   const cleanerIds = [...new Set((details.data ?? []).map((v) => v.cleaner_id).filter((x): x is string => !!x))];
@@ -92,6 +94,7 @@ export default async function QcPage({ searchParams }: { searchParams: Promise<{
               const ticked = vItems.filter((i) => i.done).length;
               const review = (reviews.data ?? []).find((r) => r.visit_id === v.id);
               const vPhotos = (photos.data ?? []).filter((p) => p.visit_id === v.id);
+              const byHand = (settled.data ?? []).find((x) => x.visit_id === v.id);
               return (
                 <li key={v.id}>
                   <Card className="grid gap-6" aria-label={`${place(v.series_id)}, ${formatDay(v.scheduled_date)}`}>
@@ -103,8 +106,15 @@ export default async function QcPage({ searchParams }: { searchParams: Promise<{
                           {v.completed_at ? ` · finished ${formatStamp(v.completed_at)}` : ""}
                         </p>
                       </div>
-                      {skipped.length ? <Badge tone="warn">{skipped.length} couldn&rsquo;t do</Badge> : <Badge tone="ok">Everything ticked</Badge>}
+                      {byHand ? <Badge tone="warn">Marked done by the Ping team</Badge> : skipped.length ? <Badge tone="warn">{skipped.length} couldn&rsquo;t do</Badge> : <Badge tone="ok">Everything ticked</Badge>}
                     </div>
+
+                    {byHand ? (
+                      <div className="grid gap-1 rounded-md bg-warn-soft px-4 py-3">
+                        <p className="text-sm font-semibold">The cleaner didn&rsquo;t finish this one in the app. The team marked it as done:</p>
+                        <p className="text-sm text-navy-2">&ldquo;{byHand.reason}&rdquo;</p>
+                      </div>
+                    ) : null}
 
                     <div className="grid gap-4 md:grid-cols-2">
                       {(["before", "after"] as const).map((kind) => {
@@ -137,7 +147,9 @@ export default async function QcPage({ searchParams }: { searchParams: Promise<{
                     </div>
 
                     <div className="grid gap-3 rounded-md bg-mist/60 p-4">
-                      <p className="font-semibold">Checklist: {ticked} of {vItems.length} ticked{skipped.length ? `, ${skipped.length} couldn't do` : ""}</p>
+                      <p className="font-semibold">
+                        {vItems.length === 0 ? "No checklist: this clean was never started in the app." : `Checklist: ${ticked} of ${vItems.length} ticked${skipped.length ? `, ${skipped.length} couldn't do` : ""}`}
+                      </p>
                       {skipped.length ? (
                         <ul className="grid gap-2">
                           {skipped.map((i) => (

@@ -53,6 +53,9 @@ export const PING_ERRORS = {
   PC035: "The cost of cancelling has changed since this page loaded. Check the new figure and confirm again.",
   PC054: "That booking has already ended, or isn't on your account.",
   PC055: "One of your cleans is under way or about to start. You can cancel the rest once it's finished, or call the Ping office.",
+  // Settling a clean by hand (the Ping team)
+  PC056: "That clean isn't waiting to be settled any more. Refresh to see where it stands.",
+  PC057: "That clean had no cleaner, so it can't be marked as done.",
 } as const;
 
 export type PingErrorCode = keyof typeof PING_ERRORS;
