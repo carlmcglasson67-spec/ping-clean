@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { Button, Field } from "@/components/ui";
+import { Button, Field, Turnstile } from "@/components/ui";
+import { authCaptchaSiteKey } from "@/lib/auth/captcha";
 import { Notice } from "../_components/auth-frame";
 import { requestReset, type ForgotState } from "./actions";
 
 export function ForgotForm() {
   const [state, action, pending] = useActionState<ForgotState, FormData>(requestReset, {});
+  const siteKey = authCaptchaSiteKey();
 
   if (state.sent) {
     return (
@@ -39,6 +41,7 @@ export function ForgotForm() {
         required
         defaultValue={state.email}
       />
+      {siteKey ? <Turnstile siteKey={siteKey} theme="light" error={state.captcha} resetOn={state} /> : null}
       <Button type="submit" size="lg" pending={pending} className="w-full">
         {pending ? "Sending…" : "Send me a reset link"}
       </Button>

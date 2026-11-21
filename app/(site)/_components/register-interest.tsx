@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { startTransition, useActionState, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Button, cn } from "@/components/ui";
+import { startTransition, useActionState, useId, useState, type ReactNode } from "react";
+import { Button, Turnstile, cn } from "@/components/ui";
 import { registerInterestOnHoldingPage, registerInterestOnInstantPrice } from "@/lib/interest/actions";
 import {
   INTEREST_FIELDS,
@@ -259,45 +259,4 @@ function NavyField({ id, label, error, children }: { id: string; label: string; 
   );
 }
 
-type TurnstileApi = { render: (el: HTMLElement, opts: { sitekey: string; theme?: string }) => string; remove: (id: string) => void };
-
-/**
- * Cloudflare Turnstile, rendered explicitly so it also works when the form appears after
- * the page has loaded. It adds its own hidden "cf-turnstile-response" field to the form.
- */
-export function Turnstile({ siteKey, error, theme = "dark" }: { siteKey: string; error?: string; theme?: "dark" | "light" }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-    if (!document.querySelector(`script[src="${SRC}"]`)) {
-      const s = document.createElement("script");
-      s.src = SRC;
-      s.async = true;
-      s.defer = true;
-      document.head.appendChild(s);
-    }
-    let widget: string | null = null;
-    const timer = window.setInterval(() => {
-      const api = (window as unknown as { turnstile?: TurnstileApi }).turnstile;
-      if (api && ref.current && widget === null) {
-        widget = api.render(ref.current, { sitekey: siteKey, theme });
-        window.clearInterval(timer);
-      }
-    }, 150);
-    return () => {
-      window.clearInterval(timer);
-      const api = (window as unknown as { turnstile?: TurnstileApi }).turnstile;
-      if (api && widget) api.remove(widget);
-    };
-  }, [siteKey, theme]);
-  return (
-    <div className="grid gap-2">
-      <div ref={ref} className="min-h-[65px]" />
-      {error ? (
-        <p role="alert" className={cn("text-base font-medium", theme === "dark" ? "text-bad-on-navy" : "text-bad")}>
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-}
+export { Turnstile };

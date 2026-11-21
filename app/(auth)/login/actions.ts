@@ -2,13 +2,14 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { CAPTCHA_MESSAGE, captchaToken, isCaptchaError } from "@/lib/auth/captcha";
 import { postLoginPath } from "@/lib/auth/roles";
 import { createClient } from "@/lib/db/server";
 import { hasSupabaseEnv } from "@/lib/env";
 
 export type LoginState = {
   error?: string;
-  fieldErrors?: { email?: string; password?: string };
+  fieldErrors?: { email?: string; password?: string; captcha?: string };
   email?: string;
 };
 
@@ -38,10 +39,13 @@ export async function signIn(_prev: LoginState, formData: FormData): Promise<Log
   const { data, error } = await supabase.auth.signInWithPassword({
     email: parsed.data.email,
     password: parsed.data.password,
+    options: { captchaToken: captchaToken(formData) },
   });
 
   if (error || !data.user) {
     // Same message whether the email exists or not, so the form can't be used to find accounts.
+    // The check isn't about the account, so saying so reveals nothing.
+    if (isCaptchaError(error)) return { email, fieldErrors: { captcha: CAPTCHA_MESSAGE } };
     const tooMany = error?.status === 429;
     // Supabase only says "not confirmed" once the password is right, so this reveals
     // nothing to someone guessing.

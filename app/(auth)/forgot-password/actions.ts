@@ -2,10 +2,11 @@
 
 import { z } from "zod";
 import { resetReturnUrl } from "@/lib/auth/links";
+import { CAPTCHA_MESSAGE, captchaToken, isCaptchaError } from "@/lib/auth/captcha";
 import { createClient } from "@/lib/db/server";
 import { hasSupabaseEnv } from "@/lib/env";
 
-export type ForgotState = { sent?: string; error?: string; email?: string };
+export type ForgotState = { sent?: string; error?: string; email?: string; captcha?: string };
 
 export async function requestReset(_prev: ForgotState, formData: FormData): Promise<ForgotState> {
   const email = String(formData.get("email") ?? "").trim();
@@ -18,6 +19,11 @@ export async function requestReset(_prev: ForgotState, formData: FormData): Prom
   // rate-limits emails to addresses that have an account, so a "too many requests" reply
   // here would tell an attacker the address is registered. (Vercel's firewall limits
   // requests per IP instead: see the PR.)
-  await supabase.auth.resetPasswordForEmail(parsed.data, { redirectTo: resetReturnUrl() });
+  // The one exception is the human check: it isn't about the account, so it can be shown.
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, {
+    redirectTo: resetReturnUrl(),
+    captchaToken: captchaToken(formData),
+  });
+  if (isCaptchaError(error)) return { email, captcha: CAPTCHA_MESSAGE };
   return { sent: parsed.data };
 }

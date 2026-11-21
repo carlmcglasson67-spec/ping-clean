@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { Button, Checkbox, Field, PasswordField } from "@/components/ui";
+import { Button, Checkbox, Field, PasswordField, Turnstile } from "@/components/ui";
+import { authCaptchaSiteKey } from "@/lib/auth/captcha";
 import { Notice } from "../_components/auth-frame";
 import { resendConfirmation, signUp, type ResendState, type SignupState } from "./actions";
 
 export function SignupForm({ next, signInHref }: { next?: string; signInHref: string }) {
   const [state, action, pending] = useActionState<SignupState, FormData>(signUp, {});
   const [email, setEmail] = useState(state.values?.email ?? "");
+  const siteKey = authCaptchaSiteKey();
 
   if (state.sent) return <CheckEmail email={state.sent.email} next={next} />;
   const fe = state.fieldErrors ?? {};
@@ -69,6 +71,8 @@ export function SignupForm({ next, signInHref }: { next?: string; signInHref: st
         </Checkbox>
       </div>
 
+      {siteKey ? <Turnstile siteKey={siteKey} theme="light" error={fe.captcha} resetOn={state} /> : null}
+
       <Button type="submit" size="lg" pending={pending} className="mt-2 w-full">
         {pending ? "Creating your account…" : "Create my account"}
       </Button>
@@ -84,6 +88,7 @@ export function SignupForm({ next, signInHref }: { next?: string; signInHref: st
 
 function CheckEmail({ email, next }: { email: string; next?: string }) {
   const [state, action, pending] = useActionState<ResendState, FormData>(resendConfirmation, {});
+  const siteKey = authCaptchaSiteKey();
   return (
     <div className="grid gap-6" data-testid="check-email">
       <Notice tone="ok">Nearly there. Check your email.</Notice>
@@ -95,6 +100,7 @@ function CheckEmail({ email, next }: { email: string; next?: string }) {
       <form action={action} className="grid gap-3">
         <input type="hidden" name="email" value={email} />
         {next ? <input type="hidden" name="next" value={next} /> : null}
+        {siteKey ? <Turnstile siteKey={siteKey} theme="light" error={state.captcha} resetOn={state} /> : null}
         <Button type="submit" variant="secondary" size="lg" pending={pending} className="w-full">
           Send it again
         </Button>

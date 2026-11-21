@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { CAPTCHA_MESSAGE, captchaToken, isCaptchaError } from "@/lib/auth/captcha";
 import { emailReturnUrl, tidyPhone } from "@/lib/auth/links";
 import { safeNext } from "@/lib/auth/next";
 import { passwordProblem } from "@/lib/auth/password";
@@ -16,7 +17,7 @@ const PRIVACY_VERSION = "draft-2026-11";
 
 export type SignupState = {
   error?: string;
-  fieldErrors?: Partial<Record<"fullName" | "email" | "password" | "phone" | "terms" | "privacy", string>>;
+  fieldErrors?: Partial<Record<"fullName" | "email" | "password" | "phone" | "terms" | "privacy" | "captcha", string>>;
   values?: { fullName?: string; email?: string; phone?: string };
   /** The confirmation email is on its way (or would be, if the address had no account). */
   sent?: { email: string };
@@ -67,6 +68,7 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
     email: parsed.data.email,
     password: raw.password,
     options: {
+      captchaToken: captchaToken(formData),
       emailRedirectTo: emailReturnUrl(next),
       // Profile name comes from full_name (private.handle_new_user). The role is never
       // read from here: every new account is a customer. Phone and consent ride along
@@ -84,6 +86,7 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
   });
 
   if (error) {
+    if (isCaptchaError(error)) return { values, fieldErrors: { captcha: CAPTCHA_MESSAGE } };
     // Email-sending limits apply per address, so only to addresses that already exist:
     // answer exactly as for a new address. (The per-IP request limit says nothing about
     // any address, so that one can be shown.)
@@ -109,7 +112,7 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
   return { sent: { email: parsed.data.email } };
 }
 
-export type ResendState = { done?: boolean };
+export type ResendState = { done?: boolean; captcha?: string };
 
 /** "Send it again" on the check-your-email screen. Same reply whatever the address. */
 export async function resendConfirmation(_prev: ResendState, formData: FormData): Promise<ResendState> {
@@ -118,10 +121,15 @@ export async function resendConfirmation(_prev: ResendState, formData: FormData)
   const supabase = await createClient();
   // Same answer whatever happens, rate limits included: Supabase only limits resends for
   // addresses that have an account, so "slow down" would reveal the address is registered.
-  await supabase.auth.resend({
+  const { error } = await supabase.auth.resend({
     type: "signup",
     email: email.data,
-    options: { emailRedirectTo: emailReturnUrl(safeNext(String(formData.get("next") ?? ""))) },
+    options: {
+      emailRedirectTo: emailReturnUrl(safeNext(String(formData.get("next") ?? ""))),
+      captchaToken: captchaToken(formData),
+    },
   });
+  // The human check isn't about the address, so that one refusal can be shown.
+  if (isCaptchaError(error)) return { captcha: CAPTCHA_MESSAGE };
   return { done: true };
 }
