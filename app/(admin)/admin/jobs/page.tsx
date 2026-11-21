@@ -152,7 +152,9 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   // What the team just did, said by the page: the alert's own card has gone with the alert.
   const last = (justSettled.data ?? [])[0];
   const lastClean = last ? cleanById.get(last.visit_id) : undefined;
-  const settledNote = last && lastClean && withinLast(last.created_at, JUST_NOW_MS)
+  // Sent back "late", the team member is always told why nothing happened, however long ago
+  // the colleague settled it: their own card has just vanished from under them.
+  const settledNote = last && lastClean && (beatenToIt || withinLast(last.created_at, JUST_NOW_MS))
     ? (beatenToIt ? "Someone on the team had already dealt with this one. " : "") +
       `${where(lastClean)}, ${formatDay(lastClean.scheduled_date)}: marked as ${last.outcome === "done" ? "done" : "not done"}. ` +
       (last.outcome === "done"
@@ -162,7 +164,9 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         : last.was_status === "in_progress"
           ? "The clean is cancelled and nobody is charged."
           : "Nobody is charged. It’s kept under “Marked as not done”, below, in case it did happen.")
-    : null;
+    : beatenToIt && settledId
+      ? "Nothing was changed: that clean was no longer waiting to be settled. This page shows where it stands now."
+      : null;
 
   return (
     <>
@@ -224,7 +228,8 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
 
       <Section id="alerts" title="Alerts" count={openAlerts.length}>
         {settledNote ? (
-          <p role="status" className="rounded-md bg-ok-soft px-5 py-4 font-semibold text-ok ring-1 ring-inset ring-ok/25">{settledNote}</p>
+          // Green when it did what was asked; amber when it didn't, because a colleague had.
+          <p role="status" className={cn("rounded-md px-5 py-4 font-semibold ring-1 ring-inset", beatenToIt ? "bg-warn-soft text-warn ring-warn/25" : "bg-ok-soft text-ok ring-ok/25")}>{settledNote}</p>
         ) : null}
         {openAlerts.length === 0 ? (
           <EmptyState title="No open alerts">When something needs a person (a missed clean, a stalled block, cover for today, a cleaner&rsquo;s document running out) it shows here.</EmptyState>
