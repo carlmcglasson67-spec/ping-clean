@@ -550,7 +550,7 @@ function ShareLaunch() {
           variant="secondary"
           className="w-fit max-sm:w-full"
           onClick={() => {
-            navigator.share({ title: "Ping Clean", text: "Regular home cleaning for West Cumbria. Put your postcode on the list.", url }).catch(() => {});
+            navigator.share({ title: "Ping Clean", text: "Regular home cleaning for Carlisle and West Cumbria. Put your postcode on the list.", url }).catch(() => {});
           }}
         >
           Share this page

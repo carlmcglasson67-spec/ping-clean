@@ -15,7 +15,7 @@ import type { Faq } from "../_content/faq";
 export const metadata: Metadata = {
   title: "Launching soon",
   description:
-    "Ping Clean is regular home cleaning for West Cumbria: one vetted cleaner for your block, a checklist and photos every visit, and you pay after. Register your interest as a customer or to clean with Ping.",
+    "Ping Clean is regular home cleaning for Carlisle and West Cumbria: one vetted cleaner for your block, a checklist and photos every visit, and you pay after. Register your interest as a customer or to clean with Ping.",
 };
 
 // The form's retention period and Turnstile key are read on every request.
@@ -56,8 +56,8 @@ const FOR_CLEANERS = [
 ];
 
 const LAUNCH_FAQ: Faq[] = [
-  { q: "What is Ping Clean?", a: "Regular home cleaning for West Cumbria. You book a block of cleans, Ping offers it to vetted, self-employed cleaners near you, and one of them takes on every clean in the block. Ping handles the booking, the payment and the quality checks." },
-  { q: "When does it launch, and where?", a: "Soon, starting in West Cumbria. We’re opening town by town, and the postcodes on this list help decide which come first. Leave yours and we’ll send you one message when booking opens near you." },
+  { q: "What is Ping Clean?", a: "Regular home cleaning for Carlisle and West Cumbria. You book a block of cleans, Ping offers it to vetted, self-employed cleaners near you, and one of them takes on every clean in the block. Ping handles the booking, the payment and the quality checks." },
+  { q: "When does it launch, and where?", a: "Soon, starting in Carlisle and West Cumbria. We’re opening town by town, and the postcodes on this list help decide which come first. Leave yours and we’ll send you one message when booking opens near you." },
   { q: "What does registering commit me to?", a: "Nothing. There’s no payment and no booking. We keep your details only to send you that one message and to plan the launch, then delete them." },
   { q: "Will I get the same cleaner each time?", a: "Yes. One cleaner takes on your whole block, so the same person does every clean in it. When you rebook they’re offered it first. If they can’t take it, Ping finds a vetted replacement and tells you who’s coming." },
   { q: "How are Ping cleaners checked?", a: "Before a cleaner can see a single job we verify 4 things: a DBS check, public liability insurance, photo ID and their right to work in the UK. Then every clean they do is scored." },
@@ -79,7 +79,7 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
                 <span aria-hidden className="ping-pulse absolute size-3 rounded-full bg-teal" />
                 <LogoMark className="relative size-7" />
               </span>
-              Launching soon in West Cumbria
+              Launching soon in Carlisle and West Cumbria
             </p>
             <h1 id="launch-title" className="mt-10 text-[clamp(3rem,1.4rem+5vw,7.25rem)] font-semibold leading-[0.95]">
               The new way of connecting <br className="hidden lg:block" />
@@ -312,7 +312,7 @@ export default async function LaunchPage({ searchParams }: { searchParams: Promi
             <div className="lg:col-span-7">
               <Eyebrow>Where we&rsquo;re opening</Eyebrow>
               <h2 id="where-title" className="mt-5 text-3xl font-semibold">
-                West Cumbria, town by town.
+                Carlisle and West Cumbria, town by town.
               </h2>
             </div>
             <p className="text-lg text-navy-2 lg:col-span-4 lg:col-start-9">

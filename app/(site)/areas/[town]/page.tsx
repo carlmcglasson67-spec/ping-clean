@@ -27,12 +27,17 @@ export async function generateMetadata({ params }: { params: Promise<{ town: str
   };
 }
 
+function districtWords(t: Town): string {
+  const d = t.districts;
+  return d.length === 1 ? `${d[0]} is the district` : `${d.slice(0, -1).join(", ")} and ${d.at(-1)} are the districts`;
+}
+
 function localFaq(t: Town): Faq[] {
   const places = t.around.length > 1 ? `${t.around.slice(0, -1).join(", ")} and ${t.around.at(-1)}` : t.around[0];
   return [
     {
       q: `Do you cover ${places}?`,
-      a: `Ping cleaners choose the postcode districts they travel to, and ${t.districts.join(" and ")} is the district for ${t.name}. Put your postcode into the instant price and you’ll see straight away whether we’re booking where you live.`,
+      a: `Ping cleaners choose the postcode districts they travel to, and ${districtWords(t)} for ${t.name}. Put your postcode into the instant price and you’ll see straight away whether we’re booking where you live.`,
     },
     {
       q: `Will I get the same cleaner in ${t.name}?`,

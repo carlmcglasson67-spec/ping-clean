@@ -9,7 +9,7 @@ import { getPricing } from "../_lib/pricing";
 
 export const metadata: Metadata = {
   title: "Get your price",
-  description: "Your postcode and how many hours: the exact price of a regular clean in West Cumbria, before you commit to anything.",
+  description: "Your postcode and how many hours: the exact price of a regular clean in Carlisle and West Cumbria, before you commit to anything.",
   alternates: { canonical: "/price" },
 };
 

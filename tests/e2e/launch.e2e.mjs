@@ -37,7 +37,7 @@ export async function launchFlows({ browser, BASE, check, shots }) {
       await page.goto(`${BASE}/launch`, { waitUntil: "networkidle" });
       await settle(page);
       const text = await page.locator("main").innerText();
-      for (const s of ["cleaners to clients.", "What Ping Clean is", "clean for a living.", "West Cumbria, town by town.", "Workington", "Be first in"]) {
+      for (const s of ["cleaners to clients.", "What Ping Clean is", "clean for a living.", "Carlisle and West Cumbria, town by town.", "Workington", "Be first in"]) {
         // Case-insensitive: the small labels are set in capitals by the stylesheet.
         assert.ok(text.toLowerCase().includes(s.toLowerCase()), `expected to see "${s}" at ${width}px`);
       }

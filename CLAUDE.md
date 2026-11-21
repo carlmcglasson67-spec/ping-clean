@@ -1,6 +1,6 @@
 # Ping Clean
 
-Regular domestic cleaning marketplace for West Cumbria. Customers book, vetted
+Regular domestic cleaning marketplace for Carlisle and West Cumbria (Carlisle CA1–CA8 leads; Carl, 21 Nov 2026). Which postcodes are open is settings.launch_districts, never code; area content is app/(site)/_content/towns.ts. Customers book, vetted
 self-employed cleaners claim the work, Ping takes a commission. Founding spec:
 https://claude.ai/artifact/1WEp7QQgrj5dGn1wzooEWz (summary in intent/v1/spec.md).
 

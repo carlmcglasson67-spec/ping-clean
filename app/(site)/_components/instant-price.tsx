@@ -116,7 +116,7 @@ function OpenPrice({ pricing, tone, interest }: { pricing: Open; tone: "card" | 
             <p className="font-display text-3xl font-semibold">We&rsquo;re not booking there yet.</p>
             <p className="text-lg text-on-navy-2">
               Ping opens a postcode when there are enough vetted local cleaners to look after it properly.
-              {interest?.retentionMonths ? " Leave your details and we\u2019ll tell you when we open near you." : " We\u2019re growing across West Cumbria first."}
+              {interest?.retentionMonths ? " Leave your details and we\u2019ll tell you when we open near you." : " We\u2019re growing across Carlisle and West Cumbria first."}
             </p>
             {interest?.retentionMonths ? (
               <RegisterInterest source="instant_price" setup={interest} initialPostcode={parsed.kind === "full" ? parsed.postcode : ""} className="mt-2" />

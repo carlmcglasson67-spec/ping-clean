@@ -61,11 +61,20 @@ export function byDistrict(a: string, b: string): number {
   return pa[1]!.localeCompare(pb[1]!) || Number(pa[2]) - Number(pb[2]) || pa[3]!.localeCompare(pb[3]!);
 }
 
-/** The main town in each West Cumbria district, so a cleaner isn't choosing from bare codes. */
+/** The main town in each district Ping covers, so a cleaner isn't choosing from bare codes. */
 export const DISTRICT_TOWN: Record<string, string> = {
+  CA1: "Carlisle centre and east",
+  CA2: "Carlisle south and west",
+  CA3: "Carlisle north",
+  CA4: "Wetheral and Scotby",
+  CA5: "Dalston",
+  CA6: "Longtown",
+  CA7: "Wigton",
+  CA8: "Brampton",
   CA13: "Cockermouth",
   CA14: "Workington",
   CA15: "Maryport",
+  CA20: "Seascale and Gosforth",
   CA22: "Egremont",
   CA25: "Cleator Moor",
   CA26: "Frizington",

@@ -10,7 +10,7 @@ import { CLEANER_STEPS, TIERS } from "../_content/how";
 export const metadata: Metadata = {
   title: "Clean for Ping",
   description:
-    "Self-employed cleaning work in West Cumbria. Choose your areas and hours, take on blocks of regular cleans, and get paid after every clean.",
+    "Self-employed cleaning work in Carlisle and West Cumbria. Choose your areas and hours, take on blocks of regular cleans, and get paid after every clean.",
   alternates: { canonical: "/clean-for-ping" },
 };
 
@@ -70,7 +70,7 @@ export default function CleanForPingPage() {
                 own work.
               </h1>
               <p className="mt-8 max-w-xl text-xl text-navy/85">
-                Self-employed cleaning in West Cumbria, with blocks of regular cleans that are yours and pay that lands in your bank after every clean.
+                Self-employed cleaning in Carlisle and West Cumbria, with blocks of regular cleans that are yours and pay that lands in your bank after every clean.
               </p>
               <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-4">
                 {/* /signup arrives with #19. */}

@@ -7,7 +7,7 @@ import { CLEANERS_LINK } from "../_content/nav";
 
 export const metadata: Metadata = {
   title: "Questions",
-  description: "How Ping prices, books and checks every regular clean in West Cumbria: your cleaner, access, what’s included, paying, skipping and cancelling.",
+  description: "How Ping prices, books and checks every regular clean in Carlisle and West Cumbria: your cleaner, access, what’s included, paying, skipping and cancelling.",
   alternates: { canonical: "/faq" },
 };
 
