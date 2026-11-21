@@ -51,11 +51,12 @@ pages are live. So the sign-in settings and the email sender come first.
     (they start `{{ .SiteURL }}/auth/confirm?…`).
   - Emails → SMTP Settings: Resend's SMTP details from step 4. Supabase's own sender only
     manages a few emails an hour. **Required before real people sign up.**
-  - **Do NOT turn on CAPTCHA protection (Attack Protection) yet.** #19 lists it as required,
-    but the sign-up, sign-in and reset forms don't send a Turnstile token yet. Turn it on
-    today and nobody can sign in, including you. See "Still to build" below.
-- [ ] **6. Cloudflare → Turnstile:** add a widget for `pingclean.co.uk` (free). It gives a
-  site key and a secret for the next step.
+  - **Leave CAPTCHA protection (Attack Protection) OFF for now.** It goes on at step 9a,
+    once the Turnstile pull request (`main-session/auth-turnstile`) is merged and the site
+    key is live. Turn it on before then and nobody can sign in, including you.
+- [ ] **6. Cloudflare → Turnstile:** add a widget for `pingclean.co.uk` (free), mode
+  Managed. It gives a site key and a secret. The same pair does the interest form and
+  sign-in: the secret goes in Vercel (step 7) and in Supabase (step 9a).
 
 ## Stage 3: connect the site, and the launch page takes names
 
@@ -84,6 +85,11 @@ pages are live. So the sign-in settings and the email sender come first.
 - [ ] **9. Redeploy and check.** Vercel → Deployments → Redeploy the latest (settings only
   take effect on a new deployment). Then on `https://pingclean.co.uk/launch`: register as a
   customer and as a cleaner with your own details. Each should end on the thank-you panel.
+- [ ] **9a. Switch on the human check for sign-in** (only once the Turnstile pull request
+  is merged and step 9 shows the check box on `/login`). Supabase → Authentication →
+  Attack Protection → Enable CAPTCHA protection → provider **Turnstile** → paste the secret
+  from step 6 → Save. Then sign out and sign in on `pingclean.co.uk`. If you can't, switch
+  it straight back off and tell me.
 - [ ] **10. Rate limits.** Vercel → Firewall → Configure → New rule. **Not the rule as
   written in #20**: that one limited every POST on every path to 10 per 10 minutes, which
   was right when only the public site existed. Now a cleaner doing one clean sends 15 or
@@ -130,7 +136,9 @@ pages are live. So the sign-in settings and the email sender come first.
 - [ ] **12. Admin console → Settings.** Booking stays closed until the starred ones are
   filled in. The numbers are Carl's (see "Decisions" below):
   price per hour* `£25.00`, shortest clean* `2 hours`, commission*, the two offer windows*
-  and the unclaimed alert*, the postcode districts you're open in*. Already set by the
+  and the unclaimed alert*, the postcode districts you're open in*: **Carlisle is
+  `CA1, CA2, CA3, CA4, CA5, CA6, CA7, CA8`** (Carl, 21 Nov), plus whichever West Cumbria
+  districts you open (`CA14` Workington, `CA28` Whitehaven …). Only listed districts can book. Already set by the
   database: 24 hours' cancellation notice, 72-hour check period before a cleaner is paid,
   payment retries at 24 and 72 hours then the block pauses for up to 7 days.
 
@@ -185,7 +193,12 @@ pages are live. So the sign-in settings and the email sender come first.
    take a job, so it has to be right from the first booking.
 3. **Offer windows:** minutes that Top cleaners get first, then Approved, and when the
    office is told nobody has taken a job.
-4. **Where the pilot is open:** which postcode districts (CA14, CA28, …).
+4. **Where the pilot is open.** Carlisle is CA1–CA8 and leads, with West Cumbria too
+   (decided 21 Nov). Still open: does Carlisle open on 30 Nov with the pilot, or after it?
+   The pilot customers (Cumbria Bright regulars) and today's cleaners are West Cumbria, so
+   Carlisle needs its own vetted cleaners first: the 200–250 Indeed applicants are the
+   place to start, on `/clean-for-ping`. Opening a district with no cleaners in it means
+   bookings nobody can take.
 5. **Late-cancellation fee:** the amount. None is set, so a late cancellation costs nothing.
 6. **A clean with "couldn't do" items:** charge in full, or hold for the office to decide.
    Not set, so today it is held.
@@ -199,8 +212,8 @@ pages are live. So the sign-in settings and the email sender come first.
 
 ## Still to build before the public launch (not the pilot)
 
-- **Turnstile on sign-up, sign-in and password reset**, then Supabase's CAPTCHA protection
-  ON (step 5). Today only the interest form has it.
+- ~~Turnstile on sign-up, sign-in and password reset~~: built in `main-session/auth-turnstile`.
+  Merge it, then step 9a.
 - **Someone registering your email before you do.** Supabase keeps the first password
   given for an address that hasn't been confirmed yet. Step 11 guards the admin accounts
   against it by hand; customers and cleaners need the same guard built in (a confirmed
