@@ -35,7 +35,7 @@ const card = (behaviour: "ok" | "decline" | "auth") =>
   fetch(`${fake.url}/__test/payment_methods`, { method: "POST", body: JSON.stringify({ id: "pm_testCard000001", customer: CUS, behaviour }) });
 
 /** The database: `begin` is what customer_pay_begin answers; results are remembered. */
-function db(begin: ReturnType<typeof row> | null, answer: (a: Record<string, unknown>) => string = (a) => (a.p_outcome === "processing" ? "ignored" : (a.p_outcome as string))) {
+function db(begin: ReturnType<typeof row> | null, answer: (a: Record<string, unknown>) => string = (a) => (a.p_outcome === "processing" ? "ignored" : (a.p_outcome as string)), allowed = true) {
   const calls: { fn: string; args: Record<string, unknown> }[] = [];
   let intent: string | null = null;
   let linked: string | null = null; // Anna's Stripe customer, made the first time it's needed
@@ -49,6 +49,7 @@ function db(begin: ReturnType<typeof row> | null, answer: (a: Record<string, unk
     if (fn === "stripe_customer_for") return { data: args.p_profile === ANNA ? linked : null, error: null };
     if (fn === "stripe_link_customer") { linked = args.p_stripe_customer as string; return { data: linked, error: null }; }
     if (fn === "stripe_card_saved") return { data: "saved", error: null };
+    if (fn === "customer_stripe_call") return { data: allowed, error: null };
     return { data: null, error: { code: "XX000" } };
   });
   return { calls, results: () => calls.filter((c) => c.fn === "stripe_payment_result").map((c) => c.args) };
@@ -136,8 +137,8 @@ describe("pay now", () => {
 describe("using a different card", () => {
   it("opens a fresh card form for the payment's own block", async () => {
     const d = db(row());
-    const secret = await startCardChange(PAYMENT, { id: ANNA, email: "anna@example.com", fullName: "Anna Test" });
-    expect(secret).toMatch(/^seti_.+_secret_/);
+    const started = await startCardChange(PAYMENT, { id: ANNA, email: "anna@example.com", fullName: "Anna Test" });
+    expect(started).toEqual({ clientSecret: expect.stringMatching(/^seti_.+_secret_/) });
     const [si] = [...fake.state.setupIntents.values()];
     expect(si).toMatchObject({ usage: "off_session", metadata: { series_id: SERIES, profile_id: ANNA } });
     expect(d.calls[0]).toEqual({ fn: "customer_card_series", args: { p_payment: PAYMENT, p_customer: ANNA } });
@@ -153,6 +154,7 @@ describe("using a different card", () => {
       d.calls.push({ fn, args });
       if (fn === "stripe_customer_for") return { data: args.p_profile === ANNA ? stripeCustomer : "cus_testSomeoneElse", error: null };
       if (fn === "stripe_card_saved") return { data: "saved", error: null };
+      if (fn === "customer_stripe_call") return { data: true, error: null };
       return { data: null, error: { code: "XX000" } };
     });
     expect(await confirmCardChange(si!.id, ANNA)).toBe(false); // not finished at Stripe yet
@@ -166,7 +168,51 @@ describe("using a different card", () => {
 
     expect(await confirmCardChange(si!.id, ANNA)).toBe(true);
     expect(d.calls.filter((c) => c.fn === "stripe_card_saved").map((c) => c.args)).toEqual([
-      expect.objectContaining({ p_series: SERIES, p_stripe_customer: stripeCustomer, p_payment_method: pm.id, p_last4: "4444" }),
+      expect.objectContaining({ p_series: SERIES, p_stripe_customer: stripeCustomer, p_payment_method: pm.id, p_last4: "4444",
+        p_setup_created: new Date((si as unknown as { created: number }).created * 1000).toISOString() }),
     ]);
+  });
+});
+
+describe("the limit on Stripe calls", () => {
+  const stripeCalls = () => fake.state.requests.filter((r) => r.path.startsWith("/v1/"));
+
+  it("over the limit, no new card form is made at Stripe, and the customer is told to wait", async () => {
+    const d = db(row(), undefined, false);
+    expect(await startCardChange(PAYMENT, { id: ANNA, email: null, fullName: null })).toBe("too_many");
+    expect(fake.state.setupIntents.size).toBe(0);
+    expect(d.calls.find((c) => c.fn === "customer_stripe_call")!.args).toEqual({ p_customer: ANNA, p_kind: "card_form" });
+  });
+
+  it("over the limit, a payment check or a new card's confirmation never reaches Stripe", async () => {
+    const d = db(row(), undefined, false);
+    rpc.mockImplementationOnce(async () => ({ data: "pi_testSomething001", error: null })); // customer_payment_intent
+    expect(await checkPayment(PAYMENT, ANNA)).toEqual({ state: "too_many" });
+    d.calls.length = 0;
+    rpc.mockImplementation(async (fn: string) =>
+      fn === "stripe_customer_for" ? { data: CUS, error: null } : fn === "customer_stripe_call" ? { data: false, error: null } : { data: null, error: { code: "XX000" } });
+    expect(await confirmCardChange("seti_testSomething01", ANNA)).toBe("too_many");
+    expect(stripeCalls()).toEqual([]);
+  });
+
+  it("counts each check against the customer's own limit", async () => {
+    await card("ok");
+    const d = db(row());
+    await payNow(PAYMENT, ANNA);
+    await checkPayment(PAYMENT, ANNA);
+    expect(d.calls.filter((c) => c.fn === "customer_stripe_call").map((c) => c.args)).toEqual([{ p_customer: ANNA, p_kind: "check" }]);
+  });
+
+  it("when the database can't answer: no Stripe call, and a general problem, not \"too many\"", async () => {
+    const { stripeCallAllowed } = await import("./pay");
+    rpc.mockImplementation(async () => ({ data: null, error: { code: "08006" } }));
+    expect(await stripeCallAllowed(ANNA, "check")).toBe("unavailable");
+    rpc.mockImplementation(async (fn: string) =>
+      fn === "customer_payment_intent" ? { data: "pi_testSomething001", error: null }
+      : fn === "customer_card_series" ? { data: SERIES, error: null }
+      : { data: null, error: { code: "08006" } });
+    expect(await checkPayment(PAYMENT, ANNA)).toEqual({ state: "unavailable" });
+    expect(await startCardChange(PAYMENT, { id: ANNA, email: null, fullName: null })).toBeNull();
+    expect(stripeCalls()).toEqual([]);
   });
 });

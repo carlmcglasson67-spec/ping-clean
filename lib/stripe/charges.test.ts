@@ -30,7 +30,7 @@ const ACCT = "acct_testCleaner0001";
 const row = (over: Record<string, unknown> = {}) => ({
   payment_id: PAYMENT, mode: "create", visit_id: VISIT, amount_pence: 5000, application_fee_pence: 1250,
   stripe_customer_id: "cus_testAnna000001", payment_method_id: "pm_testCard000001", cleaner_account_id: ACCT,
-  payment_intent_id: null, attempt: 1, idempotency_key: `payment:${PAYMENT}`, ...over,
+  payment_intent_id: null, attempt: 1, idempotency_key: `payment:${PAYMENT}`, try_sent_at: "2026-11-22T09:00:00.123456+00:00" as string | null, ...over,
 });
 
 async function card(behaviour: "ok" | "decline" | "auth", id = "pm_testCard000001") {
@@ -38,17 +38,19 @@ async function card(behaviour: "ok" | "decline" | "auth", id = "pm_testCard00000
 }
 
 /** The database's side: hands out `rows` once, and remembers what the job reported. */
-function db(rows: ReturnType<typeof row>[], answer: (args: Record<string, unknown>) => string = (a) => a.p_outcome as string) {
+function db(rows: ReturnType<typeof row>[], answer: (args: Record<string, unknown>) => string = (a) => a.p_outcome as string, lostAnswer = "not_lost") {
   const results: Record<string, unknown>[] = [];
   const notSent: Record<string, unknown>[] = [];
+  const lost: Record<string, unknown>[] = [];
   rpc.mockImplementation(async (fn: string, args: Record<string, unknown>) => {
+    if (fn === "charge_try_lost") { lost.push(args); return { data: lostAnswer, error: null }; }
     if (fn === "charge_claim") return { data: rows, error: null };
     if (fn === "stripe_payment_result") { results.push(args); return { data: answer(args), error: null }; }
     if (fn === "charge_not_sent") { notSent.push(args); return { data: "failed", error: null }; }
     if (fn === "charge_retry_not_sent") { notSent.push({ retry: true, ...args }); return { data: "returned", error: null }; }
     return { data: null, error: { code: "XX000" } };
   });
-  return { results, notSent };
+  return { results, notSent, lost };
 }
 
 beforeEach(async () => {
@@ -128,6 +130,42 @@ describe("the charge job", () => {
     await runChargeJob();
     expect(fake.state.requests.slice(before)).toEqual([{ method: "GET", path: `/v1/payment_intents/${pi!.id}`, idempotencyKey: null }]);
     expect(results[0]).toMatchObject({ p_intent: pi!.id, p_outcome: "succeeded" });
+  });
+
+  it("a check that finds a decline asks the database whether it's older than the try, with the charge's own time", async () => {
+    await card("decline");
+    db([row()]);
+    await runChargeJob();
+    const [pi] = [...fake.state.paymentIntents.values()];
+    const charge = fake.state.charges.get(pi!.latest_charge as string)!;
+    charge.created -= 3600; // the previous try's decline, an hour before the retry that got lost
+    const check = row({ mode: "check", payment_intent_id: pi!.id, stripe_customer_id: null, payment_method_id: null, attempt: 2 });
+
+    const lostRun = db([check], undefined, "returned");
+    const run = await runChargeJob();
+    // Judged against the very try the check looked at.
+    expect(lostRun.lost).toEqual([{ p_payment: PAYMENT, p_charge_at: new Date(charge.created * 1000).toISOString(), p_try_sent_at: "2026-11-22T09:00:00.123456+00:00" }]);
+    expect(lostRun.results).toEqual([]); // not recorded as a decline
+    expect(run).toMatchObject({ waiting: 1, failed: 0, errors: 0 });
+
+    const realRun = db([check]); // a decline made after the try: recorded as usual
+    expect(await runChargeJob()).toMatchObject({ failed: 1 });
+    expect(realRun.lost).toHaveLength(1);
+    expect(realRun.results[0]).toMatchObject({ p_outcome: "failed", p_charge: charge.id });
+  });
+
+  it("never asks about a lost try outside the check, or when the check finds it paid", async () => {
+    await card("decline");
+    const first = db([row()]);
+    await runChargeJob();
+    expect(first.lost).toEqual([]);
+    const [pi] = [...fake.state.paymentIntents.values()];
+    await card("ok");
+    const retry = db([row({ mode: "retry", payment_intent_id: pi!.id, attempt: 2 })]);
+    await runChargeJob();
+    const check = db([row({ mode: "check", payment_intent_id: pi!.id, stripe_customer_id: null, payment_method_id: null, attempt: 2 })]);
+    await runChargeJob();
+    expect([retry.lost, check.lost]).toEqual([[], []]);
   });
 
   it("a request Stripe refuses outright is noted as not sent, and the others still go", async () => {

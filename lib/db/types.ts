@@ -436,6 +436,8 @@ export type Database = {
           dispute_status: string | null;
           charge_started_at: string | null;
           customer_tries: number;
+          try_sent_at: string | null;
+          try_by_customer: boolean;
         };
         Insert: {
           id?: string;
@@ -461,6 +463,8 @@ export type Database = {
           dispute_status?: string | null;
           charge_started_at?: string | null;
           customer_tries?: number;
+          try_sent_at?: string | null;
+          try_by_customer?: boolean;
         };
         Update: {
           id?: string;
@@ -486,6 +490,8 @@ export type Database = {
           dispute_status?: string | null;
           charge_started_at?: string | null;
           customer_tries?: number;
+          try_sent_at?: string | null;
+          try_by_customer?: boolean;
         };
         Relationships: [];
       };
@@ -1206,8 +1212,9 @@ export type Database = {
           p_last4: string;
           p_exp_month: number;
           p_exp_year: number;
+          p_setup_created?: string | null;
         };
-        Returns: "saved" | "no_series" | "mismatch";
+        Returns: "saved" | "older" | "no_series" | "mismatch";
       };
       stripe_cleaner_account_for: {
         Args: { p_cleaner: string };
@@ -1273,6 +1280,8 @@ export type Database = {
           payment_intent_id: string | null;
           attempt: number;
           idempotency_key: string;
+          /** When the try this row is about was sent (the check passes it back to charge_try_lost). */
+          try_sent_at: string | null;
         }[];
       };
       customer_pay_begin: {
@@ -1304,12 +1313,21 @@ export type Database = {
         Args: { p_limit?: number };
         Returns: {
           notice_id: string;
-          kind: "payment_failed" | "payment_needs_confirming" | "block_on_hold" | "block_ended_unpaid";
+          kind:
+            | "payment_failed"
+            | "payment_needs_confirming"
+            | "block_on_hold"
+            | "block_ended_unpaid"
+            | "cleaner_block_on_hold"
+            | "cleaner_block_back_on"
+            | "cleaner_block_ended";
           email: string | null;
           full_name: string | null;
           payment_id: string | null;
           amount_pence: number | null;
           clean_date: string | null;
+          town: string | null;
+          weekday: number | null;
         }[];
       };
       notice_sent: {
@@ -1323,6 +1341,14 @@ export type Database = {
       charge_retry_not_sent: {
         Args: { p_payment: string; p_error: string; p_customer_try: boolean };
         Returns: "returned" | "ignored" | "unknown";
+      };
+      charge_try_lost: {
+        Args: { p_payment: string; p_charge_at: string | null; p_try_sent_at: string | null };
+        Returns: "returned" | "not_lost" | "unknown";
+      };
+      customer_stripe_call: {
+        Args: { p_customer: string; p_kind: "card_form" | "check" };
+        Returns: boolean;
       };
       stripe_payment_result: {
         Args: {

@@ -67,7 +67,8 @@ const SERIES_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
  */
 export async function onSetupIntentSucceeded(event: Stripe.Event): Promise<void> {
   const outcome = await storeSavedCard(event.data.object as Stripe.SetupIntent);
-  if (outcome !== "saved") console.warn(`stripe: setup_intent.succeeded ${event.id}: ${outcome}; nothing stored`);
+  if (outcome === "older") console.warn(`stripe: setup_intent.succeeded ${event.id}: a newer card is already saved; kept that one`);
+  else if (outcome !== "saved") console.warn(`stripe: setup_intent.succeeded ${event.id}: ${outcome}; nothing stored`);
 }
 
 /**
@@ -75,7 +76,7 @@ export async function onSetupIntentSucceeded(event: Stripe.Event): Promise<void>
  * signed event, or fetched from Stripe by the server), never from a browser. Throws when the
  * database can't be reached, so a webhook is retried.
  */
-export async function storeSavedCard(si: Stripe.SetupIntent): Promise<"saved" | "no_series" | "mismatch" | "incomplete"> {
+export async function storeSavedCard(si: Stripe.SetupIntent): Promise<"saved" | "older" | "no_series" | "mismatch" | "incomplete"> {
   const seriesId = si.metadata?.series_id;
   const customer = typeof si.customer === "string" ? si.customer : si.customer?.id;
   const pmId = typeof si.payment_method === "string" ? si.payment_method : si.payment_method?.id;
@@ -91,7 +92,9 @@ export async function storeSavedCard(si: Stripe.SetupIntent): Promise<"saved" | 
     p_last4: pm.card.last4,
     p_exp_month: pm.card.exp_month,
     p_exp_year: pm.card.exp_year,
+    // When Stripe made this SetupIntent: a late webhook for an older card never replaces a newer one.
+    p_setup_created: typeof si.created === "number" ? new Date(si.created * 1000).toISOString() : null,
   });
   if (saved.error) throw new Error("couldn't save the card"); // retried by Stripe
-  return saved.data === "saved" ? "saved" : saved.data === "no_series" ? "no_series" : "mismatch";
+  return saved.data === "saved" || saved.data === "older" || saved.data === "no_series" ? saved.data : "mismatch";
 }

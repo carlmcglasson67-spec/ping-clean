@@ -23,6 +23,7 @@ type Step =
   | { at: "card"; clientSecret: string; publishableKey: string };
 
 const TROUBLE = "We couldn’t take the payment just now, and nothing has been charged. Try again in a minute.";
+const TOO_MANY = "You’ve tried that quite a few times in the last hour, so we’ve paused it for a little while. Nothing has been charged. Give it a few minutes, then try again.";
 
 /**
  * Pay now, with the saved card or a different one. Everything that matters happens on the
@@ -70,6 +71,7 @@ export function PayPanel({
     setStep({ at: "ready" });
     if (r.state === "declined") setNote({ tone: "bad", text: `${r.reason} Nothing has been charged. You can try again, or use a different card.` });
     else if (r.state === "no_card") setNote({ tone: "bad", text: "There’s no card saved on your account. Add one below, then pay." });
+    else if (r.state === "too_many") setNote({ tone: "bad", text: TOO_MANY });
     else setNote({ tone: "bad", text: TROUBLE });
   }
 
@@ -90,11 +92,19 @@ export function PayPanel({
     const r = await startCardChangeAction(paymentId).catch(() => ({ ok: false }) as const);
     setOpening(false);
     if (r.ok) setStep({ at: "card", clientSecret: r.clientSecret, publishableKey: r.publishableKey });
+    else if ("tooMany" in r && r.tooMany) setNote({ tone: "bad", text: "You’ve opened the card form quite a few times in the last hour, so we’ve paused it for a little while. Give it a few minutes, then try again." });
     else setNote({ tone: "bad", text: "We couldn’t open the card form just now. Try again in a minute." });
   }
 
   async function cardSaved(setupIntentId: string) {
     const r = await confirmCardChangeAction(paymentId, setupIntentId);
+    if (r.tooMany) {
+      // The bank took the card; Stripe tells Ping on its own, so it shows here shortly.
+      setStep({ at: "ready" });
+      setNote({ tone: "bad", text: "Your bank accepted the new card. You’ve done that quite a few times in the last hour, so we’ve paused checking it for a little while: it shows here within a few minutes, then press pay." });
+      router.refresh();
+      return true;
+    }
     if (!r.ok) return false;
     setStep({ at: "ready" });
     setNote({ tone: "ok", text: "New card saved. Press pay to use it." });

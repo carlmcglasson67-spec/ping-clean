@@ -58,7 +58,7 @@ export async function confirmCardSetup(setupIntentId: string): Promise<{ ok: boo
   if (typeof setupIntentId !== "string" || secretKeyProblem(process.env.STRIPE_SECRET_KEY) || !hasSupabaseEnv()) return { ok: false };
   const session = await getSession();
   if (!session || session.role !== "customer") return { ok: false };
-  return { ok: await confirmCardChange(setupIntentId, session.userId) };
+  return { ok: (await confirmCardChange(setupIntentId, session.userId)) === true };
 }
 
 // ---------------------------------------------------------------- cleaners: payments set-up

@@ -99,14 +99,17 @@ export function readStripeError(e: unknown): { kind: "answer"; result: ChargeRes
 }
 
 export type Claimed = Database["public"]["Functions"]["charge_claim"]["Returns"][number];
+/** What sending a try needs: a row from charge_claim (the job) or customer_pay_begin ("Pay now"). */
+export type SendRow = Omit<Claimed, "try_sent_at">;
 
 /**
  * Sends one try. `present` = the customer pressed "Pay now" themselves (lib/stripe/pay.ts):
  * the charge is on-session, so their bank can ask them to confirm there and then.
  */
-export async function sendCharge(row: Claimed, present = false): Promise<Stripe.PaymentIntent> {
+export async function sendCharge(row: SendRow, present = false): Promise<Stripe.PaymentIntent> {
   const stripe = getStripe();
-  if (row.mode === "check" && row.payment_intent_id) return stripe.paymentIntents.retrieve(row.payment_intent_id);
+  // The check: with its latest charge, to tell a fresh decline from the previous try's.
+  if (row.mode === "check" && row.payment_intent_id) return stripe.paymentIntents.retrieve(row.payment_intent_id, { expand: ["latest_charge"] });
   if (!row.stripe_customer_id || !row.payment_method_id || !row.cleaner_account_id) throw new Error("claimed charge is missing its card or cleaner");
   if (row.mode === "retry" && row.payment_intent_id) {
     return stripe.paymentIntents.confirm(
@@ -135,6 +138,12 @@ export async function sendCharge(row: Claimed, present = false): Promise<Stripe.
 }
 
 type Db = ReturnType<typeof createAdminClient>;
+
+/** When Stripe made the PaymentIntent's latest charge, if it came back expanded. */
+export function latestChargeAt(pi: Stripe.PaymentIntent): Date | null {
+  const charge = pi.latest_charge as string | { created?: unknown } | null | undefined;
+  return charge && typeof charge === "object" && typeof charge.created === "number" ? new Date(charge.created * 1000) : null;
+}
 
 /** Hands Stripe's answer to the database, which checks it and decides what changes. */
 export async function recordChargeResult(db: Db, paymentId: string, r: ChargeResult, eventAt: Date | null): Promise<string> {
@@ -171,7 +180,24 @@ export async function runChargeJob(limit = 10): Promise<ChargeRun> {
     try {
       let result: ChargeResult;
       try {
-        result = readIntent(await sendCharge(row));
+        const pi = await sendCharge(row);
+        result = readIntent(pi);
+        if (row.mode === "check" && result.outcome === "failed") {
+          // A decline older than the try means the try never reached the card (lost on the
+          // way): the database gives it back and it's sent again next run, not counted.
+          // Judged only against the try this check looked at (try_sent_at from charge_claim).
+          const lost = await db.rpc("charge_try_lost", {
+            p_payment: row.payment_id,
+            p_charge_at: latestChargeAt(pi)?.toISOString() ?? null,
+            p_try_sent_at: row.try_sent_at,
+          });
+          if (lost.error) throw new Error("couldn't check the try");
+          if (lost.data === "returned") {
+            run.waiting++;
+            console.warn(`charge job: payment ${row.payment_id}: the last try never reached Stripe; sending it again`);
+            continue;
+          }
+        }
       } catch (e) {
         const read = readStripeError(e);
         if (read.kind === "refused" && row.mode === "create") {

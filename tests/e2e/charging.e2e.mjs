@@ -106,6 +106,18 @@ export async function chargingFlows({ browser, BASE, check, signIn, SHOTS, strip
         assert.equal((await payment()).status, "failed");
         await page.screenshot({ path: `${SHOTS}/account-pay-declined-390.png`, fullPage: true });
 
+        // She's opened the card form a lot this hour: the page says to wait, and Stripe isn't asked.
+        const ANNA = "00000000-0000-4000-a000-000000000002";
+        await sql(`insert into private.customer_stripe_calls (customer_id, kind, window_start, calls) values ($1, 'card_form', now(), 6)`, [ANNA]);
+        const setupsBefore = stripe.state.setupIntents.size;
+        await page.getByRole("button", { name: "Use a different card" }).click();
+        const wait = page.getByRole("alert").filter({ hasText: "quite a few times" });
+        await wait.waitFor();
+        assert.match(await wait.innerText(), /Give it a few minutes, then try again\./);
+        assert.equal(stripe.state.setupIntents.size, setupsBefore, "no SetupIntent made over the limit");
+        await page.screenshot({ path: `${SHOTS}/account-pay-too-many-390.png`, fullPage: true });
+        await sql(`delete from private.customer_stripe_calls where customer_id = $1`, [ANNA]);
+
         await setCard("ok"); // she tops the account up
         await page.getByRole("button", { name: "Pay £50.00 now" }).click();
         await page.getByRole("heading", { name: "Paid. Thank you." }).waitFor();

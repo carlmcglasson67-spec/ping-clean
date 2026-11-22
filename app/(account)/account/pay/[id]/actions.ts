@@ -11,7 +11,7 @@ import { publishableKey, secretKeyProblem } from "@/lib/stripe/keys";
 import { checkPayment, confirmCardChange, payNow, startCardChange, type PayState } from "@/lib/stripe/pay";
 
 export type PayView = PayState & { publishableKey?: string };
-export type CardChange = { ok: true; clientSecret: string; publishableKey: string } | { ok: false };
+export type CardChange = { ok: true; clientSecret: string; publishableKey: string } | { ok: false; tooMany?: true };
 
 const id = z.uuid();
 const OFF: PayView = { state: "unavailable" };
@@ -52,19 +52,21 @@ export async function startCardChangeAction(paymentId: string): Promise<CardChan
   const pk = publishableKey();
   if (!parsed.success || !me || !pk) return { ok: false };
   try {
-    const secret = await startCardChange(parsed.data, { id: me.userId, email: me.email, fullName: me.fullName });
-    return secret ? { ok: true, clientSecret: secret, publishableKey: pk } : { ok: false };
+    const started = await startCardChange(parsed.data, { id: me.userId, email: me.email, fullName: me.fullName });
+    if (started === "too_many") return { ok: false, tooMany: true };
+    return started ? { ok: true, clientSecret: started.clientSecret, publishableKey: pk } : { ok: false };
   } catch {
     console.error("card change: couldn't start"); // no ids or personal data in logs
     return { ok: false };
   }
 }
 
-export async function confirmCardChangeAction(paymentId: string, setupIntentId: string): Promise<{ ok: boolean }> {
+export async function confirmCardChangeAction(paymentId: string, setupIntentId: string): Promise<{ ok: boolean; tooMany?: true }> {
   const parsed = id.safeParse(paymentId);
   const me = await customer();
   if (!parsed.success || !me || typeof setupIntentId !== "string") return { ok: false };
-  const ok = await confirmCardChange(setupIntentId, me.userId);
-  if (ok) revalidatePath(`/account/pay/${parsed.data}`);
-  return { ok };
+  const saved = await confirmCardChange(setupIntentId, me.userId);
+  if (saved === "too_many") return { ok: false, tooMany: true };
+  if (saved) revalidatePath(`/account/pay/${parsed.data}`);
+  return { ok: saved };
 }

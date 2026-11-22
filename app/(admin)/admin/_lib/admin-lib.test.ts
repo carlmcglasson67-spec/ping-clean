@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALERT_KIND, alertKind, firstSentence, todoBeyond } from "./alerts";
 import { auditEntity, auditSummary } from "./audit";
@@ -23,6 +25,16 @@ describe("admin error wording", () => {
 });
 
 describe("alerts", () => {
+  it("has words for every kind the latest migration allows", () => {
+    const dir = join(process.cwd(), "supabase/migrations");
+    const sql = readdirSync(dir).sort().map((f) => readFileSync(join(dir, f), "utf8")).join("\n");
+    const last = [...sql.matchAll(/add constraint engine_alerts_kind_check\s+check \(kind in \(([^)]*)\)\)/g)].at(-1)![1]!;
+    const kinds = [...last.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
+    expect(kinds).toContain("job_call_failed");
+    expect(kinds.filter((k) => !alertKind(k))).toEqual([]);
+    expect(ALERT_KIND.job_call_failed.urgent).toBe(true);
+  });
+
   it("knows every kind the database allows", () => {
     for (const k of ["release_failed", "generate_failed", "visit_needs_cover", "visit_no_show", "visit_unfinished", "block_overlap", "block_stalled", "block_closed"]) {
       expect(alertKind(k)).toBe(k);

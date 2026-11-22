@@ -1,5 +1,5 @@
 // The engine's alerts in the Ping team's words: what happened and what to do about it.
-// Kinds come from the engine_alerts check constraint (latest: supabase/migrations/…_lapsed_checks.sql).
+// Kinds come from the engine_alerts check constraint (latest: supabase/migrations/…_job_call_alerts.sql).
 
 export type AlertKind =
   | "visit_needs_cover"
@@ -21,7 +21,8 @@ export type AlertKind =
   | "payment_disputed"
   | "visit_cancelled_late"
   | "cleaner_check_lapsed"
-  | "cleaner_check_expiring";
+  | "cleaner_check_expiring"
+  | "job_call_failed";
 
 export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo: string; urgent: boolean }> = {
   visit_needs_cover: {
@@ -143,6 +144,12 @@ export const ALERT_KIND: Record<AlertKind, { label: string; short: string; todo:
     short: "Running out",
     todo: "A working cleaner's document runs out within two weeks. Ask them to upload the renewal now. This closes by itself once the new one is verified.",
     urgent: false,
+  },
+  job_call_failed: {
+    label: "A payments job isn't running",
+    short: "Job failing",
+    todo: "The database couldn't get the charge or payout job to run in the app, so customers aren't being charged or cleaners paid. Follow the message, then tell the main session. This closes by itself once the job runs.",
+    urgent: true,
   },
 };
 

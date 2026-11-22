@@ -6,7 +6,7 @@ import { jobRequestAllowed, jobSecret, runChargeJob } from "@/lib/stripe/charges
 // no secret configured → 503; a wrong one → 401. It takes no input: what is due, and every
 // amount, comes from the database. See lib/stripe/charges.ts.
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 50; // under pg_net's 55-second wait, so the database always hears the answer
 
 const json = (status: number, body: object) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });

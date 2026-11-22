@@ -71,6 +71,7 @@ export function startFakeStripe(port = 12111) {
     paymentIntents: new Map(),
     payouts: new Map(),
     refunds: new Map(),
+    charges: new Map(),     // charge id → { id, object, created }: what expand[]=latest_charge returns
     balances: new Map(),    // connected account id → available pence (GBP)
     idempotent: new Map(), // key → response body
     onboardingOutcome: "complete",
@@ -81,6 +82,12 @@ export function startFakeStripe(port = 12111) {
     res.end(JSON.stringify(body));
   };
   const error = (res, status, message, type = "invalid_request_error") => send(res, status, { error: { type, message } });
+  /** A charge made now (each try at a card makes one, whatever the bank says). */
+  const newCharge = () => {
+    const c = { id: rid("ch"), object: "charge", created: Math.floor(Date.now() / 1000) };
+    state.charges.set(c.id, c);
+    return c.id;
+  };
 
   const server = http.createServer((req, res) => {
     let raw = "";
@@ -135,7 +142,7 @@ export function startFakeStripe(port = 12111) {
         if (!pi) return error(res, 404, "No such payment_intent");
         if (JSON.parse(raw || "{}").ok === false) Object.assign(pi, { status: "requires_payment_method", payment_method: null, next_action: null,
           last_payment_error: { type: "card_error", code: "payment_intent_authentication_failure", message: "Authentication failed." } });
-        else Object.assign(pi, { status: "succeeded", amount_received: pi.amount, latest_charge: rid("ch"), next_action: null, last_payment_error: null });
+        else Object.assign(pi, { status: "succeeded", amount_received: pi.amount, latest_charge: newCharge(), next_action: null, last_payment_error: null });
         return send(res, 200, pi);
       }
       const setSeti = path.match(/^\/__test\/setup_intents\/(seti_[A-Za-z0-9_]+)$/);
@@ -171,7 +178,7 @@ export function startFakeStripe(port = 12111) {
       }
       if (path === "/__test/requests") return send(res, 200, state.requests);
       if (path === "/__test/reset" && req.method === "POST") {
-        for (const m of [state.customers, state.setupIntents, state.paymentMethods, state.accounts, state.paymentIntents, state.payouts, state.refunds, state.balances, state.idempotent]) m.clear();
+        for (const m of [state.customers, state.setupIntents, state.paymentMethods, state.accounts, state.paymentIntents, state.payouts, state.refunds, state.charges, state.balances, state.idempotent]) m.clear();
         state.requests.length = 0;
         state.refundStatus = "succeeded";
         state.down = false;
@@ -241,7 +248,7 @@ export function startFakeStripe(port = 12111) {
         const id = rid("seti");
         const si = { id, object: "setup_intent", client_secret: `${id}_secret_${randomBytes(8).toString("hex")}`, customer: b.customer,
           usage: b.usage ?? "off_session", allowed_payment_method_types: b.allowed_payment_method_types ?? null, payment_method_types: b.allowed_payment_method_types ?? ["card"], status: "requires_payment_method",
-          payment_method: null, metadata: b.metadata ?? {}, livemode: false };
+          payment_method: null, metadata: b.metadata ?? {}, created: Math.floor(Date.now() / 1000), livemode: false };
         state.setupIntents.set(id, si);
         return remember(si);
       }
@@ -282,7 +289,7 @@ export function startFakeStripe(port = 12111) {
         pi.payment_method = pmId;
         const behaviour = card.__behaviour ?? "ok";
         if (behaviour === "ok") {
-          Object.assign(pi, { status: "succeeded", amount_received: pi.amount, latest_charge: rid("ch"), last_payment_error: null });
+          Object.assign(pi, { status: "succeeded", amount_received: pi.amount, latest_charge: newCharge(), last_payment_error: null });
           return remember({ ...pi });
         }
         if (behaviour === "auth" && pi.__present) {
@@ -291,7 +298,7 @@ export function startFakeStripe(port = 12111) {
         }
         const code = behaviour === "auth" ? "authentication_required" : "card_declined";
         const decline_code = behaviour === "auth" ? "authentication_required" : "insufficient_funds";
-        Object.assign(pi, { status: "requires_payment_method", payment_method: null, latest_charge: rid("ch"),
+        Object.assign(pi, { status: "requires_payment_method", payment_method: null, latest_charge: newCharge(),
           last_payment_error: { type: "card_error", code, decline_code, message: "Your card was declined." } });
         return remember({ error: { type: "card_error", code, decline_code, message: "Your card was declined.", payment_intent: { ...pi } } }, 402);
       };
@@ -324,7 +331,12 @@ export function startFakeStripe(port = 12111) {
       const intent = path.match(/^\/v1\/payment_intents\/(pi_[A-Za-z0-9_]+)$/);
       if (intent && req.method === "GET") {
         const found = state.paymentIntents.get(intent[1]);
-        return found ? send(res, 200, found) : error(res, 404, `No such payment_intent: '${intent[1]}'`);
+        if (!found) return error(res, 404, `No such payment_intent: '${intent[1]}'`);
+        const expand = url.searchParams.getAll("expand[]").concat(url.searchParams.getAll("expand[0]"));
+        if (expand.includes("latest_charge") && found.latest_charge) {
+          return send(res, 200, { ...found, latest_charge: state.charges.get(found.latest_charge) ?? found.latest_charge });
+        }
+        return send(res, 200, found);
       }
       const pm = path.match(/^\/v1\/payment_methods\/([A-Za-z0-9_]+)$/);
       if (pm && req.method === "GET") {
