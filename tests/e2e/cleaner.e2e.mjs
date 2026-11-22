@@ -63,9 +63,6 @@ export async function cleanerFlows({ browser, BASE, check, signIn, SHOTS }) {
     const email = `dana.${Date.now()}@ping.test`;
     await page.getByLabel("Your name").fill("Dana New");
     await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Create a password").fill("blue kettle 42");
-    await page.getByLabel(/terms of use/).check();
-    await page.getByLabel(/privacy notice/).check();
     await page.getByRole("button", { name: "Create my account" }).click();
     await page.getByTestId("check-email").waitFor();
     let link = null;
@@ -78,7 +75,12 @@ export async function cleanerFlows({ browser, BASE, check, signIn, SHOTS }) {
     await page.goto(link);
     await page.getByRole("button", { name: "Confirm my email" }).click();
     await page.waitForURL((u) => u.pathname === "/auth/confirmed");
-    await page.getByRole("link", { name: "Continue" }).click();
+    // A new account chooses its password after confirming (#60), then carries on.
+    await page.getByRole("link", { name: "Choose my password" }).click();
+    await page.getByLabel("Choose a password").fill("blue kettle 42");
+    await page.getByLabel(/terms of use/).check();
+    await page.getByLabel(/privacy notice/).check();
+    await page.getByRole("button", { name: "Save and continue" }).click();
     await page.waitForURL(`${BASE}/work/apply`, { timeout: 15_000 });
     await page.getByRole("button", { name: "Start my application" }).click();
     await page.waitForURL(`${BASE}/work/details`, { timeout: 15_000 });

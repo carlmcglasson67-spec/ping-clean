@@ -74,6 +74,12 @@ pages are live. So the sign-in settings and the email sender come first.
   | `TURNSTILE_SECRET_KEY` | the secret from step 6. Mark it Sensitive. | **Carl pastes** |
   | `RESET_PASS_SECRET` | run `openssl rand -hex 32` in a terminal and paste the result. Mark it Sensitive. Without it password resets are off. | **Carl pastes** |
 
+  **`RESET_PASS_SECRET` for Preview too, with a different value.** Previews run with
+  NODE_ENV=production, so password resets (and invitees choosing a password) are off on
+  every preview unless it is set there. Add it a second time with the environment set to
+  **Preview only**, from a fresh `openssl rand -hex 32`, never the Production value
+  (issue #21, note 4). **Carl pastes.**
+
   Only after step 2: with the first two set and no tables, pages that read the database
   would fail. In production the interest form **refuses every entry until both Turnstile
   keys are set** (by design: no spam protection, no form).
@@ -121,10 +127,7 @@ pages are live. So the sign-in settings and the email sender come first.
 
 - [ ] **11. Make the first admin.** There is deliberately no screen for this.
   1. Sign up on the live site with your own email and confirm it from the email.
-  2. **Sign in with the password you chose.** If it is refused, stop: use "Forgotten your
-     password?" to set your own, then sign in. (If someone had already tried to register
-     your address, the account would still be holding their password. Signing in with
-     yours proves it isn't.)
+  2. **Choose your password** on the page the email link takes you to, then sign in with it.
   3. Supabase → Authentication → Users: copy your **User UID**.
   4. Supabase → SQL Editor, both lines together, once:
      ```sql
@@ -134,7 +137,9 @@ pages are live. So the sign-in settings and the email sender come first.
      It should return one row with your email. No row means the UID was wrong and nothing
      changed. It is recorded in the audit log.
 
-  Michelle and Shell: the same four steps, after they've signed up.
+  Michelle and Shell: **not by hand.** Once they've signed up and opened their email link,
+  add them in the admin console → **Team** → Add an admin. It is checked, needs a reason and
+  is logged against you.
 - [ ] **12. Admin console → Settings.** Booking stays closed until the starred ones are
   filled in. The numbers are Carl's (see "Decisions" below):
   price per hour* `£25.00`, shortest clean* `2 hours`, commission*, the two offer windows*
@@ -220,8 +225,7 @@ pages are live. So the sign-in settings and the email sender come first.
   given for an address that hasn't been confirmed yet. Step 11 guards the admin accounts
   against it by hand; customers and cleaners need the same guard built in (a confirmed
   sign-up should always end with the password that person just chose).
-- **A proper way to make an admin**, instead of a line of SQL: an admin-only function, so
-  the second and third admins are made from the console and logged against a person.
+- ~~A proper way to make an admin~~: admin console → Team (`main-session/make-admin`).
 - **A second Supabase project for previews**, so pull requests can be tried with test
   logins before merging (#19 explains why previews can never share the live one).
 - **No access** (the cleaner turned up and couldn't get in): recording it, and whether it

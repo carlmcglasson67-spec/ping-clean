@@ -8,7 +8,7 @@
 //   PATCH (update) and POST (insert), with Prefer: return=representation|minimal
 //   Storage: upload (owner + size metadata), sign one or many, and fetch-by-signed-URL, gated by the real
 //   storage.objects policies. File bytes live in memory only. CORS like Supabase.
-//   Auth: password sign-in, sign-up, resend, recovery and verify (email links go to a test outbox).
+//   Auth: password sign-in, sign-up, resend, recovery, invite, email change and verify (email links go to a test outbox).
 // Never deploy this. Real environments use a real Supabase project.
 import { createHmac, randomUUID } from "node:crypto";
 import http from "node:http";
@@ -50,9 +50,10 @@ function verifyJwt(token) {
 }
 
 async function userJson(id) {
-  const { rows } = await pool.query(`select id, email, raw_user_meta_data, created_at from auth.users where id = $1`, [id]);
+  const { rows } = await pool.query(`select id, email, raw_user_meta_data, created_at, invited_at from auth.users where id = $1`, [id]);
   const u = rows[0];
-  return u && { id: u.id, aud: "authenticated", role: "authenticated", email: u.email, user_metadata: u.raw_user_meta_data ?? {}, app_metadata: { provider: "email" }, created_at: u.created_at };
+  return u && { id: u.id, aud: "authenticated", role: "authenticated", email: u.email, user_metadata: u.raw_user_meta_data ?? {}, app_metadata: { provider: "email" }, created_at: u.created_at,
+    ...(u.invited_at ? { invited_at: u.invited_at } : {}) };
 }
 
 // How each session was signed in, as GoTrue's `amr` claim: "password" for a sign-in, and
@@ -187,15 +188,23 @@ const config = { confirm: true }; // Supabase "Confirm email" setting
 // the request's redirect address: if the app ever ran on a different host from the Site
 // URL, these links would point elsewhere and the e2e checks would fail.
 let SITE_URL = "http://127.0.0.1:3200";
-function mail(email, type, userId) {
+//   {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite
+//   {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email_change
+function mail(email, type, userId, extra = {}) {
   const hash = randomUUID().replace(/-/g, "");
-  tokens.set(hash, { userId, type });
+  tokens.set(hash, { userId, type, ...(extra && typeof extra === "object" ? extra : {}) }); // callers may pass the redirect address: ignored
   const site = SITE_URL;
   const link = type === "signup"
     ? `${site}/auth/confirm?flow=signup&token_hash=${hash}&type=email`
-    : `${site}/auth/confirm?flow=reset&token_hash=${hash}&type=recovery`;
+    : type === "recovery"
+      ? `${site}/auth/confirm?flow=reset&token_hash=${hash}&type=recovery`
+      : `${site}/auth/confirm?token_hash=${hash}&type=${type}`;
   outbox.push({ email, type, link });
 }
+// Email changes waiting for their links: userId -> { to, waiting: Set<"current" | "new"> }.
+// With Secure email change on (GoTrue's default) a link goes to each address, and the
+// address only changes once both are used; the first gives no session, only a message.
+const emailChanges = new Map();
 const userByEmail = async (email) =>
   (await pool.query(`select id, email_confirmed_at from auth.users where email = $1`, [String(email ?? "").toLowerCase()])).rows[0];
 
@@ -254,7 +263,7 @@ export function startFakeSupabase(port = 54321, { siteUrl } = {}) {
       if (url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "password") {
         const { email, password } = await readBody(req);
         const { rows } = await pool.query(
-          `select id from auth.users where email = $1 and encrypted_password = extensions.crypt($2, encrypted_password)`,
+          `select id from auth.users where email = $1 and case when coalesce(encrypted_password, '') = '' then false else extensions.crypt($2, encrypted_password) = encrypted_password end`,
           [String(email).toLowerCase(), String(password)],
         );
         if (!rows[0]) return send(res, 400, { code: 400, error_code: "invalid_credentials", msg: "Invalid login credentials" });
@@ -297,17 +306,31 @@ export function startFakeSupabase(port = 54321, { siteUrl } = {}) {
       if (url.pathname === "/auth/v1/verify" && req.method === "POST") {
         const { token_hash, type } = await readBody(req);
         const t = tokens.get(String(token_hash));
-        const want = type === "email" || type === "signup" ? "signup" : type;
-        if (!t || t.type !== want) return send(res, 403, { code: 403, error_code: "otp_expired", msg: "Email link is invalid or has expired" });
+        // GoTrue finds sign-up and invite links by the same confirmation token, so either
+        // type verifies either kind of link (verify.go: signup and invite share a lookup).
+        const confirmation = (x) => x === "signup" || x === "email" || x === "invite";
+        const fits = t && (t.type === type || (t.type === "signup" && confirmation(type)) || (t.type === "invite" && confirmation(type)));
+        if (!fits) return send(res, 403, { code: 403, error_code: "otp_expired", msg: "Email link is invalid or has expired" });
         tokens.delete(String(token_hash)); // links work once
-        if (t.type === "signup") await pool.query(`update auth.users set email_confirmed_at = now() where id = $1`, [t.userId]);
+        if (t.type === "signup" || t.type === "invite") await pool.query(`update auth.users set email_confirmed_at = now() where id = $1`, [t.userId]);
+        if (t.type === "email_change") {
+          const change = emailChanges.get(t.userId);
+          if (!change) return send(res, 403, { code: 403, error_code: "otp_expired", msg: "Email link is invalid or has expired" });
+          change.waiting.delete(t.which);
+          if (change.waiting.size) {
+            // GoTrue's verifyPost for the first of two links: 200, a message, no session.
+            return send(res, 200, { msg: "Confirmation link accepted. Please proceed to confirm link sent to the other email", code: 200 });
+          }
+          emailChanges.delete(t.userId);
+          await pool.query(`update auth.users set email = $2, email_change = '' where id = $1`, [t.userId, change.to]);
+        }
         return send(res, 200, await session(t.userId, "otp")); // every type, as GoTrue
       }
       if (url.pathname === "/auth/v1/user" && req.method === "PUT") {
         if (!claims) return send(res, 401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" });
         const { password, data } = await readBody(req);
         if (password) {
-          const same = await pool.query(`select 1 from auth.users where id = $1 and encrypted_password = extensions.crypt($2, encrypted_password)`, [claims.sub, String(password)]);
+          const same = await pool.query(`select 1 from auth.users where id = $1 and case when coalesce(encrypted_password, '') = '' then false else extensions.crypt($2, encrypted_password) = encrypted_password end`, [claims.sub, String(password)]);
           if (same.rows[0]) return send(res, 422, { code: 422, error_code: "same_password", msg: "New password should be different from the old password." });
           await pool.query(`update auth.users set encrypted_password = extensions.crypt($2, extensions.gen_salt('bf')) where id = $1`, [claims.sub, String(password)]);
         }
@@ -390,6 +413,36 @@ export function startFakeSupabase(port = 54321, { siteUrl } = {}) {
       if (url.pathname === "/__test/mail") {
         const found = outbox.filter((m) => m.email === url.searchParams.get("email") && (!url.searchParams.get("type") || m.type === url.searchParams.get("type")));
         return send(res, found.length ? 200 : 404, found.at(-1) ?? { message: "no mail" });
+      }
+      // An admin invite (supabase.auth.admin.inviteUserByEmail): a new account, no password, one link.
+      if (url.pathname === "/__test/invite" && req.method === "POST") {
+        const { email } = await readBody(req);
+        // As GoTrue: an unconfirmed account at that address is invited as it is (keeping any
+        // password it holds); a confirmed one is refused.
+        const existing = await userByEmail(email);
+        if (existing?.email_confirmed_at) return send(res, 422, { code: 422, error_code: "email_exists", msg: "A user with this email address has already been registered" });
+        const id = existing?.id ?? randomUUID();
+        if (existing) await pool.query(`update auth.users set invited_at = now() where id = $1`, [id]);
+        else await pool.query(
+          `insert into auth.users (instance_id, id, aud, role, email, encrypted_password, invited_at, raw_app_meta_data, raw_user_meta_data, confirmation_token, recovery_token, email_change_token_new, email_change)
+           values ('00000000-0000-0000-0000-000000000000', $1, 'authenticated', 'authenticated', $2, '', now(), '{"provider":"email","providers":["email"]}', '{}', '', '', '', '')`,
+          [id, String(email).toLowerCase()],
+        );
+        mail(String(email).toLowerCase(), "invite", id);
+        return send(res, 200, { id });
+      }
+      // A change of email address (supabase.auth.updateUser({ email })). secure: false sends one
+      // link, to the new address only (Secure email change switched off).
+      if (url.pathname === "/__test/email-change" && req.method === "POST") {
+        const { email, to, secure = true } = await readBody(req);
+        const u = await userByEmail(email);
+        if (!u) return send(res, 404, { message: "no such user" });
+        const next = String(to).toLowerCase();
+        await pool.query(`update auth.users set email_change = $2 where id = $1`, [u.id, next]);
+        emailChanges.set(u.id, { to: next, waiting: new Set(secure ? ["current", "new"] : ["new"]) });
+        if (secure) mail(String(email).toLowerCase(), "email_change", u.id, { which: "current" });
+        mail(next, "email_change", u.id, { which: "new" });
+        return send(res, 200, {});
       }
       if (url.pathname === "/__test/config" && req.method === "POST") {
         Object.assign(config, await readBody(req));

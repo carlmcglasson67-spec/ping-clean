@@ -7,6 +7,7 @@ import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
 import { adminFlows } from "./admin.flows.mjs";
 import { authFlows } from "./auth.flows.mjs";
+import { authLinkFlows } from "./auth-links.flows.mjs";
 import { cleanerFlows } from "./cleaner.e2e.mjs";
 import { cleanerPaymentsFlows } from "./cleaner-payments.e2e.mjs";
 import { fakeServiceRoleKey, startFakeSupabase } from "./fake-supabase.mjs";
@@ -214,6 +215,7 @@ try {
   }
 
   await authFlows({ browser, BASE, check, shots: process.env.SIGNUP_SHOT_DIR ?? SHOTS });
+  await authLinkFlows({ browser, BASE, check, shots: process.env.SIGNUP_SHOT_DIR ?? SHOTS });
   await stripeWebhookFlows({ BASE, check, stripe: fakeStripe });
   await interestFlows({ browser, BASE, check, shots: process.env.INTEREST_SHOT_DIR ?? SHOTS });
   await launchFlows({ browser, BASE, check, shots: process.env.LAUNCH_SHOT_DIR ?? SHOTS });

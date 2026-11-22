@@ -3,6 +3,7 @@ import { ButtonLink } from "@/components/ui";
 import { cookies } from "next/headers";
 import { canChooseNewPassword, RESET_COOKIE, resetPassSecret } from "@/lib/auth/recovery";
 import { getSession } from "@/lib/auth/session";
+import { createClient } from "@/lib/db/server";
 import { AuthFrame, FormIntro, Notice } from "../_components/auth-frame";
 import { ResetForm } from "./reset-form";
 
@@ -11,17 +12,32 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-/** Reached only from a reset email: the session a reset link created, within 15 minutes (lib/auth/recovery.ts). */
-export default async function ResetPasswordPage() {
-  const [session, jar] = await Promise.all([getSession(), cookies()]);
+/**
+ * Reached only from an email link: the session a reset, sign-up or invite link created,
+ * within 15 minutes (lib/auth/recovery.ts).
+ */
+export default async function ResetPasswordPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const [session, jar, { next }] = await Promise.all([getSession(), cookies(), searchParams]);
+  // A brand-new account choosing its first password: decided by the account itself, as the
+  // action decides it, so the page always shows the fields the action will ask for. (The
+  // ?first=1 the confirm step adds is only there to carry ?next.)
+  let isNew = false;
+  let invited = false;
+  if (session) {
+    const { data } = await (await createClient()).auth.getUser();
+    isNew = data.user?.user_metadata?.password_pending === true;
+    // An invited account (issue #21, note 3) takes the same first-password step as a new
+    // sign-up; only the words differ. Read from the account (invited_at), like isNew.
+    invited = isNew && Boolean(data.user?.invited_at);
+  }
   const ready = canChooseNewPassword(jar.get(RESET_COOKIE)?.value, session, resetPassSecret());
 
   return (
     <AuthFrame
-      eyebrow="New password"
+      eyebrow={invited ? "Welcome to Ping" : isNew ? "Your password" : "New password"}
       statement={
         <>
-          Nearly done.
+          {invited ? "Last step." : "Nearly done."}
           <br />
           <span className="text-brand-gradient-navy">Pick a good one.</span>
         </>
@@ -30,15 +46,20 @@ export default async function ResetPasswordPage() {
     >
       {ready ? (
         <>
-          <FormIntro title="Choose a new password">
-            For <strong className="font-semibold text-navy">{session!.email}</strong>. You&rsquo;ll stay signed in afterwards.
+          <FormIntro title={isNew ? "Choose your password" : "Choose a new password"}>
+            For <strong className="font-semibold text-navy">{session!.email}</strong>.{" "}
+            {invited ? "It\u2019s what you\u2019ll sign in with from now on. You\u2019ll stay signed in afterwards." : "You\u2019ll stay signed in afterwards."}
           </FormIntro>
-          <ResetForm email={session!.email ?? ""} />
+          <ResetForm email={session!.email ?? ""} isNew={isNew} next={isNew ? next : undefined} name={isNew ? (session!.fullName ?? "") : undefined} />
         </>
       ) : (
         <div className="grid gap-6" data-testid="reset-expired">
           <FormIntro title="That link has run out" />
-          <Notice>Reset links work once, for a short time. Ask for a new one and open it straight away.</Notice>
+          <Notice>
+            {isNew
+              ? "Your account is set up, but there's a short time limit for choosing the password. Ask for a link to choose it now."
+              : "Reset links work once, for a short time. Ask for a new one and open it straight away."}
+          </Notice>
           <div>
             <ButtonLink href="/forgot-password" size="lg">
               Send me a new link
