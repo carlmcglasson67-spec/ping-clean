@@ -1,15 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
-import { Button, Checkbox, Field, PasswordField, Turnstile } from "@/components/ui";
+import { useActionState } from "react";
+import { Button, Checkbox, Field, Turnstile } from "@/components/ui";
 import { authCaptchaSiteKey } from "@/lib/auth/captcha";
 import { Notice } from "../_components/auth-frame";
 import { resendConfirmation, signUp, type ResendState, type SignupState } from "./actions";
 
 export function SignupForm({ next, signInHref }: { next?: string; signInHref: string }) {
   const [state, action, pending] = useActionState<SignupState, FormData>(signUp, {});
-  const [email, setEmail] = useState(state.values?.email ?? "");
   const siteKey = authCaptchaSiteKey();
 
   if (state.sent) return <CheckEmail email={state.sent.email} next={next} />;
@@ -39,10 +38,8 @@ export function SignupForm({ next, signInHref }: { next?: string; signInHref: st
         spellCheck={false}
         required
         defaultValue={state.values?.email}
-        onChange={(e) => setEmail(e.target.value)}
         error={fe.email}
       />
-      <PasswordField label="Create a password" autoComplete="new-password" rules email={email} error={fe.password} />
       <Field
         label="Mobile number (optional)"
         name="phone"
@@ -93,8 +90,8 @@ function CheckEmail({ email, next }: { email: string; next?: string }) {
     <div className="grid gap-6" data-testid="check-email">
       <Notice tone="ok">Nearly there. Check your email.</Notice>
       <p className="text-lg text-navy-2">
-        We&rsquo;ve sent a link to <strong className="font-semibold text-navy">{email}</strong>. Open it on this phone or any other device
-        to finish setting up your account. The link expires, so open it soon.
+        We&rsquo;ve sent a link to <strong className="font-semibold text-navy">{email}</strong>. Open it on this phone or any other device,
+        then choose your password. The link expires, so open it soon.
       </p>
       <p className="text-navy-2">Nothing there after a few minutes? Check your junk or spam folder, then send it again.</p>
       <form action={action} className="grid gap-3">

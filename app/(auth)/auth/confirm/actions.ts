@@ -40,20 +40,8 @@ export async function confirmLink(formData: FormData): Promise<void> {
   if (!user) redirect("/login?link=expired");
 
   // A reset link: give THIS session a signed 15-minute reset pass (lib/auth/recovery.ts).
-  // Only here, after a recovery link verified: a sign-up confirmation never gets one.
   if (recovery) {
-    const secret = resetPassSecret();
-    const { data: claims } = await supabase.auth.getClaims();
-    const sessionId = claims?.claims?.session_id;
-    if (!secret) console.error(RESET_SECRET_PROBLEM);
-    if (secret && typeof sessionId === "string") {
-      const jar = await cookies();
-      jar.set(RESET_COOKIE, makeResetPass(sessionId, secret), {
-        ...RESET_COOKIE_OPTIONS,
-        secure: (resolveSiteUrl() ?? "").startsWith("https:"),
-        maxAge: RESET_PASS_MINUTES * 60,
-      });
-    }
+    await giveResetPass(supabase);
     redirect("/reset-password"); // without a pass, it says the link has run out
   }
 
@@ -77,5 +65,28 @@ export async function confirmLink(formData: FormData): Promise<void> {
 
   const next = f.next ?? (typeof meta.next === "string" ? meta.next : undefined);
   const to = postLoginPath(profile.role, safeNext(next));
-  redirect(`/auth/confirmed?next=${encodeURIComponent(to)}` as "/auth/confirmed");
+
+  // A new account has no password anyone knows (signup/actions.ts, #60): this person has
+  // just proved the address is theirs, so they choose it now, with the same pass a reset
+  // link gives. The link was the proof, so this is the only place that pass is handed out
+  // for a sign-up, and only while the account is still waiting for its first password.
+  const first = meta.password_pending === true;
+  if (first) await giveResetPass(supabase);
+  redirect(`/auth/confirmed?${first ? "first=1&" : ""}next=${encodeURIComponent(to)}` as "/auth/confirmed");
+}
+
+/** A signed 15-minute pass for THIS session to choose a password (lib/auth/recovery.ts). */
+async function giveResetPass(supabase: Awaited<ReturnType<typeof createClient>>): Promise<void> {
+  const secret = resetPassSecret();
+  const { data: claims } = await supabase.auth.getClaims();
+  const sessionId = claims?.claims?.session_id;
+  if (!secret) console.error(RESET_SECRET_PROBLEM);
+  if (secret && typeof sessionId === "string") {
+    const jar = await cookies();
+    jar.set(RESET_COOKIE, makeResetPass(sessionId, secret), {
+      ...RESET_COOKIE_OPTIONS,
+      secure: (resolveSiteUrl() ?? "").startsWith("https:"),
+      maxAge: RESET_PASS_MINUTES * 60,
+    });
+  }
 }

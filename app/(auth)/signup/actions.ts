@@ -1,11 +1,11 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { captchaMessage, captchaToken, isCaptchaError } from "@/lib/auth/captcha";
 import { emailReturnUrl, tidyPhone } from "@/lib/auth/links";
 import { safeNext } from "@/lib/auth/next";
-import { passwordProblem } from "@/lib/auth/password";
 import { postLoginPath } from "@/lib/auth/roles";
 import { createClient } from "@/lib/db/server";
 import { hasSupabaseEnv } from "@/lib/env";
@@ -17,7 +17,7 @@ const PRIVACY_VERSION = "draft-2026-11";
 
 export type SignupState = {
   error?: string;
-  fieldErrors?: Partial<Record<"fullName" | "email" | "password" | "phone" | "terms" | "privacy" | "captcha", string>>;
+  fieldErrors?: Partial<Record<"fullName" | "email" | "phone" | "terms" | "privacy" | "captcha", string>>;
   values?: { fullName?: string; email?: string; phone?: string };
   /** The confirmation email is on its way (or would be, if the address had no account). */
   sent?: { email: string };
@@ -26,7 +26,6 @@ export type SignupState = {
 const schema = z.object({
   fullName: z.string().trim().min(1, { message: "Tell us your name." }).max(120, { message: "Use 120 characters or fewer." }),
   email: z.email({ message: "Enter an email address, like you@example.com." }).max(254),
-  password: z.string().max(200),
   phone: z.string().max(40),
   terms: z.literal("on", { message: "Tick to agree to the terms of use." }),
   privacy: z.literal("on", { message: "Tick to say you've read the privacy notice." }),
@@ -37,7 +36,6 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
   const raw = {
     fullName: String(formData.get("fullName") ?? ""),
     email: String(formData.get("email") ?? "").trim().toLowerCase(),
-    password: String(formData.get("password") ?? ""),
     phone: String(formData.get("phone") ?? ""),
     terms: formData.get("terms") ?? undefined,
     privacy: formData.get("privacy") ?? undefined,
@@ -54,8 +52,6 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
     const fe = z.flattenError(parsed.error).fieldErrors;
     for (const k of ["fullName", "email", "terms", "privacy"] as const) if (fe[k]?.[0]) fieldErrors[k] = fe[k]![0];
   }
-  const pw = passwordProblem(raw.password, raw.email);
-  if (pw) fieldErrors.password = pw;
   const phone = tidyPhone(raw.phone);
   if (phone === "invalid") fieldErrors.phone = "That doesn't look like a phone number. Leave it blank if you'd rather.";
   if (!parsed.success || Object.keys(fieldErrors).length) return { values, fieldErrors };
@@ -64,9 +60,15 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
 
   const next = safeNext(parsed.data.next);
   const supabase = await createClient();
+  // Nobody chooses their password here. The account starts with a long random one that no
+  // one ever sees, and the person picks their own after the email link proves the address
+  // is theirs (app/auth/confirm → /reset-password?first=1). Otherwise a stranger could sign
+  // up with someone else's address first: Supabase keeps the FIRST password given for an
+  // unconfirmed address, so when the real owner later confirmed, the account would still
+  // open with the stranger's password (#60). Now there is no password a stranger could know.
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
-    password: raw.password,
+    password: unguessablePassword(),
     options: {
       captchaToken: captchaToken(formData),
       emailRedirectTo: emailReturnUrl(next),
@@ -81,6 +83,8 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
         terms_version: TERMS_VERSION,
         privacy_version: PRIVACY_VERSION,
         consented_at: new Date().toISOString(),
+        // Cleared when they choose their own (app/(auth)/reset-password/actions.ts).
+        password_pending: true,
       },
     },
   });
@@ -94,7 +98,6 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
     // any address, so that one can be shown.)
     if (error.code === "over_email_send_rate_limit") return { sent: { email: parsed.data.email } };
     if (error.code === "over_request_rate_limit") return { values, error: "Too many sign-ups from here just now. Wait a few minutes, then try again." };
-    if (error.code === "weak_password") return { values, fieldErrors: { password: "That password is too easy to guess. Try a longer one." } };
     if (error.code === "user_already_exists" || error.code === "email_exists") {
       // Same answer as a new address, so the form can't be used to find out who has an account.
       return { sent: { email: parsed.data.email } };
@@ -112,6 +115,11 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
     redirect(postLoginPath("customer", next));
   }
   return { sent: { email: parsed.data.email } };
+}
+
+/** 48 random bytes, with every character class some password rules ask for. Never shown or kept. */
+function unguessablePassword(): string {
+  return `${randomBytes(48).toString("base64url")}aZ9!`;
 }
 
 export type ResendState = { done?: boolean; captcha?: string };

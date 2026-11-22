@@ -19,19 +19,40 @@ async function openLink(page, link, button = /Confirm my email|Continue to reset
   await page.goto(link);
   await page.getByRole("button", { name: button }).click();
 }
-/** After confirming: the page names the signed-in account (re-review N6), then Continue. */
-async function continueAfterConfirm(page, email) {
+/**
+ * After confirming: the page names the signed-in account (re-review N6). A new account then
+ * chooses its password (#60) and carries on to where it was going.
+ */
+async function continueAfterConfirm(page, email, password = "blue kettle 42") {
   await page.waitForURL((u) => u.pathname === "/auth/confirmed");
   const masked = `${email[0]}•••${email.slice(email.lastIndexOf("@"))}`;
   await page.getByText(masked).waitFor();
-  await page.getByRole("link", { name: "Continue" }).click();
+  await page.getByRole("link", { name: "Choose my password" }).click();
+  await page.waitForURL((u) => u.pathname === "/reset-password" && u.searchParams.get("first") === "1");
+  await page.getByLabel("Choose a password").fill(password);
+  await page.getByRole("button", { name: "Save my password" }).click();
+}
+/** Signs in with email and password; true if it got past /login. */
+async function canSignIn(browser, BASE, email, password) {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/login`);
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(400);
+  const ok = new URL(page.url()).pathname !== "/login";
+  await ctx.close();
+  return ok;
 }
 const setConfirm = (confirm) => fetch(`${FAKE}/__test/config`, { method: "POST", body: JSON.stringify({ confirm }) });
 
-async function fillSignup(page, { name, email, password, phone = "", terms = true, privacy = true }) {
+async function fillSignup(page, { name, email, phone = "", terms = true, privacy = true }) {
   await page.getByLabel("Your name").fill(name);
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Create a password").fill(password);
+  // No password here: it's chosen after the email link (#60).
+  assert.equal(await page.getByLabel("Create a password").count(), 0);
   if (phone) await page.getByLabel("Mobile number (optional)").fill(phone);
   if (terms) await page.getByLabel(/terms of use/).check();
   if (privacy) await page.getByLabel(/privacy notice/).check();
@@ -53,11 +74,10 @@ export async function authFlows({ browser, BASE, check, shots }) {
 
   console.log("e2e: sign up and reset");
 
-  await check("refuses a weak password and missing consent, in plain words", async () => {
+  await check("refuses missing consent, in plain words", async () => {
     const page = await browser.newPage();
     await page.goto(`${BASE}/signup`);
-    await fillSignup(page, { name: "Weak Test", email: "weak@ping.test", password: "password123", terms: false, privacy: false });
-    await page.getByText("That one's too easy to guess").first().waitFor();
+    await fillSignup(page, { name: "Weak Test", email: "weak@ping.test", terms: false, privacy: false });
     await page.getByText("Tick to agree to the terms of use.").waitFor();
     await page.getByText("Tick to say you've read the privacy notice.").waitFor();
     await page.close();
@@ -81,7 +101,15 @@ export async function authFlows({ browser, BASE, check, shots }) {
     await page.waitForURL((u) => u.pathname === "/auth/confirmed");
     await page.getByText("Not you?").waitFor();
     if (shots) await page.screenshot({ path: `${shots}/confirmed-1440.png`, fullPage: true });
-    await continueAfterConfirm(page, nia.email);
+    // Choosing the first password: a weak one is refused in plain words, as on a reset.
+    await page.getByRole("link", { name: "Choose my password" }).click();
+    await page.getByRole("heading", { name: "Choose your password" }).waitFor();
+    if (shots) await page.screenshot({ path: `${shots}/first-password-1440.png`, fullPage: true });
+    await page.getByLabel("Choose a password").fill("password123");
+    await page.getByRole("button", { name: "Save my password" }).click();
+    await page.getByText("That one's too easy to guess").first().waitFor();
+    await page.getByLabel("Choose a password").fill(nia.password);
+    await page.getByRole("button", { name: "Save my password" }).click();
     await page.waitForURL(`${BASE}/account`);
     await page.getByRole("heading", { name: "Hello, Nia." }).waitFor();
     const c = db(); await c.connect();
@@ -90,17 +118,52 @@ export async function authFlows({ browser, BASE, check, shots }) {
     await c.end();
     // The phone now lives on the profile only (review fix 7).
     assert.deepEqual(rows[0], { role: "customer", phone: "07700 900321", terms: "draft-2026-11", meta_phone: null });
-    // A sign-up confirmation gives an "otp" session, just like a reset link, but no reset
-    // pass: the new-password page stays shut (final check F1).
+    // The pass for the first password works once: the page is shut again now (final check F1).
     await page.goto(`${BASE}/reset-password`);
     await page.getByTestId("reset-expired").waitFor();
+    const c2 = db(); await c2.connect();
+    const { rows: m } = await c2.query(`select raw_user_meta_data -> 'password_pending' as pending from auth.users where email = $1`, [nia.email]);
+    await c2.end();
+    assert.equal(m[0].pending, null, "the account no longer waits for a password");
     await ctx.close();
+    assert.ok(await canSignIn(browser, BASE, nia.email, nia.password), "signs in with the password chosen after confirming");
+  });
+
+  await check("a stranger who signs up with someone else's address first can't get into the account (#60)", async () => {
+    const victim = { name: "Vic Test", email: `vic.${Date.now()}@ping.test` };
+    // The stranger gets there first. They never see a password, because there isn't one to see.
+    const s = await browser.newContext();
+    const sp = await s.newPage();
+    await sp.goto(`${BASE}/signup`);
+    await fillSignup(sp, { name: "Stranger", email: victim.email });
+    await sp.getByTestId("check-email").waitFor();
+    await s.close();
+    // The account exists, unconfirmed, with a password nobody chose.
+    const c = db(); await c.connect();
+    const { rows } = await c.query(`select email_confirmed_at, raw_user_meta_data ->> 'password_pending' as pending,
+      length(encrypted_password) > 0 as has_pw from auth.users where email = $1`, [victim.email]);
+    await c.end();
+    assert.deepEqual(rows[0], { email_confirmed_at: null, pending: "true", has_pw: true });
+    for (const guess of ["blue kettle 42", "password123", "ping-test-2026"]) {
+      assert.equal(await canSignIn(browser, BASE, victim.email, guess), false, `no way in with "${guess}"`);
+    }
+    // The real owner signs up later, confirms from their own inbox and chooses a password.
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/signup`);
+    await fillSignup(page, { name: victim.name, email: victim.email });
+    await page.getByTestId("check-email").waitFor();
+    await openLink(page, await mailFor(victim.email, "signup"));
+    await continueAfterConfirm(page, victim.email, "harbour lamp 77");
+    await page.waitForURL(`${BASE}/account`);
+    await ctx.close();
+    assert.ok(await canSignIn(browser, BASE, victim.email, "harbour lamp 77"), "the owner's password opens it");
   });
 
   await check("gives the same answer for an address that already has an account", async () => {
     const page = await browser.newPage();
     await page.goto(`${BASE}/signup`);
-    await fillSignup(page, { name: "Anna Again", email: "anna.customer@ping.test", password });
+    await fillSignup(page, { name: "Anna Again", email: "anna.customer@ping.test" });
     await page.getByTestId("check-email").waitFor();
     await page.close();
   });
@@ -158,7 +221,10 @@ export async function authFlows({ browser, BASE, check, shots }) {
     });
     // Sent on to the application. (Until Track B's /work/apply page is merged, main's
     // cleaner-only /work layout then bounces a customer to /account.)
-    assert.ok(seen.includes("/work/apply"), `expected a visit to /work/apply, saw ${seen.join(", ")}`);
+    // The password step's action redirects there in the same response (as sign-in does,
+    // below), so the browser's address is the proof when there's no separate request.
+    const landed = new URL(page.url()).pathname === "/work/apply";
+    assert.ok(landed || seen.includes("/work/apply"), `expected to land on /work/apply, saw ${seen.join(", ")} (at ${page.url()})`);
     await ctx.close();
   });
 

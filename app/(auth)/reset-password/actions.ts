@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { canChooseNewPassword, RESET_COOKIE, RESET_COOKIE_OPTIONS, resetPassSecret } from "@/lib/auth/recovery";
 import { passwordProblem } from "@/lib/auth/password";
-import { homeFor } from "@/lib/auth/roles";
+import { safeNext } from "@/lib/auth/next";
+import { postLoginPath } from "@/lib/auth/roles";
 import { getSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/db/server";
 
@@ -22,7 +23,9 @@ export async function setNewPassword(_prev: ResetState, formData: FormData): Pro
   if (problem) return { fieldError: problem };
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.updateUser({ password });
+  // password_pending marks a new account still on its unguessable starting password
+  // (signup/actions.ts, #60). Choosing one here ends that.
+  const { error } = await supabase.auth.updateUser({ password, data: { password_pending: null } });
   if (error) {
     if (error.code === "same_password") return { fieldError: "That's the password you already have. Choose a new one." };
     if (error.code === "weak_password") return { fieldError: "That password is too easy to guess. Try a longer one." };
@@ -30,5 +33,6 @@ export async function setNewPassword(_prev: ResetState, formData: FormData): Pro
     return { error: "We couldn't change your password just now. Try again in a minute." };
   }
   jar.delete({ name: RESET_COOKIE, path: RESET_COOKIE_OPTIONS.path }); // used: gone
-  redirect(homeFor(session.role));
+  // A new account carries on where it was going (checked again: only paths in its own area).
+  redirect(postLoginPath(session.role, safeNext(String(formData.get("next") ?? ""))));
 }
