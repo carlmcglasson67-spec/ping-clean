@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * The fields /auth/confirm posts, checked before anything reaches Supabase (re-review N7).
  *   token_hash + type   the recommended email templates (work on any device)
- *   code                the default PKCE link (only in the browser that asked for it)
+ *   code                the default PKCE link (only in the browser that asked for it), never with a type
  */
 export const confirmFields = z
   .object({
@@ -15,7 +15,10 @@ export const confirmFields = z
     flow: z.enum(["signup", "reset"]).optional(),
   })
   .strict()
-  .refine((f) => Boolean((f.token_hash && f.type) || f.code), { message: "incomplete link" });
+  .refine((f) => Boolean((f.token_hash && f.type) || f.code), { message: "incomplete link" })
+  // A code (PKCE) link never carries a type or token hash: its kind can't be checked, so a
+  // form claiming "code + type=invite" (or recovery…) is refused outright (issue #21 review S2).
+  .refine((f) => !(f.code && (f.type || f.token_hash)), { message: "mixed link" });
 
 export type ConfirmFields = z.infer<typeof confirmFields>;
 

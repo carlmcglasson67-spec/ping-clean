@@ -50,9 +50,10 @@ function verifyJwt(token) {
 }
 
 async function userJson(id) {
-  const { rows } = await pool.query(`select id, email, raw_user_meta_data, created_at from auth.users where id = $1`, [id]);
+  const { rows } = await pool.query(`select id, email, raw_user_meta_data, created_at, invited_at from auth.users where id = $1`, [id]);
   const u = rows[0];
-  return u && { id: u.id, aud: "authenticated", role: "authenticated", email: u.email, user_metadata: u.raw_user_meta_data ?? {}, app_metadata: { provider: "email" }, created_at: u.created_at };
+  return u && { id: u.id, aud: "authenticated", role: "authenticated", email: u.email, user_metadata: u.raw_user_meta_data ?? {}, app_metadata: { provider: "email" }, created_at: u.created_at,
+    ...(u.invited_at ? { invited_at: u.invited_at } : {}) };
 }
 
 // How each session was signed in, as GoTrue's `amr` claim: "password" for a sign-in, and
@@ -305,8 +306,11 @@ export function startFakeSupabase(port = 54321, { siteUrl } = {}) {
       if (url.pathname === "/auth/v1/verify" && req.method === "POST") {
         const { token_hash, type } = await readBody(req);
         const t = tokens.get(String(token_hash));
-        const want = type === "email" || type === "signup" ? "signup" : type;
-        if (!t || t.type !== want) return send(res, 403, { code: 403, error_code: "otp_expired", msg: "Email link is invalid or has expired" });
+        // GoTrue finds sign-up and invite links by the same confirmation token, so either
+        // type verifies either kind of link (verify.go: signup and invite share a lookup).
+        const confirmation = (x) => x === "signup" || x === "email" || x === "invite";
+        const fits = t && (t.type === type || (t.type === "signup" && confirmation(type)) || (t.type === "invite" && confirmation(type)));
+        if (!fits) return send(res, 403, { code: 403, error_code: "otp_expired", msg: "Email link is invalid or has expired" });
         tokens.delete(String(token_hash)); // links work once
         if (t.type === "signup" || t.type === "invite") await pool.query(`update auth.users set email_confirmed_at = now() where id = $1`, [t.userId]);
         if (t.type === "email_change") {
@@ -413,10 +417,15 @@ export function startFakeSupabase(port = 54321, { siteUrl } = {}) {
       // An admin invite (supabase.auth.admin.inviteUserByEmail): a new account, no password, one link.
       if (url.pathname === "/__test/invite" && req.method === "POST") {
         const { email } = await readBody(req);
-        const id = randomUUID();
-        await pool.query(
-          `insert into auth.users (instance_id, id, aud, role, email, encrypted_password, raw_app_meta_data, raw_user_meta_data, confirmation_token, recovery_token, email_change_token_new, email_change)
-           values ('00000000-0000-0000-0000-000000000000', $1, 'authenticated', 'authenticated', $2, '', '{"provider":"email","providers":["email"]}', '{}', '', '', '', '')`,
+        // As GoTrue: an unconfirmed account at that address is invited as it is (keeping any
+        // password it holds); a confirmed one is refused.
+        const existing = await userByEmail(email);
+        if (existing?.email_confirmed_at) return send(res, 422, { code: 422, error_code: "email_exists", msg: "A user with this email address has already been registered" });
+        const id = existing?.id ?? randomUUID();
+        if (existing) await pool.query(`update auth.users set invited_at = now() where id = $1`, [id]);
+        else await pool.query(
+          `insert into auth.users (instance_id, id, aud, role, email, encrypted_password, invited_at, raw_app_meta_data, raw_user_meta_data, confirmation_token, recovery_token, email_change_token_new, email_change)
+           values ('00000000-0000-0000-0000-000000000000', $1, 'authenticated', 'authenticated', $2, '', now(), '{"provider":"email","providers":["email"]}', '{}', '', '', '', '')`,
           [id, String(email).toLowerCase()],
         );
         mail(String(email).toLowerCase(), "invite", id);

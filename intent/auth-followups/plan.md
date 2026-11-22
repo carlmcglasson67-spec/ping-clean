@@ -26,16 +26,22 @@ Migration `supabase/migrations/20261122093000_profile_email_sync.sql`:
   both links are used, so the profile changes at the same moment.
 - A one-off line brings any profile already out of step back in line.
 - Execute revoked from public (a trigger function; nobody calls it directly).
+- `profiles_audit_email`: an email change on a profile is written to the audit log, with
+  the address redacted ("changed"), as the role trigger does.
 - No new table, no grant change: people still can't edit `profiles.email` themselves.
 
 ## 3. Invited people choose a password
-An invite link signs the person in but they have no password. After an **invite** link is
-confirmed, the action gives that session the same signed 15-minute reset pass a recovery
-link gets (`lib/auth/recovery.ts`, `RESET_PASS_SECRET`) and sends them to
-`/reset-password?invited=1`. The page then says "Choose your password" instead of "Choose
-a new password"; the pass check is unchanged (the query only changes words). If the pass
-is missing or has run out, the existing "Send me a new link" (forgot-password) still works
-for them, because an invited account is a confirmed account.
+(Revised after the security review of the first version, and rebased on the sign-up fix #60.)
+An invite link is handled exactly like a sign-up link: once it verifies (token-hash links
+only), the password is replaced with an unguessable one, `password_pending` is set, and the
+person goes through the same first-password step (name, password, phone, consent).
+- Why: GoTrue re-sends an invite to an existing UNCONFIRMED account, which may hold a
+  password a stranger chose before #60; and GoTrue verifies sign-up and invite links by the
+  same token, so either type opens either link. Both now behave the same.
+- "Invited" is read from the account (`invited_at`), never from the link type; it only
+  changes the words (`/auth/confirmed?invited=1`, and the reset page from the account).
+- A code (PKCE) link can't carry a type at all (`lib/auth/confirm-fields.ts`), so it can't
+  pose as an invite or a reset.
 
 ## 4. Reset passes on previews (configuration only)
 A line in `intent/go-live/plan.md` step 7: previews run with NODE_ENV=production, so

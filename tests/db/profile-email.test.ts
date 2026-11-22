@@ -28,11 +28,25 @@ describe("profiles.email follows auth.users.email", () => {
     });
   });
 
-  it("follows the change while the email change is only half done (Secure email change)", async () => {
+  it("doesn't change while an email change is only half done (Secure email change)", async () => {
     await as("superuser", async (q) => {
       // The first of the two links only records the pending address: email itself is unchanged.
       await q.rows(`update auth.users set email_change = 'anna.next@ping.test' where id = $1`, [U.anna]);
       expect(await profileEmail(q, U.anna)).toBe("anna.customer@ping.test");
+    });
+  });
+
+  it("logs an email change for admins, without the address", async () => {
+    await as("superuser", async (q) => {
+      await q.rows(`update auth.users set email = 'anna.logged@ping.test' where id = $1`, [U.anna]);
+      const rows = await q.rows<{ action: string; detail: Record<string, unknown> }>(
+        `select action, detail from public.audit_log where entity = 'profiles' and entity_id = $1 order by id desc limit 1`, [U.anna]);
+      expect(rows[0]).toEqual({ action: "update", detail: { email: "changed" } });
+      expect(JSON.stringify(rows)).not.toContain("anna.logged");
+      // Nothing logged when the address doesn't change.
+      const before = await q.count("public.audit_log");
+      await q.rows(`update public.profiles set full_name = full_name where id = $1`, [U.anna]);
+      expect(await q.count("public.audit_log")).toBe(before);
     });
   });
 
