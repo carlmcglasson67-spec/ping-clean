@@ -57,6 +57,12 @@ export const PING_ERRORS = {
   PC056: "That clean isn't waiting to be settled any more. Refresh to see where it stands.",
   PC057: "That clean had no cleaner, so it can't be marked as done.",
   PC058: "That clean was waiting for cover, so the cleaner named on it isn't the one who did it. Mark it as not done, and pay whoever covered outside Ping.",
+  // Who is an admin (the Ping team)
+  PC060: "There's no confirmed Ping account with that email. Ask them to sign up and use the link in their email first.",
+  PC061: "That's a cleaner's account. Ask them to sign up for the office with a different email.",
+  PC062: "Nothing to change: they already have that access. Refresh to see the team as it is now.",
+  PC063: "You can't remove your own admin access. Ask someone else on the team.",
+  PC064: "They're the last admin, so removing them would leave nobody able to run Ping.",
 } as const;
 
 export type PingErrorCode = keyof typeof PING_ERRORS;
