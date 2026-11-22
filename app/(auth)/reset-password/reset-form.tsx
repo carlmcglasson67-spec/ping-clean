@@ -10,7 +10,7 @@ import { setNewPassword, type ResetState } from "./actions";
  * A new password, or for a brand-new account (isNew) the first one, with the details that
  * only the address's owner should give: their name (checked), phone and consent (#60).
  */
-export function ResetForm({ email, isNew = false, next, name }: { email: string; isNew?: boolean; next?: string; name?: string }) {
+export function ResetForm({ email, isNew = false, invited = false, next, name }: { email: string; isNew?: boolean; invited?: boolean; next?: string; name?: string }) {
   const [state, action, pending] = useActionState<ResetState, FormData>(setNewPassword, {});
   const fe = state.fieldErrors ?? {};
   return (
@@ -31,7 +31,7 @@ export function ResetForm({ email, isNew = false, next, name }: { email: string;
         />
       ) : null}
       <PasswordField
-        label={isNew ? "Choose a password" : "New password"}
+        label={isNew ? "Choose a password" : invited ? "Your password" : "New password"}
         autoComplete="new-password"
         rules
         email={email}
@@ -67,7 +67,7 @@ export function ResetForm({ email, isNew = false, next, name }: { email: string;
         </>
       ) : null}
       <Button type="submit" size="lg" pending={pending} className="w-full">
-        {pending ? "Saving…" : isNew ? "Save and continue" : "Save my new password"}
+        {pending ? "Saving…" : isNew ? "Save and continue" : invited ? "Save my password" : "Save my new password"}
       </Button>
     </form>
   );

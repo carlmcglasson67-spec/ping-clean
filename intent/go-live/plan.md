@@ -72,6 +72,12 @@ pages are live. So the sign-in settings and the email sender come first.
   | `TURNSTILE_SECRET_KEY` | the secret from step 6. Mark it Sensitive. | **Carl pastes** |
   | `RESET_PASS_SECRET` | run `openssl rand -hex 32` in a terminal and paste the result. Mark it Sensitive. Without it password resets are off. | **Carl pastes** |
 
+  **`RESET_PASS_SECRET` for Preview too, with a different value.** Previews run with
+  NODE_ENV=production, so password resets (and invitees choosing a password) are off on
+  every preview unless it is set there. Add it a second time with the environment set to
+  **Preview only**, from a fresh `openssl rand -hex 32`, never the Production value
+  (issue #21, note 4). **Carl pastes.**
+
   Only after step 2: with the first two set and no tables, pages that read the database
   would fail. In production the interest form **refuses every entry until both Turnstile
   keys are set** (by design: no spam protection, no form).
