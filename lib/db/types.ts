@@ -936,6 +936,33 @@ export type Database = {
         };
         Relationships: [];
       };
+      team_changes: {
+        Row: {
+          id: number;
+          profile_id: string;
+          made_admin: boolean;
+          reason: string;
+          actor_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: never;
+          profile_id: string;
+          made_admin: boolean;
+          reason: string;
+          actor_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: never;
+          profile_id?: string;
+          made_admin?: boolean;
+          reason?: string;
+          actor_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       visit_photos: {
         Row: {
           id: string;
@@ -1164,6 +1191,14 @@ export type Database = {
       admin_settle_visit: {
         Args: { p_visit: string; p_outcome: string; p_reason: string; p_was_not_done?: boolean };
         Returns: undefined;
+      };
+      admin_add_admin: {
+        Args: { p_email: string; p_reason: string };
+        Returns: { id: string; email: string; full_name: string | null }[];
+      };
+      admin_remove_admin: {
+        Args: { p_profile: string; p_reason: string };
+        Returns: { id: string; email: string; full_name: string | null }[];
       };
       start_visit: {
         Args: { p_visit: string };

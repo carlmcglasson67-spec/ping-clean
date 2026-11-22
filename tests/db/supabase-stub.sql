@@ -26,6 +26,7 @@ create table auth.users (
   email text unique,
   encrypted_password text,
   email_confirmed_at timestamptz,
+  invited_at timestamptz,
   raw_app_meta_data jsonb default '{}'::jsonb,
   raw_user_meta_data jsonb default '{}'::jsonb,
   created_at timestamptz default now(),
@@ -33,7 +34,10 @@ create table auth.users (
   confirmation_token text,
   recovery_token text,
   email_change_token_new text,
-  email_change text
+  email_change text,
+  -- As on Supabase: soft-deleted and banned accounts (admin_add_admin refuses both).
+  deleted_at timestamptz,
+  banned_until timestamptz
 );
 
 create table auth.identities (

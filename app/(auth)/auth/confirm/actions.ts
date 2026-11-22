@@ -27,9 +27,14 @@ export async function confirmLink(formData: FormData): Promise<void> {
 
   const supabase = await createClient();
   let recovery = f.type === "recovery";
+  // An invite link, only once a token-hash link has verified as one. A code (PKCE) link
+  // never counts, whatever the form says (confirm-fields.ts refuses code + type anyway).
+  let invite = false;
   if (f.token_hash && f.type) {
-    const { error } = await supabase.auth.verifyOtp({ token_hash: f.token_hash, type: f.type as EmailOtpType });
+    const { data: verified, error } = await supabase.auth.verifyOtp({ token_hash: f.token_hash, type: f.type as EmailOtpType });
     if (error) redirect("/login?link=expired");
+    if (halfEmailChange(f.type, verified.session)) redirect("/auth/other-address");
+    invite = f.type === "invite";
   } else {
     const { error } = await supabase.auth.exchangeCodeForSession(f.code!);
     if (error) redirect("/login?link=expired");
@@ -53,7 +58,14 @@ export async function confirmLink(formData: FormData): Promise<void> {
   // address is theirs. Replace the password at once with one nobody knows, whatever the
   // account holds (an account made before #60 could still hold a stranger's), and have
   // them choose their own next. Decided by the link, not by metadata a user could edit.
-  const signupLink = f.flow === "signup" || f.type === "signup";
+  // An invite is handled exactly the same (issue #21, note 3): GoTrue finds sign-up and
+  // invite links by the same token, so either type verifies either link, and re-inviting
+  // an unconfirmed account keeps whatever password it already has.
+  // GoTrue also verifies these links under type=email. An invite link has no flow=signup to
+  // catch that, so an invited account that has never been through this step counts too:
+  // password_pending is absent until this step sets it, and null once they choose.
+  const untouchedInvite = Boolean(user.invited_at) && !("password_pending" in (user.user_metadata ?? {}));
+  const signupLink = f.flow === "signup" || f.type === "signup" || invite || (Boolean(f.token_hash) && untouchedInvite);
   if (signupLink) {
     const { error } = await supabase.auth.updateUser({ password: unguessablePassword(), data: { password_pending: true } });
     if (error) redirect("/login?link=expired");
@@ -85,7 +97,11 @@ export async function confirmLink(formData: FormData): Promise<void> {
   // link gives. The link was the proof, so this is the only place that pass is handed out
   // for a sign-up, and only while the account is still waiting for its first password.
   if (first) await giveResetPass(supabase);
-  redirect(`/auth/confirmed?${first ? "first=1&" : ""}next=${encodeURIComponent(to)}` as "/auth/confirmed");
+  const kind = f.type === "email_change" ? "kind=email_change&" : ""; // issue #21, note 1
+  // Invited or not is read from the account (GoTrue sets invited_at), never from the link
+  // type, which can be swapped. It only changes words on the next pages.
+  const invited = first && Boolean(user.invited_at) ? "invited=1&" : "";
+  redirect(`/auth/confirmed?${first ? "first=1&" : ""}${invited}${kind}next=${encodeURIComponent(to)}` as "/auth/confirmed");
 }
 
 /** A signed 15-minute pass for THIS session to choose a password (lib/auth/recovery.ts). */
@@ -102,4 +118,14 @@ async function giveResetPass(supabase: Awaited<ReturnType<typeof createClient>>)
       maxAge: RESET_PASS_MINUTES * 60,
     });
   }
+}
+
+/**
+ * Secure email change (issue #21, note 1): changing an address sends a link to each
+ * address, and the first one used gives no session (GoTrue: "Confirmation link accepted.
+ * Please proceed to confirm link sent to the other email"). Checked before anything looks
+ * at who is signed in, so a browser already signed in doesn't carry on as if it were done.
+ */
+function halfEmailChange(type: string, session: unknown): boolean {
+  return type === "email_change" && !session;
 }
