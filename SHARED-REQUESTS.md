@@ -265,10 +265,11 @@ Track A will likely need the same for checkout; worth merging this first.
 - Track C's flows are in `tests/e2e/admin.flows.mjs`, called from the end of `roles.e2e.mjs` (a two-line
   change, flagged in the PR). B2's runner would remove the need to touch that file.
 
-### C-7. Later: settle a visit by hand
-- `visit_unfinished` and `visit_no_show` alerts say "settle it by hand", and there's no function to do it
-  (complete, cancel or confirm a no-show, with a reason). It decides charging, so it belongs with Phase 5.
-  The console resolves the alert only, for now.
+### C-7. Settle a visit by hand. **Done in the settle-visit PR** (codes PC056/PC057; plan in intent/settle/plan.md).
+- `visit_unfinished` and `visit_no_show` alerts say "settle it by hand", and there was no function to do it.
+  Now `public.admin_settle_visit(p_visit, p_outcome, p_reason)`: "done" completes and charges the clean through
+  the usual charge, "not_done" cancels a started clean and leaves a missed one missed. Jobs → Alerts offers
+  both, each with a reason and a confirm step. Still open: no access (waits for Carl's `no_access_rule`).
 
 ### C-8. CSV export breaks mobile numbers (lib/interest/csv.ts). **Fix before the first send.**
 - **What:** `csvCell` prefixes any value starting with `+` with an apostrophe, so every mobile exports as

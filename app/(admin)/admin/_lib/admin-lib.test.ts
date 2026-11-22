@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALERT_KIND, alertKind } from "./alerts";
+import { ALERT_KIND, alertKind, firstSentence, todoBeyond } from "./alerts";
 import { auditEntity, auditSummary } from "./audit";
 import { adminErrorMessage } from "./errors";
 import { missingSettings, REQUIRED_SETTINGS } from "./required-settings";
@@ -33,6 +33,26 @@ describe("alerts", () => {
     expect(ALERT_KIND[alertKind("cleaner_check_lapsed")!].urgent).toBe(true);
     expect(ALERT_KIND[alertKind("cleaner_check_expiring")!].urgent).toBe(false);
     expect(alertKind("something_new")).toBeNull();
+  });
+
+  it("never says the same sentence twice under an alert", () => {
+    // The engine's own messages for the two cleans the team settles (migrations: close_stale_visits).
+    const missed = "A booked clean passed without being started. Check with the cleaner and the customer.";
+    const unfinished = "A clean was started but never marked complete. Check it and settle it by hand.";
+    expect(todoBeyond(missed, ALERT_KIND.visit_no_show.todo)).toBe("Then say whether it was done.");
+    expect(todoBeyond(unfinished, ALERT_KIND.visit_unfinished.todo)).toBe("Ask the cleaner what happened, then say whether it was done.");
+    // A clean the team settles shows only what happened, then one instruction: the engine's
+    // own "settle it by hand" gives way to the two answers on the card.
+    expect(firstSentence(unfinished)).toBe("A clean was started but never marked complete.");
+    expect(todoBeyond(firstSentence(unfinished), ALERT_KIND.visit_unfinished.todo)).toBe("Ask the cleaner what happened, then say whether it was done.");
+    expect(todoBeyond(firstSentence(missed), ALERT_KIND.visit_no_show.todo)).toBe("Check with the cleaner and the customer. Then say whether it was done.");
+    expect(firstSentence("No full stop here")).toBe("No full stop here");
+    // Nothing in common: the advice is shown whole. All said already: nothing more is shown.
+    expect(todoBeyond("e2e: a test alert", ALERT_KIND.generate_failed.todo)).toBe(ALERT_KIND.generate_failed.todo);
+    expect(todoBeyond("One thing. Two things.", "One thing. Two things.")).toBe("");
+    // Only whole sentences from the start: a shared opening word or a later match isn't cut.
+    expect(todoBeyond("Check Stripe.", "Check Stripe, then tell the main session.")).toBe("Check Stripe, then tell the main session.");
+    expect(todoBeyond("B. A.", "A. B.")).toBe("A. B.");
   });
 });
 

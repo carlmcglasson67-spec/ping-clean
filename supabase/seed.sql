@@ -1,5 +1,5 @@
--- Ping Clean — LOCAL TEST DATA ONLY. Loaded by `supabase db reset` and by the DB tests.
--- Never run against production.
+-- Ping Clean — LOCAL TEST DATA ONLY. Loaded by the test scripts (scripts/db-test.sh) and by
+-- nothing else. Never run against production.
 --
 -- Test logins (password for all: ping-test-2026)
 --   admin@ping.test               admin
@@ -13,6 +13,24 @@
 --
 -- The settings below are PLACEHOLDERS so the tests have numbers to work with. They are
 -- not pricing decisions: the real figures are open questions in intent/v1/spec.md.
+
+-- This file refuses to run anywhere but a test database. scripts/db-test.sh says so for its
+-- own session (ping.seed_ok); nothing else does, and supabase/config.toml tells the Supabase
+-- CLI and the GitHub integration not to run seed files at all. Two locks, because one of
+-- these logins is an admin and the password is written at the top of this file.
+--
+-- The whole file is one transaction, opened before the check. A plain `psql -f` carries on
+-- after an error, so without it the check would complain and the logins would be written
+-- anyway. With it, the failed check poisons the transaction: every statement after it is
+-- refused and the commit at the end undoes the lot.
+begin;
+
+do $$
+begin
+  if coalesce(current_setting('ping.seed_ok', true), '') <> 'local-test-only' then
+    raise exception 'supabase/seed.sql is local test data with a published password. It only runs from scripts/db-test.sh.';
+  end if;
+end $$;
 
 do $$
 declare
@@ -125,20 +143,8 @@ from (values
 ) as v (id, d, status, started, completed)
 cross join lateral private.split_visit_price(2000, 150, 'percent', 2500) as p;
 
-insert into public.checklist_templates (id, name, is_default, items) values
-  ('00000000-0000-4000-f000-000000000001', 'Standard regular clean', true, '[
-    {"key":"kitchen.surfaces","room":"Kitchen","label":"Worktops, splashbacks and hob wiped and dried"},
-    {"key":"kitchen.sink","room":"Kitchen","label":"Sink and taps cleaned and polished"},
-    {"key":"kitchen.outside","room":"Kitchen","label":"Outside of appliances and cupboard fronts wiped"},
-    {"key":"bathroom.wc","room":"Bathroom","label":"Toilet cleaned inside and out"},
-    {"key":"bathroom.bath","room":"Bathroom","label":"Bath, shower and screen cleaned"},
-    {"key":"bathroom.basin","room":"Bathroom","label":"Basin, taps and mirror polished"},
-    {"key":"rooms.dust","room":"Living areas","label":"Reachable surfaces dusted"},
-    {"key":"rooms.beds","room":"Bedrooms","label":"Beds made (linen changed if left out)"},
-    {"key":"floors.hoover","room":"Whole home","label":"Carpets and rugs hoovered"},
-    {"key":"floors.mop","room":"Whole home","label":"Hard floors mopped"},
-    {"key":"bins.empty","room":"Whole home","label":"Bins emptied and bags replaced"}
-  ]');
+-- The default checklist comes from a migration (20261121090100_standard_checklist.sql), as it
+-- does on the live database. The done clean below is ticked from it.
 
 insert into public.checklist_items (visit_id, item_key, room, label, position, done)
 select '00000000-0000-4000-e000-000000000001', i ->> 'key', i ->> 'room', i ->> 'label', (n - 1)::smallint, true
@@ -182,3 +188,5 @@ update public.payouts set status = 'paid', paid_at = now() - interval '5 days' w
 insert into public.messages (series_id, sender_id, body, created_at) values
   ('00000000-0000-4000-c000-000000000001', '00000000-0000-4000-a000-000000000002', 'Hi Tara, could you do the oven door this week? Thank you!', now() - interval '2 days'),
   ('00000000-0000-4000-c000-000000000001', '00000000-0000-4000-a000-000000000004', 'No problem at all, see you Monday.', now() - interval '2 days' + interval '20 minutes');
+
+commit;

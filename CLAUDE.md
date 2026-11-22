@@ -9,7 +9,9 @@ https://claude.ai/artifact/1WEp7QQgrj5dGn1wzooEWz (summary in intent/v1/spec.md)
 - Test: npm test (unit), npm run test:db (schema + RLS, every role, real Postgres, no Docker),
   npm run test:e2e (builds the app, signs in as every seeded role in Chrome)
 - Lint/types: npm run lint && npm run typecheck (run before every commit)
-- DB: npx supabase start | npx supabase db reset | npm run db:types (regenerates lib/db/types.ts)
+- DB: npx supabase start | npx supabase db reset | npm run db:types (regenerates lib/db/types.ts).
+  The test logins in supabase/seed.sql load only through the test scripts (scripts/db-test.sh):
+  run any other way the file writes nothing, and `db reset` leaves the tables empty.
 - Guardrails: bash scripts/check-secrets.sh && bash scripts/check-rls.sh
 
 ## Architecture
@@ -20,14 +22,19 @@ https://claude.ai/artifact/1WEp7QQgrj5dGn1wzooEWz (summary in intent/v1/spec.md)
   during parallel work (see intent/v1/plan.md).
 - Core model: a series (the regular arrangement) generates visits. Cleaners claim
   a series, never a single visit.
-- Background work (visit generation, tiered offer release, unclaimed alerts) runs in
-  supabase/functions/ on cron, never in the Next.js app.
+- Background work (visit generation, tiered offer release, unclaimed alerts, payment holds,
+  document checks) runs inside the database on pg_cron (the private.run_* functions), never
+  in the Next.js app. There are no Edge Functions.
 - Stripe webhooks are request handlers in app/api/stripe/ (signature-checked, recorded once:
   lib/stripe/receive.ts), not background work.
 - Jobs that must call Stripe (the charge job) are decided and scheduled in the database
   (pg_cron), which then calls a signed handler in app/api/stripe/ (PING_JOB_SECRET:
   lib/stripe/charges.ts). The handler takes no input and holds no rules.
 - Planning files for each change live in intent/<change>/ (intent.md, spec.md, plan.md).
+- Live: Supabase project `ping-clean` (London, ref cqymfeumtvafrarmumkw), Vercel project
+  `ping-clean` deploying main. Migrations reach the live database through Supabase's GitHub
+  integration when a PR merges to main, so a merged migration IS a live schema change. Never
+  run SQL against the live database by hand. Set-up and what's still open: intent/go-live/plan.md.
 
 ## Rules
 - Plan before code. Use plan mode for anything touching more than one file.
