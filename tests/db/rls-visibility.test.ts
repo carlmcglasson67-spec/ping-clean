@@ -8,7 +8,7 @@ afterAll(() => pool.end());
 const TABLES = [
   "profiles", "cleaners", "cleaner_documents", "cleaner_reviews", "settings", "properties", "series", "series_billing", "visits", "visit_settlements",
   "job_offers", "checklist_templates", "checklist_items", "visit_photos", "reviews", "visit_qc",
-  "payments", "payouts", "refunds", "payout_batches", "messages", "audit_log", "engine_alerts", "interest_signups",
+  "payments", "payouts", "refunds", "payout_batches", "messages", "audit_log", "engine_alerts", "interest_signups", "team_changes",
 ] as const;
 
 describe("every table is locked down", () => {

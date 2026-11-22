@@ -18,7 +18,7 @@ const FIELD =
  * The admins, and one change at a time: add someone or remove someone. Each needs a reason
  * and a second press that says exactly what will happen. The database decides and logs it.
  */
-export function TeamPanel({ members, changes }: { members: TeamMember[]; changes: TeamChange[] }) {
+export function TeamPanel({ members, changes }: { members: TeamMember[]; changes: TeamChange[] | null }) {
   const router = useRouter();
   const emailId = useId();
   const whyId = useId();
@@ -46,7 +46,7 @@ export function TeamPanel({ members, changes }: { members: TeamMember[]; changes
     start(async () => {
       let r: ActionResult;
       try {
-        r = await setAdmin({ email, make: open.make, reason: why });
+        r = await setAdmin(open.make ? { make: true, email, reason: why } : { make: false, profileId: open.member.id, reason: why });
       } catch {
         r = { ok: false, message: NOT_SAVED };
       }
@@ -133,13 +133,14 @@ export function TeamPanel({ members, changes }: { members: TeamMember[]; changes
                     onChange={(e) => setEmail(e.target.value)}
                     className={FIELD}
                   />
-                  <p className="text-sm text-on-navy-3">The address they signed up with. They must have opened the link we emailed them.</p>
+                  <p className="text-sm text-on-navy-3">The address they signed up with. They must have chosen their password from the link we emailed them.</p>
                 </div>
               ) : null}
               <div className="grid gap-2">
                 <label htmlFor={whyId} className="text-sm font-semibold">
-                  Why
+                  {open.make ? "What they'll do" : "Why"}
                 </label>
+                <p className="text-sm text-on-navy-3">Kept with the change. No personal or health details.</p>
                 <textarea id={whyId} required maxLength={300} rows={2} value={why} disabled={checking} onChange={(e) => setWhy(e.target.value)} className={FIELD} />
               </div>
 
@@ -176,7 +177,9 @@ export function TeamPanel({ members, changes }: { members: TeamMember[]; changes
           <h2 id="changes-title" className="text-lg font-semibold">
             Recent changes
           </h2>
-          {changes.length === 0 ? (
+          {changes === null ? (
+            <p role="alert" className="text-bad">The record of changes didn&rsquo;t load. Refresh the page.</p>
+          ) : changes.length === 0 ? (
             <p className="text-navy-2">None yet. The first admin was made by hand at go-live.</p>
           ) : (
             <ol className="grid gap-3">

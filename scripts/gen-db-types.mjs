@@ -135,9 +135,13 @@ out += `${ind(2)}};
         Args: { p_visit: string; p_outcome: string; p_reason: string; p_was_not_done?: boolean };
         Returns: undefined;
       };
-      admin_set_admin: {
-        Args: { p_email: string; p_make: boolean; p_reason: string };
-        Returns: { email: string; full_name: string | null }[];
+      admin_add_admin: {
+        Args: { p_email: string; p_reason: string };
+        Returns: { id: string; email: string; full_name: string | null }[];
+      };
+      admin_remove_admin: {
+        Args: { p_profile: string; p_reason: string };
+        Returns: { id: string; email: string; full_name: string | null }[];
       };
       start_visit: {
         Args: { p_visit: string };

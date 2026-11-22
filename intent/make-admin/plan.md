@@ -4,27 +4,41 @@ Until now the only way to make an admin was a line of SQL in the Supabase editor
 is still made that way (go-live list, step 11), because someone has to be first. Every admin after
 that is made in **Admin console → Team**.
 
-## Database: `public.admin_set_admin(p_email, p_make, p_reason)`
+## Database
 
-Only admins can call it. It is security definer, with a locked search_path.
+Two functions, admins only, security definer, with a locked search_path. Both start the same
+way (`private.team_change_begin`):
 
-- **Add** (`p_make = true`) works only on a confirmed account, meaning the email link was used.
+- check the caller is an admin
+- check the reason (a real word, up to 300 characters)
+- lock every admin row in id order
+- check the caller is still an admin, since they may have been removed while waiting
+
+The two functions:
+
+- `admin_add_admin(p_email, p_reason)`. It needs exactly one account with that address, and
+  that account must be confirmed, not deleted and not banned (PC060).
   - It must be a customer account. A cleaner's or applicant's account is refused (PC061).
-  - No confirmed account with that email gives PC060.
-  - If the person is already an admin, the answer is PC062.
-- **Remove** (`p_make = false`) turns the account back into a customer one.
+  - A customer with cleans booked is refused (PC065), because an admin account can't manage or
+    pay for its own cleans.
+  - Already an admin: PC062. No email: PC066.
+- `admin_remove_admin(p_profile, p_reason)` works by id, so a changed or reused email can't
+  point it at the wrong person.
   - You can't remove yourself (PC063).
   - You can't remove the last admin (PC064).
-  - An admin is always removing someone else, so PC064 can't actually happen. It is kept as a
-    guard if the function ever changes.
-  - Every admin row is locked in id order first, so two admins removing each other at the same
-    moment take turns.
-- **Reason:** required, as for the other admin actions (a real word, up to 300 characters).
-- **Logging:** the existing role audit trigger logs the change against the admin. A second row
-  (`make_admin` / `remove_admin`) records the reason.
 
-No table changes. It adds one function, which counts as a schema change: merging this PR is the
-sign-off.
+Two admins removing each other at the same moment take turns. The second is refused, because
+they are no longer an admin.
+
+Reasons go in a new table, `public.team_changes`, which admins can read and nobody can write
+except these functions. They are not stored in the audit log, which is never edited and must
+hold no personal details. The existing role audit trigger still logs each change against the
+admin.
+
+This depends on the sign-up fix (#65). A "confirmed" account only proves who owns it once using
+the email link replaces the password, so merge #65 first.
+
+New table plus two functions: merging is the sign-off.
 
 ## Console: /admin/team
 
@@ -38,10 +52,14 @@ sign-off.
 ## Tests
 
 - **Database (`tests/db/admin-access.test.ts`):**
-  - Only admins can call the function.
-  - Email case and spaces are ignored.
-  - Covers: unknown address, unconfirmed account, cleaner, applicant, already an admin, not an
-    admin, missing reason, removing yourself, removing another admin.
-  - The audit rows are checked.
-- **End to end (`admin-team.flows.mjs`):** a cleaner's account is refused; Ben is added, then
-  removed; the log shows both.
+  - Only admins can call either function.
+  - Email case and spaces don't matter.
+  - Refused: unknown address, unconfirmed account, deleted account, banned account, cleaner,
+    applicant, customer with cleans booked, already an admin, no email, not an admin, missing
+    reason, removing yourself.
+  - What goes into the record and what stays out of the audit log.
+  - A real two-connection race: two admins removing each other.
+- **End to end (`admin-team.flows.mjs`):**
+  - A cleaner is refused, and a booked customer is refused.
+  - A new office account is added, then removed.
+  - The record shows both changes.
