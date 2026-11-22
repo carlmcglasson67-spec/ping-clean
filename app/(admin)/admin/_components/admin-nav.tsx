@@ -17,6 +17,7 @@ const ITEMS: Item[] = [
   { href: "/admin/payments", label: "Payments" },
   { href: "/admin/interest", label: "Interest" },
   { href: "/admin/settings", label: "Settings" },
+  { href: "/admin/team", label: "Team" },
 ];
 
 function isCurrent(href: string, path: string) {
