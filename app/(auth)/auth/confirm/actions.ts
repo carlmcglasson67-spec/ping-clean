@@ -27,9 +27,11 @@ export async function confirmLink(formData: FormData): Promise<void> {
 
   const supabase = await createClient();
   let recovery = f.type === "recovery";
+  const invite = f.type === "invite"; // invited people choose a password next (issue #21, note 3)
   if (f.token_hash && f.type) {
-    const { error } = await supabase.auth.verifyOtp({ token_hash: f.token_hash, type: f.type as EmailOtpType });
+    const { data: verified, error } = await supabase.auth.verifyOtp({ token_hash: f.token_hash, type: f.type as EmailOtpType });
     if (error) redirect("/login?link=expired");
+    if (halfEmailChange(f.type, verified.session)) redirect("/auth/other-address");
   } else {
     const { error } = await supabase.auth.exchangeCodeForSession(f.code!);
     if (error) redirect("/login?link=expired");
@@ -41,9 +43,10 @@ export async function confirmLink(formData: FormData): Promise<void> {
   if (!user) redirect("/login?link=expired");
 
   // A reset link: give THIS session a signed 15-minute reset pass (lib/auth/recovery.ts).
-  if (recovery) {
+  // An invite gets one too: an invited account has no password to sign in with yet (issue #21, note 3).
+  if (recovery || invite) {
     await giveResetPass(supabase);
-    redirect("/reset-password"); // without a pass, it says the link has run out
+    redirect(invite ? "/reset-password?invited=1" : "/reset-password"); // without a pass, it says the link has run out
   }
 
   const { data: profile } = await supabase.from("profiles").select("role, phone").eq("id", user.id).maybeSingle();
@@ -85,7 +88,8 @@ export async function confirmLink(formData: FormData): Promise<void> {
   // link gives. The link was the proof, so this is the only place that pass is handed out
   // for a sign-up, and only while the account is still waiting for its first password.
   if (first) await giveResetPass(supabase);
-  redirect(`/auth/confirmed?${first ? "first=1&" : ""}next=${encodeURIComponent(to)}` as "/auth/confirmed");
+  const kind = f.type === "email_change" ? "kind=email_change&" : ""; // issue #21, note 1
+  redirect(`/auth/confirmed?${first ? "first=1&" : ""}${kind}next=${encodeURIComponent(to)}` as "/auth/confirmed");
 }
 
 /** A signed 15-minute pass for THIS session to choose a password (lib/auth/recovery.ts). */
@@ -102,4 +106,14 @@ async function giveResetPass(supabase: Awaited<ReturnType<typeof createClient>>)
       maxAge: RESET_PASS_MINUTES * 60,
     });
   }
+}
+
+/**
+ * Secure email change (issue #21, note 1): changing an address sends a link to each
+ * address, and the first one used gives no session (GoTrue: "Confirmation link accepted.
+ * Please proceed to confirm link sent to the other email"). Checked before anything looks
+ * at who is signed in, so a browser already signed in doesn't carry on as if it were done.
+ */
+function halfEmailChange(type: string, session: unknown): boolean {
+  return type === "email_change" && !session;
 }
