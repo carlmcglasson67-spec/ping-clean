@@ -164,6 +164,9 @@ export async function authLinkFlows({ browser, BASE, check, shots }) {
     assert.equal(new URL(page.url()).searchParams.get("invited"), null, "never invited, so not worded as one");
     await page.getByRole("link", { name: "Choose my password" }).click();
     await page.waitForURL((u) => u.pathname === "/reset-password");
+    // Wait for the password page itself: the address changes a moment before the page does,
+    // and the confirmed page it leaves says "Welcome to Ping." too.
+    await page.getByRole("heading", { name: "Choose your password" }).waitFor();
     assert.equal(await page.getByText("Welcome to Ping").count(), 0);
     await ctx.close();
     assert.equal((await account(joiner)).pending, true);
