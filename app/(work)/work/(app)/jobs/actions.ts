@@ -14,7 +14,8 @@ const input = z.object({ offerId: pgUuid, seriesId: pgUuid });
  * decided here; this only turns the database's answer into plain words.
  *
  * A retry after a dropped connection is safe: if the first tap did go through, the
- * database says "already claimed", we see the series is ours, and report success.
+ * database says "already claimed" (or, if the team has since ended the block, "no longer
+ * open"), we see the series is ours, and report success.
  */
 export async function claimJob(raw: unknown): Promise<ClaimResult> {
   const session = await requireRole("cleaner", "/work/jobs");
@@ -26,8 +27,9 @@ export async function claimJob(raw: unknown): Promise<ClaimResult> {
   const { error } = await supabase.rpc("claim_series", { p_offer: offerId });
   if (!error) return { ok: true };
 
-  if (error.code === "PC002") {
-    // Someone has it. Was it us, on an earlier tap whose reply never arrived?
+  if (error.code === "PC002" || error.code === "PC003") {
+    // Someone has it, or it has gone (e.g. the team ended it just after). Was it us, on an
+    // earlier tap whose reply never arrived?
     const { data: mine } = await supabase
       .from("series")
       .select("id")
