@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { Button, Checkbox, Field, Turnstile } from "@/components/ui";
+import { Button, Field, Turnstile } from "@/components/ui";
 import { authCaptchaSiteKey } from "@/lib/auth/captcha";
 import { Notice } from "../_components/auth-frame";
 import { resendConfirmation, signUp, type ResendState, type SignupState } from "./actions";
@@ -40,33 +40,17 @@ export function SignupForm({ next, signInHref }: { next?: string; signInHref: st
         defaultValue={state.values?.email}
         error={fe.email}
       />
-      <Field
-        label="Mobile number (optional)"
-        name="phone"
-        type="tel"
-        autoComplete="tel"
-        inputMode="tel"
-        defaultValue={state.values?.phone}
-        hint="So your cleaner or the Ping team can reach you on the day. We never share it for marketing."
-        error={fe.phone}
-      />
-
-      <div className="grid gap-3 pt-2">
-        <Checkbox name="terms" required error={fe.terms}>
-          I agree to Ping&rsquo;s{" "}
-          <Link href="/terms" target="_blank" className="font-semibold text-blue underline underline-offset-4">
-            terms of use
-          </Link>
-          .
-        </Checkbox>
-        <Checkbox name="privacy" required error={fe.privacy}>
-          I&rsquo;ve read the{" "}
-          <Link href="/privacy" target="_blank" className="font-semibold text-blue underline underline-offset-4">
-            privacy notice
-          </Link>
-          , which explains what Ping keeps about me and why.
-        </Checkbox>
-      </div>
+      <p className="text-base text-navy-2">
+        We&rsquo;ll email you a link. Open it to choose your password, add a phone number if you like, and agree to the{" "}
+        <Link href="/terms" target="_blank" className="font-semibold text-blue underline underline-offset-4">
+          terms
+        </Link>{" "}
+        and{" "}
+        <Link href="/privacy" target="_blank" className="font-semibold text-blue underline underline-offset-4">
+          privacy notice
+        </Link>
+        . We only use your email to send that link until then.
+      </p>
 
       {siteKey ? <Turnstile siteKey={siteKey} theme="light" error={fe.captcha} resetOn={state} /> : null}
 

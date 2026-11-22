@@ -29,8 +29,19 @@ async function continueAfterConfirm(page, email, password = "blue kettle 42") {
   await page.getByText(masked).waitFor();
   await page.getByRole("link", { name: "Choose my password" }).click();
   await page.waitForURL((u) => u.pathname === "/reset-password" && u.searchParams.get("first") === "1");
+  await firstPassword(page, { password });
+}
+/**
+ * The first-password step: the details only the address's owner gives (#60). The name is
+ * shown filled in from sign-up, for checking.
+ */
+async function firstPassword(page, { password, name, phone = "", terms = true, privacy = true }) {
+  if (name !== undefined) await page.getByLabel("Your name").fill(name);
   await page.getByLabel("Choose a password").fill(password);
-  await page.getByRole("button", { name: "Save my password" }).click();
+  if (phone) await page.getByLabel("Mobile number (optional)").fill(phone);
+  if (terms) await page.getByLabel(/terms of use/).check();
+  if (privacy) await page.getByLabel(/privacy notice/).check();
+  await page.getByRole("button", { name: "Save and continue" }).click();
 }
 /** Signs in with email and password; true if it got past /login. */
 async function canSignIn(browser, BASE, email, password) {
@@ -48,14 +59,13 @@ async function canSignIn(browser, BASE, email, password) {
 }
 const setConfirm = (confirm) => fetch(`${FAKE}/__test/config`, { method: "POST", body: JSON.stringify({ confirm }) });
 
-async function fillSignup(page, { name, email, phone = "", terms = true, privacy = true }) {
+async function fillSignup(page, { name, email }) {
   await page.getByLabel("Your name").fill(name);
   await page.getByLabel("Email").fill(email);
   // No password here: it's chosen after the email link (#60).
   assert.equal(await page.getByLabel("Create a password").count(), 0);
-  if (phone) await page.getByLabel("Mobile number (optional)").fill(phone);
-  if (terms) await page.getByLabel(/terms of use/).check();
-  if (privacy) await page.getByLabel(/privacy notice/).check();
+  // Nor phone or consent: those come from the owner after the link, too.
+  assert.equal(await page.getByLabel("Mobile number (optional)").count(), 0);
   await page.getByRole("button", { name: "Create my account" }).click();
 }
 
@@ -73,15 +83,6 @@ export async function authFlows({ browser, BASE, check, shots }) {
   const nia = { name: "Nia Test", email: `nia.${Date.now()}@ping.test`, password, phone: "07700 900321" };
 
   console.log("e2e: sign up and reset");
-
-  await check("refuses missing consent, in plain words", async () => {
-    const page = await browser.newPage();
-    await page.goto(`${BASE}/signup`);
-    await fillSignup(page, { name: "Weak Test", email: "weak@ping.test", terms: false, privacy: false });
-    await page.getByText("Tick to agree to the terms of use.").waitFor();
-    await page.getByText("Tick to say you've read the privacy notice.").waitFor();
-    await page.close();
-  });
 
   await check("signs up, confirms by email and lands in My cleans, as a customer, with the phone saved", async () => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -101,15 +102,16 @@ export async function authFlows({ browser, BASE, check, shots }) {
     await page.waitForURL((u) => u.pathname === "/auth/confirmed");
     await page.getByText("Not you?").waitFor();
     if (shots) await page.screenshot({ path: `${shots}/confirmed-1440.png`, fullPage: true });
-    // Choosing the first password: a weak one is refused in plain words, as on a reset.
+    // The first-password step: a weak password and missing consent are refused in plain words.
     await page.getByRole("link", { name: "Choose my password" }).click();
     await page.getByRole("heading", { name: "Choose your password" }).waitFor();
+    assert.equal(await page.getByLabel("Your name").inputValue(), "Nia Test", "the name from sign-up, shown for checking");
     if (shots) await page.screenshot({ path: `${shots}/first-password-1440.png`, fullPage: true });
-    await page.getByLabel("Choose a password").fill("password123");
-    await page.getByRole("button", { name: "Save my password" }).click();
+    await firstPassword(page, { password: "password123", terms: false, privacy: false });
     await page.getByText("That one's too easy to guess").first().waitFor();
-    await page.getByLabel("Choose a password").fill(nia.password);
-    await page.getByRole("button", { name: "Save my password" }).click();
+    await page.getByText("Tick to agree to the terms of use.").waitFor();
+    await page.getByText("Tick to say you've read the privacy notice.").waitFor();
+    await firstPassword(page, { password: nia.password, phone: nia.phone });
     await page.waitForURL(`${BASE}/account`);
     await page.getByRole("heading", { name: "Hello, Nia." }).waitFor();
     const c = db(); await c.connect();
@@ -154,10 +156,49 @@ export async function authFlows({ browser, BASE, check, shots }) {
     await fillSignup(page, { name: victim.name, email: victim.email });
     await page.getByTestId("check-email").waitFor();
     await openLink(page, await mailFor(victim.email, "signup"));
-    await continueAfterConfirm(page, victim.email, "harbour lamp 77");
+    await page.waitForURL((u) => u.pathname === "/auth/confirmed");
+    await page.getByRole("link", { name: "Choose my password" }).click();
+    // The stranger's name came first and is shown for checking: the owner puts theirs.
+    assert.equal(await page.getByLabel("Your name").inputValue(), "Stranger");
+    await firstPassword(page, { password: "harbour lamp 77", name: victim.name, phone: "07700 900777" });
     await page.waitForURL(`${BASE}/account`);
     await ctx.close();
     assert.ok(await canSignIn(browser, BASE, victim.email, "harbour lamp 77"), "the owner's password opens it");
+    const c2 = db(); await c2.connect();
+    const { rows: p } = await c2.query(`select p.full_name, p.phone, u.raw_user_meta_data ->> 'consented_at' is not null as consented
+      from public.profiles p join auth.users u on u.id = p.id where u.email = $1`, [victim.email]);
+    await c2.end();
+    assert.deepEqual(p[0], { full_name: "Vic Test", phone: "07700 900777", consented: true });
+  });
+
+  await check("an account a stranger registered the old way, with a password they know, is closed to them on confirming (#60)", async () => {
+    // Made as the old sign-up form made accounts: unconfirmed, the stranger's own password,
+    // their phone number waiting in the metadata, and no password_pending flag.
+    const email = `old.${Date.now()}@ping.test`;
+    const c = db(); await c.connect();
+    await c.query(`insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+        raw_app_meta_data, raw_user_meta_data, confirmation_token, recovery_token, email_change_token_new, email_change)
+      values ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated', $1,
+        extensions.crypt('stranger knows this', extensions.gen_salt('bf')), null,
+        '{"provider":"email"}', '{"full_name":"Old Stranger","phone":"07700 900999"}', '', '', '', '')`, [email]);
+    await c.end();
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/signup`);
+    await fillSignup(page, { name: "Real Owner", email });
+    await page.getByTestId("check-email").waitFor();
+    await page.getByRole("button", { name: "Send it again" }).click(); // the owner asks again: a link to their inbox
+    await openLink(page, await mailFor(email, "signup"));
+    // The moment the link is used, the stranger's password stops working, before any choice.
+    assert.equal(await canSignIn(browser, BASE, email, "stranger knows this"), false, "the old password is gone");
+    await continueAfterConfirm(page, email, "river stone 31");
+    await page.waitForURL(`${BASE}/account`);
+    await ctx.close();
+    const c2 = db(); await c2.connect();
+    const { rows } = await c2.query(`select p.phone from public.profiles p join auth.users u on u.id = p.id where u.email = $1`, [email]);
+    await c2.end();
+    assert.equal(rows[0].phone, null, "the stranger's phone number never reaches the owner's profile");
+    assert.ok(await canSignIn(browser, BASE, email, "river stone 31"));
   });
 
   await check("gives the same answer for an address that already has an account", async () => {
@@ -258,21 +299,20 @@ export async function authFlows({ browser, BASE, check, shots }) {
     await ctx.close();
   });
 
-  await check("a ?next= pointing off Ping is ignored; with confirmation off the phone still leaves the metadata (N3)", async () => {
+  await check("a ?next= pointing off Ping is ignored; with confirmation off, sign-up signs straight in", async () => {
     await setConfirm(false);
     try {
       const ctx = await browser.newContext();
       const page = await ctx.newPage();
       await page.goto(`${BASE}/signup?next=${encodeURIComponent("https://evil.example/account")}`);
-      const ruth = { name: "Ruth Test", email: `ruth.${Date.now()}@ping.test`, password, phone: "07700 900456" };
+      const ruth = { name: "Ruth Test", email: `ruth.${Date.now()}@ping.test` };
       await fillSignup(page, ruth);
       // Confirmation is off in this check, so sign-up signs straight in.
       await page.waitForURL(`${BASE}/account`);
       const c = db(); await c.connect();
-      const { rows } = await c.query(`select p.phone, u.raw_user_meta_data ->> 'phone' as meta_phone
-        from public.profiles p join auth.users u on u.id = p.id where u.email = $1`, [ruth.email]);
+      const { rows } = await c.query(`select u.raw_user_meta_data ->> 'next' as next from auth.users u where u.email = $1`, [ruth.email]);
       await c.end();
-      assert.deepEqual(rows[0], { phone: "07700 900456", meta_phone: null });
+      assert.deepEqual(rows[0], { next: null });
       await ctx.close();
     } finally {
       await setConfirm(true);

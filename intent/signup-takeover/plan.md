@@ -11,17 +11,25 @@ signs the real person in, so they never notice. Address, access notes and key co
 
 Nobody chooses a password at sign-up any more.
 
-1. **Sign-up** (`app/(auth)/signup/actions.ts`) asks for name, email, phone and consent.
-   The account is created with a long random password that is never shown or kept, and
+1. **Sign-up** (`app/(auth)/signup/actions.ts`) asks only for a name and an email. The
+   account is created with a long random password that is never shown or kept, and
    `password_pending: true` in its metadata.
-2. **The email link** (`app/(auth)/auth/confirm/actions.ts`): once it verifies and the
-   account is still `password_pending`, this session gets the same signed 15-minute pass a
-   reset link gives (`lib/auth/recovery.ts`).
+2. **The email link** (`app/(auth)/auth/confirm/actions.ts`). Once a sign-up link verifies,
+   the account's password is **replaced at once** with a new random one. This is decided by
+   the link, not the metadata, so it also covers an account made by the old form, which
+   could still hold a stranger's password. The session then gets the same signed 15-minute
+   pass a reset link gives (`lib/auth/recovery.ts`). The phone number from the form is never
+   copied.
 3. **/auth/confirmed** still names the account ("Not you? Sign out"), then its button is
    **Choose my password**.
-4. **/reset-password?first=1** words it as a first password. The pass is the guard, not
-   `?first`. Saving clears `password_pending` and carries on to where they were going
-   (`next`, checked again by `postLoginPath`).
+4. **/reset-password** shows the first-password form while the account is still
+   `password_pending`, and the action decides this the same way. The form has the name
+   (filled in from sign-up, for checking), the password, an optional mobile number, and the
+   terms and privacy ticks. Consent is recorded here (`lib/auth/consent.ts`), from the person
+   who proved the address. Supabase keeps the FIRST sign-up's details for an unconfirmed
+   address, so the form's name and consent could belong to a stranger. Saving clears
+   `password_pending`, writes the name and phone to the profile, and carries on to where they
+   were going (`next`, checked again by `postLoginPath`).
 
 A stranger who signs up first learns nothing: there is no password to know. Whoever proves
 the address by opening the link chooses the password.
@@ -46,6 +54,9 @@ End to end:
 - Sign-up → confirm → choose → in. A weak first password is refused in plain words.
 - The pass works once.
 - `password_pending` is cleared, and sign-in works with the chosen password.
+- **An old-style account replayed.** The stranger's own password and phone number are set
+  up directly in the database. The stranger's password stops working the moment the owner
+  uses the link, and their phone number never reaches the owner's profile.
 - **The attack replayed.** A stranger signs up first, and none of the likely passwords get
   in. The owner then signs up, confirms and chooses a password, and that password opens the
   account.

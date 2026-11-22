@@ -4,6 +4,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { parseConfirmForm } from "@/lib/auth/confirm-fields";
+import { unguessablePassword } from "@/lib/auth/consent";
 import { tidyPhone } from "@/lib/auth/links";
 import { safeNext } from "@/lib/auth/next";
 import { makeResetPass, RESET_COOKIE, RESET_COOKIE_OPTIONS, RESET_PASS_MINUTES, RESET_SECRET_PROBLEM, resetPassSecret } from "@/lib/auth/recovery";
@@ -48,14 +49,27 @@ export async function confirmLink(formData: FormData): Promise<void> {
   const { data: profile } = await supabase.from("profiles").select("role, phone").eq("id", user.id).maybeSingle();
   if (!profile) redirect("/login?link=expired");
 
+  // A sign-up confirmation: whoever filled in the form, this person has just proved the
+  // address is theirs. Replace the password at once with one nobody knows, whatever the
+  // account holds (an account made before #60 could still hold a stranger's), and have
+  // them choose their own next. Decided by the link, not by metadata a user could edit.
+  const signupLink = f.flow === "signup" || f.type === "signup";
+  if (signupLink) {
+    const { error } = await supabase.auth.updateUser({ password: unguessablePassword(), data: { password_pending: true } });
+    if (error) redirect("/login?link=expired");
+  }
+
   // The phone number given at sign-up waits in the account's metadata until now (there was
   // no session to save it with). Copy it once, only if the profile has none, then remove it
   // from the metadata so it lives in one place, under the profile's rules.
   // Where they were going ("next") waits there too: the email link is built from the Site
   // URL alone (see the PR's template steps), so it can't carry it. Both are cleared.
   const meta = user.user_metadata ?? {};
+  const first = signupLink || meta.password_pending === true;
   const metaPhone = meta.phone;
-  if (typeof metaPhone === "string") {
+  // A new account's phone comes from the owner on the next step, never from the sign-up
+  // form, which a stranger may have filled in first (#60).
+  if (typeof metaPhone === "string" && !first) {
     const phone = tidyPhone(metaPhone);
     if (phone && phone !== "invalid" && !profile.phone) {
       await supabase.from("profiles").update({ phone }).eq("id", user.id);
@@ -70,7 +84,6 @@ export async function confirmLink(formData: FormData): Promise<void> {
   // just proved the address is theirs, so they choose it now, with the same pass a reset
   // link gives. The link was the proof, so this is the only place that pass is handed out
   // for a sign-up, and only while the account is still waiting for its first password.
-  const first = meta.password_pending === true;
   if (first) await giveResetPass(supabase);
   redirect(`/auth/confirmed?${first ? "first=1&" : ""}next=${encodeURIComponent(to)}` as "/auth/confirmed");
 }

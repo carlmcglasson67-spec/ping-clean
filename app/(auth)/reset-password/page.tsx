@@ -3,6 +3,7 @@ import { ButtonLink } from "@/components/ui";
 import { cookies } from "next/headers";
 import { canChooseNewPassword, RESET_COOKIE, resetPassSecret } from "@/lib/auth/recovery";
 import { getSession } from "@/lib/auth/session";
+import { createClient } from "@/lib/db/server";
 import { AuthFrame, FormIntro, Notice } from "../_components/auth-frame";
 import { ResetForm } from "./reset-form";
 
@@ -12,10 +13,16 @@ export const metadata: Metadata = {
 };
 
 /** Reached only from a reset email: the session a reset link created, within 15 minutes (lib/auth/recovery.ts). */
-export default async function ResetPasswordPage({ searchParams }: { searchParams: Promise<{ first?: string; next?: string }> }) {
-  const [session, jar, { first, next }] = await Promise.all([getSession(), cookies(), searchParams]);
-  // A brand-new account choosing its first password (?first=1, words only: the pass is the guard).
-  const isNew = first === "1";
+export default async function ResetPasswordPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const [session, jar, { next }] = await Promise.all([getSession(), cookies(), searchParams]);
+  // A brand-new account choosing its first password: decided by the account itself, as the
+  // action decides it, so the page always shows the fields the action will ask for. (The
+  // ?first=1 the confirm step adds is only there to carry ?next.)
+  let isNew = false;
+  if (session) {
+    const { data } = await (await createClient()).auth.getUser();
+    isNew = data.user?.user_metadata?.password_pending === true;
+  }
   const ready = canChooseNewPassword(jar.get(RESET_COOKIE)?.value, session, resetPassSecret());
 
   return (
@@ -35,7 +42,7 @@ export default async function ResetPasswordPage({ searchParams }: { searchParams
           <FormIntro title={isNew ? "Choose your password" : "Choose a new password"}>
             For <strong className="font-semibold text-navy">{session!.email}</strong>. You&rsquo;ll stay signed in afterwards.
           </FormIntro>
-          <ResetForm email={session!.email ?? ""} isNew={isNew} next={isNew ? next : undefined} />
+          <ResetForm email={session!.email ?? ""} isNew={isNew} next={isNew ? next : undefined} name={isNew ? (session!.fullName ?? "") : undefined} />
         </>
       ) : (
         <div className="grid gap-6" data-testid="reset-expired">
