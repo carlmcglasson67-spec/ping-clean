@@ -136,6 +136,19 @@ export async function authLinkFlows({ browser, BASE, check, shots }) {
     await ctx.close();
     assert.equal((await account(invitee)).pending, true);
 
+    // An invite link edited to type=email (GoTrue verifies that too, and it has no
+    // flow=signup): the untouched invited account still gets the first-password step.
+    const emailed = `swap.email.${stamp}@ping.test`;
+    await post("/__test/invite", { email: emailed });
+    const emailLink = (await mailFor(emailed, "invite")).replace("type=invite", "type=email");
+    ctx = await browser.newContext();
+    page = await ctx.newPage();
+    await page.goto(emailLink);
+    await page.getByRole("button", { name: /Confirm my email|Accept and choose a password/ }).click();
+    await page.waitForURL((u) => u.pathname === "/auth/confirmed" && u.searchParams.get("first") === "1");
+    await ctx.close();
+    assert.equal((await account(emailed)).pending, true, "type=email can't skip the first-password step");
+
     // A sign-up link edited to type=invite: the sign-up's first-password step, not "invited".
     const joiner = `swap.signup.${stamp}@ping.test`;
     ctx = await browser.newContext();

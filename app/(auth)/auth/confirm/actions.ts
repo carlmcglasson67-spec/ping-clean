@@ -61,7 +61,11 @@ export async function confirmLink(formData: FormData): Promise<void> {
   // An invite is handled exactly the same (issue #21, note 3): GoTrue finds sign-up and
   // invite links by the same token, so either type verifies either link, and re-inviting
   // an unconfirmed account keeps whatever password it already has.
-  const signupLink = f.flow === "signup" || f.type === "signup" || invite;
+  // GoTrue also verifies these links under type=email. An invite link has no flow=signup to
+  // catch that, so an invited account that has never been through this step counts too:
+  // password_pending is absent until this step sets it, and null once they choose.
+  const untouchedInvite = Boolean(user.invited_at) && !("password_pending" in (user.user_metadata ?? {}));
+  const signupLink = f.flow === "signup" || f.type === "signup" || invite || (Boolean(f.token_hash) && untouchedInvite);
   if (signupLink) {
     const { error } = await supabase.auth.updateUser({ password: unguessablePassword(), data: { password_pending: true } });
     if (error) redirect("/login?link=expired");
