@@ -131,6 +131,10 @@ out += `${ind(2)}};
         Args: { p_series: string; p_reason: string };
         Returns: undefined;
       };
+      admin_settle_visit: {
+        Args: { p_visit: string; p_outcome: string; p_reason: string; p_was_not_done?: boolean };
+        Returns: undefined;
+      };
       start_visit: {
         Args: { p_visit: string };
         Returns: undefined;

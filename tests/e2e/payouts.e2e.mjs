@@ -26,7 +26,14 @@ export async function payoutFlows({ browser, BASE, check, signIn, SHOTS, stripe 
 
   const ctx = await browser.newContext(PHONE);
   const page = await ctx.newPage();
-  const step = () => page.locator(`[data-earning-step]`).first().getAttribute("data-earning-step");
+  // Waits until the row is on screen. After a reload the page streams in behind its loading
+  // state: the row is in the document a moment before it is shown, and reading "main" in
+  // that moment finds only the navigation.
+  const step = async () => {
+    const row = page.locator(`[data-earning-step]`).first();
+    await row.waitFor();
+    return row.getAttribute("data-earning-step");
+  };
   const shoot = async (p, name) => { await p.evaluate(() => document.fonts.ready); await p.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true }); };
   try {
     await check("the job's address lets nobody in without the secret, and takes POST only", async () => {

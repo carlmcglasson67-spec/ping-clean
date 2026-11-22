@@ -996,6 +996,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      visit_settlements: {
+        Row: {
+          id: string;
+          visit_id: string;
+          outcome: string;
+          was_status: Database["public"]["Enums"]["visit_status"];
+          reason: string;
+          actor_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          visit_id: string;
+          outcome: string;
+          was_status: Database["public"]["Enums"]["visit_status"];
+          reason: string;
+          actor_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          visit_id?: string;
+          outcome?: string;
+          was_status?: Database["public"]["Enums"]["visit_status"];
+          reason?: string;
+          actor_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       visits: {
         Row: {
           id: string;
@@ -1129,6 +1159,10 @@ export type Database = {
       };
       admin_end_block: {
         Args: { p_series: string; p_reason: string };
+        Returns: undefined;
+      };
+      admin_settle_visit: {
+        Args: { p_visit: string; p_outcome: string; p_reason: string; p_was_not_done?: boolean };
         Returns: undefined;
       };
       start_visit: {

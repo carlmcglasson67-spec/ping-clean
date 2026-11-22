@@ -222,8 +222,8 @@ pages are live. So the sign-in settings and the email sender come first.
   the second and third admins are made from the console and logged against a person.
 - **A second Supabase project for previews**, so pull requests can be tried with test
   logins before merging (#19 explains why previews can never share the live one).
-- **Settling a clean by hand**: the office marking a missed or unfinished clean as done or
-  not done. Today those alerts say "settle it by hand" and there is no button.
+- **No access** (the cleaner turned up and couldn't get in): recording it, and whether it
+  carries a fee. Waits for decision 7 above. Until then the office marks the clean "wasn't done".
 - The follow-ups in #12, #21 and #44.
 
 ## Things that will bite if forgotten
@@ -239,6 +239,9 @@ pages are live. So the sign-in settings and the email sender come first.
   them match (Vercel → Settings → Build and Deployment → Node.js Version → 22.x).
 - **Secrets never go in the repository, a pull request or a chat.** Paste them into Vercel
   and Supabase directly.
+- **Never run `private.generate_visits()` by hand on the live database.** The scheduled job
+  calls a form of it that commits between steps. Run by hand, it can lock against a cleaner
+  finishing a clean or the office settling one (the reviewer reproduced the deadlock).
 - **The tests have never met the real thing.** They run on Postgres 16 with a stand-in for
   Supabase and Stripe; live is Postgres 17 with real scheduled jobs, storage and Stripe.
   Steps 2, 9 and 16 are where that gets found out.
