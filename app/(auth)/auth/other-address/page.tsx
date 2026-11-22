@@ -32,8 +32,8 @@ export default function OtherAddressPage() {
         </FormIntro>
         <Notice tone="ok">Nothing changes until both links are used.</Notice>
         <p className="text-navy-2">
-          Can&rsquo;t find it? Check your junk or spam folder. Links run out after a while; if it has, change your email
-          address again from your account.
+          Can&rsquo;t find it? Check your junk or spam folder. Links run out after a while; if yours has, ask the Ping
+          team and we&rsquo;ll sort it out with you.
         </p>
         <div>
           <ButtonLink href="/login" size="lg" variant="secondary">

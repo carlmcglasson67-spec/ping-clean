@@ -1,4 +1,6 @@
-// Invite and email-change links, end to end against the fake Supabase (issue #21, notes 1–3).
+// Invite and email-change links, end to end against the fake Supabase (issue #21, notes 1–3,
+// and the security review of them: S1 invites replace any password, S2 code links can't
+// pose as invites, S3 sign-up and invite links swapped by type).
 // The fake's test-only controls stand in for the admin invite and supabase.auth.updateUser({ email }).
 import assert from "node:assert/strict";
 import pg from "pg";
@@ -27,6 +29,42 @@ async function profileEmail(email) {
   }
 }
 
+/** The account as the database has it: password still to choose, terms version, profile name. */
+async function account(email) {
+  const c = new pg.Client({ connectionString: process.env.PING_TEST_DATABASE_URL });
+  await c.connect();
+  try {
+    const { rows } = await c.query(
+      `select u.raw_user_meta_data -> 'password_pending' as pending, u.raw_user_meta_data ->> 'terms_version' as terms, p.full_name
+         from auth.users u join public.profiles p on p.id = u.id where u.email = $1`, [email]);
+    return rows[0];
+  } finally {
+    await c.end();
+  }
+}
+/** The first-password step (#60), as tests/e2e/auth.flows.mjs fills it in. */
+async function firstPassword(page, { name, password }) {
+  if (name !== undefined) await page.getByLabel("Your name").fill(name);
+  await page.getByLabel("Choose a password").fill(password);
+  await page.getByLabel(/terms of use/).check();
+  await page.getByLabel(/privacy notice/).check();
+  await page.getByRole("button", { name: "Save and continue" }).click();
+}
+/** Signs in with email and password in a fresh browser; true if it got past /login. */
+async function canSignIn(browser, BASE, email, password) {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/login`);
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(400);
+  const ok = new URL(page.url()).pathname !== "/login";
+  await ctx.close();
+  return ok;
+}
+
 export async function authLinkFlows({ browser, BASE, check, shots }) {
   const stamp = Date.now();
   const ola = { email: `ola.${stamp}@ping.test`, password: "red bicycle 58" };
@@ -34,7 +72,7 @@ export async function authLinkFlows({ browser, BASE, check, shots }) {
 
   console.log("e2e: invite and email-change links");
 
-  await check("an invite link says it's an invitation, then the invitee chooses a password and can sign in with it", async () => {
+  await check("an invite link says it's an invitation, then the invitee gives their details, chooses a password and can sign in with it", async () => {
     assert.equal((await post("/__test/invite", { email: ola.email })).status, 200);
     const link = await mailFor(ola.email, "invite");
     assert.match(link, /\/auth\/confirm\?token_hash=[0-9a-f]+&type=invite$/);
@@ -47,28 +85,84 @@ export async function authLinkFlows({ browser, BASE, check, shots }) {
     if (shots) await page.screenshot({ path: `${shots}/confirm-invite-1440.png`, fullPage: true });
     await page.getByRole("button", { name: "Accept and choose a password" }).click();
 
-    await page.waitForURL((u) => u.pathname === "/reset-password" && u.searchParams.get("invited") === "1");
+    // The same first-password step as a new sign-up (review S1), worded as an invitation.
+    await page.waitForURL((u) => u.pathname === "/auth/confirmed" && u.searchParams.get("first") === "1" && u.searchParams.get("invited") === "1");
+    await page.getByText("Invitation accepted").waitFor();
+    await page.getByText(masked(ola.email)).waitFor();
+    await page.getByRole("link", { name: "Choose my password" }).click();
+    await page.waitForURL((u) => u.pathname === "/reset-password" && u.searchParams.get("first") === "1");
     await page.getByRole("heading", { name: "Choose your password" }).waitFor();
+    await page.getByText("Welcome to Ping").waitFor();
     if (shots) await page.screenshot({ path: `${shots}/invite-password-1440.png`, fullPage: true });
-    await page.getByLabel("Your password").fill(ola.password);
-    await page.getByRole("button", { name: "Save my password" }).click();
+    await firstPassword(page, { name: "Ola Test", password: ola.password });
     await page.waitForURL(`${BASE}/account`);
-
-    await page.getByRole("button", { name: "Sign out" }).click();
-    await page.waitForURL(`${BASE}/login`);
-    await page.getByLabel("Email").fill(ola.email);
-    await page.getByLabel("Password").fill(ola.password);
-    await page.getByRole("button", { name: "Sign in" }).click();
-    await page.waitForURL(`${BASE}/account`);
+    assert.deepEqual(await account(ola.email), { pending: null, terms: "draft-2026-11", full_name: "Ola Test" });
     await ctx.close();
+    assert.equal(await canSignIn(browser, BASE, ola.email, ola.password), true);
   });
 
-  await check("an invite without its pass can't set a password: the page says the link has run out", async () => {
+  await check("re-inviting an unconfirmed account replaces whatever password it held (review S1)", async () => {
+    const email = `held.${stamp}@ping.test`;
+    // An account made before #60, holding a password a stranger chose, never confirmed.
+    const c = new pg.Client({ connectionString: process.env.PING_TEST_DATABASE_URL });
+    await c.connect();
+    await c.query(
+      `insert into auth.users (instance_id, id, aud, role, email, encrypted_password, raw_app_meta_data, raw_user_meta_data, confirmation_token, recovery_token, email_change_token_new, email_change)
+       values ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated', $1,
+               extensions.crypt('stranger pass 99', extensions.gen_salt('bf')), '{"provider":"email","providers":["email"]}', '{}', '', '', '', '')`, [email]);
+    await c.end();
+    assert.equal((await post("/__test/invite", { email })).status, 200);
+
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
-    await page.goto(`${BASE}/reset-password?invited=1`);
-    await page.getByTestId("reset-expired").waitFor();
-    await page.getByText("Invitation links work once").waitFor();
+    await page.goto(await mailFor(email, "invite"));
+    await page.getByRole("button", { name: "Accept and choose a password" }).click();
+    await page.waitForURL((u) => u.pathname === "/auth/confirmed" && u.searchParams.get("first") === "1");
+    await ctx.close();
+    assert.equal((await account(email)).pending, true, "waiting for the owner's own password");
+    assert.equal(await canSignIn(browser, BASE, email, "stranger pass 99"), false, "the stranger's password is gone");
+  });
+
+  await check("sign-up and invite links swapped by type both end at the first-password step; invited or not comes from the account (review S3)", async () => {
+    // An invite link edited to type=signup: still the invitation's first-password step.
+    const invitee = `swap.invite.${stamp}@ping.test`;
+    await post("/__test/invite", { email: invitee });
+    const inviteLink = (await mailFor(invitee, "invite")).replace("type=invite", "type=signup");
+    let ctx = await browser.newContext();
+    let page = await ctx.newPage();
+    await page.goto(inviteLink);
+    await page.getByRole("button", { name: "Confirm my email" }).click();
+    await page.waitForURL((u) => u.pathname === "/auth/confirmed" && u.searchParams.get("first") === "1" && u.searchParams.get("invited") === "1");
+    await ctx.close();
+    assert.equal((await account(invitee)).pending, true);
+
+    // A sign-up link edited to type=invite: the sign-up's first-password step, not "invited".
+    const joiner = `swap.signup.${stamp}@ping.test`;
+    ctx = await browser.newContext();
+    page = await ctx.newPage();
+    await page.goto(`${BASE}/signup`);
+    await page.getByLabel("Your name").fill("Swap Test");
+    await page.getByLabel("Email").fill(joiner);
+    await page.getByRole("button", { name: "Create my account" }).click();
+    const signupLink = (await mailFor(joiner, "signup")).replace("type=email", "type=invite");
+    await page.goto(signupLink);
+    await page.getByRole("button", { name: "Accept and choose a password" }).click();
+    await page.waitForURL((u) => u.pathname === "/auth/confirmed" && u.searchParams.get("first") === "1");
+    assert.equal(new URL(page.url()).searchParams.get("invited"), null, "never invited, so not worded as one");
+    await page.getByRole("link", { name: "Choose my password" }).click();
+    await page.waitForURL((u) => u.pathname === "/reset-password");
+    assert.equal(await page.getByText("Welcome to Ping").count(), 0);
+    await ctx.close();
+    assert.equal((await account(joiner)).pending, true);
+  });
+
+  await check("a code link can't claim to be an invite and get a password pass (review S2)", async () => {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/auth/confirm?code=abcdefgh12345678&type=invite`);
+    await page.getByRole("button", { name: "Accept and choose a password" }).click();
+    await page.waitForURL((u) => u.pathname === "/login" && u.searchParams.get("link") === "expired");
+    assert.equal((await ctx.cookies()).some((c) => c.name === "ping-reset"), false, "no reset pass");
     await ctx.close();
   });
 

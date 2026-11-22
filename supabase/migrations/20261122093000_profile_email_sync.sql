@@ -20,6 +20,13 @@ create trigger on_auth_user_email_changed after update of email on auth.users
   for each row when (new.email is distinct from old.email)
   execute function private.sync_profile_email();
 
+-- An email change on a profile is logged (profiles.email is what the admin console works
+-- from), with the address redacted: the log says it changed, never to what. Role changes
+-- already have their own trigger (profiles_audit_role); this one is for email only.
+create trigger profiles_audit_email after update of email on public.profiles
+  for each row when (new.email is distinct from old.email)
+  execute function private.audit_row('full_name', 'phone', 'email');
+
 -- Bring any profile already out of step back in line, once.
 update public.profiles p
    set email = u.email
