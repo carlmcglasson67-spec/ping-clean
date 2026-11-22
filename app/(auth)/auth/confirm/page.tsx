@@ -3,6 +3,7 @@ import { ButtonLink } from "@/components/ui";
 import { AuthFrame, FormIntro, Notice } from "../../_components/auth-frame";
 import { confirmLink } from "./actions";
 import { ConfirmButton } from "./confirm-button";
+import { linkWording } from "./wording";
 
 export const metadata: Metadata = {
   title: "Confirm",
@@ -18,45 +19,29 @@ type Params = { token_hash?: string; type?: string; code?: string; next?: string
  */
 export default async function ConfirmPage({ searchParams }: { searchParams: Promise<Params> }) {
   const p = await searchParams;
-  const reset = p.type === "recovery" || p.flow === "reset";
+  const w = linkWording(p);
   const usable = Boolean((p.token_hash && p.type) || p.code);
 
   return (
     <AuthFrame
-      eyebrow={reset ? "New password" : "Nearly there"}
+      eyebrow={w.eyebrow}
       statement={
-        reset ? (
-          <>
-            One tap,
-            <br />
-            <span className="text-brand-gradient-navy">then a new password.</span>
-          </>
-        ) : (
-          <>
-            One tap
-            <br />
-            <span className="text-brand-gradient-navy">and you&rsquo;re in.</span>
-          </>
-        )
+        <>
+          {w.statement[0]}
+          <br />
+          <span className="text-brand-gradient-navy">{w.statement[1]}</span>
+        </>
       }
-      lede={
-        reset
-          ? "Press continue to choose a new password for your Ping account."
-          : "Press confirm to finish setting up your Ping account. This shows us the email address really is yours."
-      }
+      lede={w.lede}
     >
       {usable ? (
         <div className="grid gap-6">
-          <FormIntro title={reset ? "Reset your password" : "Confirm your email"}>
-            {reset
-              ? "You asked to reset your Ping password. If that wasn't you, close this page: nothing will change."
-              : "You've just created a Ping account. Confirm it's yours and we'll take you in."}
-          </FormIntro>
+          <FormIntro title={w.title}>{w.intro}</FormIntro>
           <form action={confirmLink} className="grid gap-4">
             {(["token_hash", "type", "code", "next", "flow"] as const).map((k) =>
               p[k] ? <input key={k} type="hidden" name={k} value={String(p[k]).slice(0, 512)} /> : null,
             )}
-            <ConfirmButton label={reset ? "Continue to reset your password" : "Confirm my email"} />
+            <ConfirmButton label={w.button} />
           </form>
         </div>
       ) : (

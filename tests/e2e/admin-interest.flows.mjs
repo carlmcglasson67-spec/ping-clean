@@ -59,7 +59,7 @@ export default async function interestFlows({ page, browser, signIn, BASE, check
   await check("the CSV export downloads, warns about Excel, defuses formulas, and is logged without contacts", async () => {
     await page.goto(`${BASE}/admin/interest`);
     await settle(page);
-    await page.getByText("Import directly into your SMS tool; don't re-save in Excel.").waitFor();
+    await page.getByText("Import it straight into your SMS tool. Don't re-save it in Excel.").waitFor();
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export all as CSV" }).click()]);
     assert.match(download.suggestedFilename(), /^ping-interest-all-\d{4}-\d{2}-\d{2}\.csv$/);
     const csv = await readFile(await download.path(), "utf8");
