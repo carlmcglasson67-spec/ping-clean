@@ -85,6 +85,45 @@ describe("what the emails say", () => {
   });
 });
 
+describe("the cleaner's emails about their block", () => {
+  const facts = { firstName: "Tara", amountPence: null, cleanDate: null, link: "https://pingclean.co.uk/work", town: "Workington", weekday: 2 };
+  it("names the block by its town and day, says what to do, and links to the cleaner app", () => {
+    const hold = noticeEmail("cleaner_block_on_hold", facts);
+    expect(hold.subject).toBe("One of your regular cleans is on hold");
+    expect(hold.text).toContain("Hello Tara,");
+    expect(hold.text).toContain("Your regular clean in Workington on Tuesdays is on hold for now, so please don't go until we tell you it's back on.");
+    expect(hold.html).toContain('href="https://pingclean.co.uk/work"');
+    expect(noticeEmail("cleaner_block_back_on", facts).text).toContain("your regular clean in Workington on Tuesdays is back on.");
+    expect(noticeEmail("cleaner_block_ended", facts).text).toContain("Your regular clean in Workington on Tuesdays has ended");
+  });
+
+  it("never says why, and never mentions money", () => {
+    for (const kind of ["cleaner_block_on_hold", "cleaner_block_back_on", "cleaner_block_ended"] as const) {
+      const m = noticeEmail(kind, { ...facts, amountPence: 5000, cleanDate: "2026-11-12" });
+      expect(m.text).not.toMatch(/card|pay|bank|£|declin|unpaid|owed|customer/i);
+      expect(m.subject).not.toMatch(/card|pay|bank|£/i);
+    }
+  });
+
+  it("copes without a town or a day", () => {
+    expect(noticeEmail("cleaner_block_on_hold", { ...facts, town: null, weekday: null }).text).toContain("Your regular clean is on hold for now");
+  });
+
+  it("is sent to the cleaner with the app's link, and no payment is looked up", async () => {
+    const lookup = vi.spyOn(paymentKind, "maybeSingle");
+    const sent = db([notice({ kind: "cleaner_block_on_hold", email: "tara@example.com", full_name: "Tara Test", payment_id: null, amount_pence: null, clean_date: null,
+      town: "Workington", weekday: 2 })]);
+    const fetcher = vi.fn(async () => new Response("{}", { status: 200 }));
+    expect(await sendDueNotices(20, fetcher as unknown as typeof fetch)).toEqual({ claimed: 1, sent: 1, failed: 0 });
+    const body = JSON.parse((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+    expect(body).toMatchObject({ to: ["tara@example.com"], subject: "One of your regular cleans is on hold" });
+    expect(body.text).toContain("Open your jobs: https://pingclean.co.uk/work\n");
+    expect(lookup).not.toHaveBeenCalled();
+    lookup.mockRestore();
+    expect(sent).toEqual([{ p_notice: "00000000-0000-4000-9100-000000000001", p_error: null }]);
+  });
+});
+
 describe("sending", () => {
   it("sends each notice once through Resend, with the notice as the idempotency key, and marks it sent", async () => {
     const sent = db([notice(), notice({ notice_id: "00000000-0000-4000-9100-000000000002", kind: "block_ended_unpaid", payment_id: null, amount_pence: null, clean_date: null })]);

@@ -196,6 +196,8 @@ describe("sending the emails", () => {
   it("hands each notice to one sender at a time, with only what the email needs, until it's sent", async () => {
     const r = await as("superuser", async (q) => {
       await lastTryFailed(q);
+      // The cleaner's own email about the hold is tested in payments-followups.test.ts.
+      await q.rows(`delete from private.customer_notices where kind like 'cleaner\\_%'`);
       await server(q);
       const first = await q.rows<Record<string, unknown>>(`select * from public.notices_claim(20)`);
       const again = await q.rows(`select * from public.notices_claim(20)`);
@@ -213,7 +215,7 @@ describe("sending the emails", () => {
     });
     expect(r.first).toHaveLength(1);
     expect(r.first[0]).toMatchObject({ kind: "block_on_hold", email: r.anna!.email, full_name: r.anna!.full_name, amount_pence: 5000 });
-    expect(Object.keys(r.first[0]!).sort()).toEqual(["amount_pence", "clean_date", "email", "full_name", "kind", "notice_id", "payment_id"]);
+    expect(Object.keys(r.first[0]!).sort()).toEqual(["amount_pence", "clean_date", "email", "full_name", "kind", "notice_id", "payment_id", "town", "weekday"]);
     expect(r).toMatchObject({ again: 0, retry: 1, done: 0, row: { attempts: 2, sent: true, last_error: null } });
   });
 

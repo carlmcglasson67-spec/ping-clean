@@ -18,7 +18,18 @@ export type PayState =
   | { state: "declined"; reason: string }
   | { state: "in_progress" }
   | { state: "no_card" }
+  | { state: "too_many" } // they've asked a lot in the last hour: give it a few minutes
   | { state: "unavailable" }; // not theirs, not payable right now, or something went wrong
+
+/**
+ * The pay page's limit on calls to Stripe, per customer, kept in the database (Vercel runs
+ * many copies of the app, so nothing in memory would hold). False also when the database
+ * can't say: no answer, no Stripe call.
+ */
+export async function stripeCallAllowed(customerId: string, kind: "card_form" | "check"): Promise<boolean> {
+  const r = await createAdminClient().rpc("customer_stripe_call", { p_customer: customerId, p_kind: kind });
+  return !r.error && r.data === true;
+}
 
 /** A plain-English line for the bank's reason. Never the raw code. */
 export function declineReason(code: string | null): string {
@@ -95,6 +106,7 @@ export async function checkPayment(paymentId: string, customerId: string): Promi
   const db = createAdminClient();
   const known = await db.rpc("customer_payment_intent", { p_payment: paymentId, p_customer: customerId });
   if (known.error || typeof known.data !== "string" || !known.data) return { state: "unavailable" };
+  if (!(await stripeCallAllowed(customerId, "check"))) return { state: "too_many" };
   try {
     const pi = await getStripe().paymentIntents.retrieve(known.data);
     const r = readIntent(pi);
@@ -107,16 +119,17 @@ export async function checkPayment(paymentId: string, customerId: string): Promi
   }
 }
 
-/** "Use a different card": a SetupIntent for the block this payment belongs to. */
+/** "Use a different card": a SetupIntent for the block this payment belongs to (a new one each time, so limited). */
 export async function startCardChange(
   paymentId: string,
   customer: { id: string; email: string | null; fullName: string | null },
-): Promise<string | null> {
+): Promise<{ clientSecret: string } | "too_many" | null> {
   const series = await createAdminClient().rpc("customer_card_series", { p_payment: paymentId, p_customer: customer.id });
   if (series.error || typeof series.data !== "string") return null;
+  if (!(await stripeCallAllowed(customer.id, "card_form"))) return "too_many";
   const stripeCustomer = await ensureStripeCustomer(customer);
   const si = await createCardUpdateIntent(series.data, stripeCustomer, customer.id);
-  return si.client_secret;
+  return si.client_secret ? { clientSecret: si.client_secret } : null;
 }
 
 const SETUP_INTENT = /^seti_[A-Za-z0-9_]{6,64}$/;
@@ -130,6 +143,7 @@ export async function confirmCardChange(setupIntentId: string, customerId: strin
   if (!SETUP_INTENT.test(setupIntentId)) return false;
   const mine = await createAdminClient().rpc("stripe_customer_for", { p_profile: customerId });
   if (mine.error || typeof mine.data !== "string" || !mine.data) return false;
+  if (!(await stripeCallAllowed(customerId, "check"))) return false;
   try {
     const si = await getStripe().setupIntents.retrieve(setupIntentId);
     const owner = typeof si.customer === "string" ? si.customer : si.customer?.id;

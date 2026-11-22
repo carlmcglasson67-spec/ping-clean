@@ -106,11 +106,22 @@ describe("setup_intent.succeeded (the webhook that saves the card)", () => {
 
   it("saves the card's brand, last four and expiry, after checking the card belongs to that customer at Stripe", async () => {
     const id = await pm("cus_testAnna0001");
-    await onSetupIntentSucceeded(event({ status: "succeeded", customer: "cus_testAnna0001", payment_method: id, metadata: { series_id: SERIES } }));
+    await onSetupIntentSucceeded(event({ status: "succeeded", customer: "cus_testAnna0001", payment_method: id, metadata: { series_id: SERIES }, created: 1_795_000_000 }));
     expect(rpc).toHaveBeenCalledWith("stripe_card_saved", {
       p_series: SERIES, p_stripe_customer: "cus_testAnna0001", p_payment_method: id,
       p_brand: "visa", p_last4: "4242", p_exp_month: 11, p_exp_year: 2031,
+      p_setup_created: new Date(1_795_000_000 * 1000).toISOString(), // so a late webhook for an older card can't replace a newer one
     });
+  });
+
+  it("a late webhook for an older card is acknowledged, not retried", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    rpc.mockResolvedValue({ data: "older", error: null });
+    const id = await pm("cus_testAnna0001");
+    await expect(onSetupIntentSucceeded(event({ status: "succeeded", customer: "cus_testAnna0001", payment_method: id, metadata: { series_id: SERIES }, created: 1 })))
+      .resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/newer card is already saved/));
+    warn.mockRestore();
   });
 
   it("stores nothing when the card isn't attached to that customer, or the event is incomplete", async () => {
