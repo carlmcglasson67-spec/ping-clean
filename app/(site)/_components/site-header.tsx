@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { ButtonLink, LogoMark, Wordmark, cn } from "@/components/ui";
-import { AREAS_LINK, AREA_LINKS, CLEANERS_LINK, CLEANING_LINKS, FAQ_LINK } from "../_content/nav";
+import { AREAS_LINK, AREA_GROUPS, CLEANERS_LINK, CLEANING_LINKS, FAQ_LINK, townCount } from "../_content/nav";
 
 type Menu = "cleaning" | "areas" | null;
 
@@ -168,23 +168,30 @@ export function SiteHeader() {
           <div className="col-span-4 grid content-between gap-8 rounded-lg bg-mist p-9">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-navy-2">Where Ping cleans</p>
             <div>
-              <p className="font-display text-2xl font-semibold leading-tight">West Cumbria, from the Solway to Seascale.</p>
-              <p className="mt-4 text-navy-2">Ten towns and the villages around them. Pick yours to see what a regular clean looks like there.</p>
+              <p className="font-display text-2xl font-semibold leading-tight">Carlisle, the Solway and the west coast to Seascale.</p>
+              <p className="mt-4 text-navy-2">{townCount()}. Pick yours to see what a regular clean looks like there.</p>
               <Link href={AREAS_LINK.href} onClick={close} className="mt-6 inline-flex min-h-12 items-center gap-2 rounded-full bg-navy px-5 text-base font-semibold text-on-navy hover:bg-navy-800">
                 {AREAS_LINK.label} <span aria-hidden>&rarr;</span>
               </Link>
             </div>
           </div>
-          <ul className="col-span-8 grid grid-cols-3 content-center gap-x-6 gap-y-1">
-            {AREA_LINKS.map((l) => (
-              <li key={l.label}>
-                <Link href={l.href} onClick={close} className="group flex min-h-14 items-baseline justify-between gap-4 rounded-md px-5 py-3 transition-colors hover:bg-card">
-                  <span className="font-display text-xl font-semibold group-hover:text-teal-ink">{l.label}</span>
-                  <span className="text-sm font-semibold text-navy-3 tabular">{l.districts.join(" ")}</span>
-                </Link>
-              </li>
+          <div className="col-span-8 grid content-center gap-6">
+            {AREA_GROUPS.map((g) => (
+              <div key={g.id}>
+                <p className="px-5 text-sm font-semibold uppercase tracking-[0.16em] text-teal-ink">{g.name}</p>
+                <ul className="mt-2 grid grid-cols-3 gap-x-6 gap-y-1">
+                  {g.links.map((l) => (
+                    <li key={l.label}>
+                      <Link href={l.href} onClick={close} className="group flex min-h-14 items-baseline justify-between gap-4 rounded-md px-5 py-3 transition-colors hover:bg-card">
+                        <span className="font-display text-xl font-semibold group-hover:text-teal-ink">{l.label}</span>
+                        <span className="shrink-0 text-sm font-semibold text-navy-3 tabular">{l.districts.length > 1 ? `${l.districts[0]}–${l.districts.at(-1)}` : l.districts[0]}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       </div>
 
@@ -202,15 +209,17 @@ export function SiteHeader() {
               </SheetLink>
             ))}
           </SheetGroup>
-          <SheetGroup title="Areas">
-            <div className="grid grid-cols-2 gap-x-4">
-              {AREA_LINKS.map((l) => (
-                <Link key={l.label} href={l.href} onClick={() => setSheet(false)} className="flex min-h-12 items-center text-lg font-semibold">
-                  {l.label}
-                </Link>
-              ))}
-            </div>
-          </SheetGroup>
+          {AREA_GROUPS.map((g) => (
+            <SheetGroup key={g.id} title={g.name}>
+              <div className="grid grid-cols-2 gap-x-4">
+                {g.links.map((l) => (
+                  <Link key={l.label} href={l.href} onClick={() => setSheet(false)} className="flex min-h-12 items-center text-lg font-semibold">
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
+            </SheetGroup>
+          ))}
           <SheetGroup title="Ping">
             {pathname === "/launch" ? (
               <SheetLink href="/launch#register" onClick={() => setSheet(false)}>

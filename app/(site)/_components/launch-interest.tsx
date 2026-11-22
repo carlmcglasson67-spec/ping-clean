@@ -239,7 +239,7 @@ export function LaunchInterest({ setup, initialKind = "customer", className }: {
             autoCapitalize="characters"
             spellCheck={false}
             maxLength={10}
-            placeholder="CA14 3XX"
+            placeholder="CA1 2XX"
             aria-invalid={fe.postcode ? true : undefined}
             aria-describedby={fe.postcode ? `${id("postcode")}-error` : undefined}
             className={inputClass(Boolean(fe.postcode))}
@@ -550,7 +550,7 @@ function ShareLaunch() {
           variant="secondary"
           className="w-fit max-sm:w-full"
           onClick={() => {
-            navigator.share({ title: "Ping Clean", text: "Regular home cleaning for West Cumbria. Put your postcode on the list.", url }).catch(() => {});
+            navigator.share({ title: "Ping Clean", text: "Regular home cleaning for Carlisle and West Cumbria. Put your postcode on the list.", url }).catch(() => {});
           }}
         >
           Share this page

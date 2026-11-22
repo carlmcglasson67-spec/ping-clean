@@ -10,7 +10,7 @@ import { STEPS } from "./_content/how";
 import { InstantPrice } from "./_components/instant-price";
 import { interestFormSetup } from "@/lib/interest/server";
 import { getPricing } from "./_lib/pricing";
-import { AREA_LINKS, CLEANERS_LINK, FAQ_LINK } from "./_content/nav";
+import { AREA_GROUPS, CLEANERS_LINK, FAQ_LINK, townCount } from "./_content/nav";
 
 const STATS = [
   { value: "1", label: "cleaner for your block", note: "One person for every clean you book, not whoever is free." },
@@ -220,24 +220,34 @@ export default async function Home() {
           <div className="lg:col-span-4">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-navy-2">Where Ping cleans</p>
             <h2 id="areas-title" className="mt-5 text-3xl font-semibold">
-              West Cumbria first.
+              Carlisle and the west&nbsp;coast.
             </h2>
             <p className="mt-6 max-w-sm text-lg text-navy-2">
-              Ten towns and the villages between them, from Maryport down the coast to Seascale. Ping cleaners choose the areas they cover, so the one who takes on your home wants to be there.
+              {townCount()}, from Carlisle out to Brampton and down the west coast to Seascale. Ping cleaners choose the areas they cover, so the one who takes on your home wants to be there.
             </p>
           </div>
-          <ul className="grid content-start gap-x-10 sm:grid-cols-2 lg:col-span-8">
-            {AREA_LINKS.map((t) => (
-              <li key={t.label} className="border-b border-navy/15">
-                <Link href={t.href} className="group flex min-h-20 items-center justify-between gap-6 py-4">
-                  <span className="font-display text-[clamp(1.75rem,1.2rem+1.6vw,2.75rem)] font-semibold leading-none transition-colors group-hover:text-teal-ink">
-                    {t.label}
-                  </span>
-                  <span className="rounded-full bg-canvas/70 px-3 py-1 text-sm font-semibold text-navy-2 tabular">{t.districts.join(" ")}</span>
-                </Link>
-              </li>
+          <div className="grid min-w-0 content-start gap-14 lg:col-span-8">
+            {AREA_GROUPS.map((g) => (
+              <div key={g.id} className="min-w-0">
+                <p className="flex items-baseline justify-between gap-6 border-b-2 border-navy pb-3 text-sm font-semibold uppercase tracking-[0.16em] text-navy-2">
+                  <span>{g.name}</span>
+                  <span className="normal-case tracking-normal text-navy-3 max-sm:hidden">{g.line}</span>
+                </p>
+                <ul className="grid content-start gap-x-10 sm:grid-cols-2">
+                  {g.links.map((t) => (
+                    <li key={t.label} className="border-b border-navy/15">
+                      <Link href={t.href} className="group flex min-h-20 items-center justify-between gap-6 py-4">
+                        <span className="font-display text-[clamp(1.75rem,1.2rem+1.6vw,2.75rem)] font-semibold leading-none transition-colors group-hover:text-teal-ink">
+                          {t.label}
+                        </span>
+                        <span className="rounded-full bg-canvas/70 px-3 py-1 text-sm font-semibold text-navy-2 tabular">{t.districts.join(" ")}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       </section>
 

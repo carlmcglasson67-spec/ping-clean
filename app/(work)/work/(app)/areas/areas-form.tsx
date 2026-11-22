@@ -71,7 +71,7 @@ export function AreasForm({ districts, areas, slots }: Props) {
                       className="sr-only"
                     />
                     <span className="font-display text-2xl font-semibold tabular">{d}</span>
-                    <span className={cn("text-sm", checked ? "text-on-navy-2" : "text-navy-3")}>{DISTRICT_TOWN[d] ?? "West Cumbria"}</span>
+                    <span className={cn("text-sm", checked ? "text-on-navy-2" : "text-navy-3")}>{DISTRICT_TOWN[d] ?? "Cumbria"}</span>
                     {checked ? (
                       <svg viewBox="0 0 24 24" className="absolute right-4 top-4 size-5 text-teal" aria-hidden>
                         <path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />

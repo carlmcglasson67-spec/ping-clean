@@ -11,7 +11,7 @@ export default function TermsPage() {
       title="Terms of use"
       intro="The final terms are being written. Until then, this page lists what they will cover, so nothing is left out."
       sections={[
-        { heading: "Who Ping is", points: ["Ping Clean introduces customers to independent, self-employed cleaners in West Cumbria.", "Which company runs Ping, and how to contact it."] },
+        { heading: "Who Ping is", points: ["Ping Clean introduces customers to independent, self-employed cleaners in Cumbria.", "Which company runs Ping, and how to contact it."] },
         { heading: "What you book", points: ["Regular home cleans, booked as a block of 1 to 8 cleans.", "Who the clean is bought from, and Ping's role as the introducing agent."] },
         { heading: "Paying", points: ["When your card is charged, and what for.", "Receipts, refunds and disputes."] },
         { heading: "Changes and cancelling", points: ["How much notice to give, and any late-cancellation fee.", "What happens if a cleaner can't make it."] },

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
 import { LogoMark, Wordmark } from "@/components/ui";
-import { AREAS_LINK, AREA_LINKS, CLEANERS_LINK, CLEANING_LINKS } from "../_content/nav";
+import { AREAS_LINK, AREA_GROUPS, CLEANERS_LINK, CLEANING_LINKS } from "../_content/nav";
 
 export function SiteFooter() {
   return (
@@ -13,7 +13,7 @@ export function SiteFooter() {
             <p className="mt-8 max-w-md font-display text-2xl font-semibold leading-tight">
               A cleaner home is just <span className="text-brand-gradient-navy">a Ping away.</span>
             </p>
-            <p className="mt-4 max-w-md text-lg text-on-navy-2">Regular home cleaning for West Cumbria. One cleaner per block, a proper checklist, pay after.</p>
+            <p className="mt-4 max-w-md text-lg text-on-navy-2">Regular home cleaning for Carlisle and West Cumbria. One cleaner per block, a proper checklist, pay after.</p>
           </div>
 
           <FooterCol title="Regular cleaning" className="lg:col-span-2">
@@ -26,10 +26,15 @@ export function SiteFooter() {
 
           <FooterCol title="Areas" className="lg:col-span-3" more={<FooterLink href={AREAS_LINK.href}>{AREAS_LINK.label} &rarr;</FooterLink>}>
             <div className="grid grid-cols-2 gap-x-6">
-              {AREA_LINKS.map((l) => (
-                <FooterLink key={l.label} href={l.href}>
-                  {l.label}
-                </FooterLink>
+              {AREA_GROUPS.map((g) => (
+                <div key={g.id} className="grid content-start">
+                  <p className="mb-1 text-sm font-semibold text-on-navy-3">{g.name}</p>
+                  {g.links.map((l) => (
+                    <FooterLink key={l.label} href={l.href}>
+                      {l.label}
+                    </FooterLink>
+                  ))}
+                </div>
               ))}
             </div>
           </FooterCol>

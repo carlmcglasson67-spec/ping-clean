@@ -62,7 +62,7 @@ function OpenPrice({ pricing, tone, interest }: { pricing: Open; tone: "card" | 
             autoCapitalize="characters"
             spellCheck={false}
             maxLength={10}
-            placeholder="CA14 3XX"
+            placeholder="CA1 2XX"
             value={raw}
             onChange={(e) => setRaw(e.target.value)}
             onBlur={() => setTouched(true)}
@@ -75,7 +75,7 @@ function OpenPrice({ pricing, tone, interest }: { pricing: Open; tone: "card" | 
             )}
           />
           <p id={ids.hint} data-instant-hint className={cn("text-base", showInvalid ? "font-medium text-bad" : "text-navy-3")} role={showInvalid ? "alert" : undefined}>
-            {showInvalid ? "That doesn’t look like a UK postcode. Try something like CA14 3XX." : "Just the first half works too, like CA28."}
+            {showInvalid ? "That doesn’t look like a UK postcode. Try something like CA1 2XX." : "Just the first half works too, like CA2."}
           </p>
         </div>
 
@@ -116,7 +116,7 @@ function OpenPrice({ pricing, tone, interest }: { pricing: Open; tone: "card" | 
             <p className="font-display text-3xl font-semibold">We&rsquo;re not booking there yet.</p>
             <p className="text-lg text-on-navy-2">
               Ping opens a postcode when there are enough vetted local cleaners to look after it properly.
-              {interest?.retentionMonths ? " Leave your details and we\u2019ll tell you when we open near you." : " We\u2019re growing across West Cumbria first."}
+              {interest?.retentionMonths ? " Leave your details and we\u2019ll tell you when we open near you." : " We\u2019re growing across Carlisle and West Cumbria first."}
             </p>
             {interest?.retentionMonths ? (
               <RegisterInterest source="instant_price" setup={interest} initialPostcode={parsed.kind === "full" ? parsed.postcode : ""} className="mt-2" />

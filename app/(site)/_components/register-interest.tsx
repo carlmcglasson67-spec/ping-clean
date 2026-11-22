@@ -122,7 +122,7 @@ export function RegisterInterest({
           autoCapitalize="characters"
           spellCheck={false}
           maxLength={10}
-          placeholder="CA14 3XX"
+          placeholder="CA1 2XX"
           aria-invalid={fe.postcode ? true : undefined}
           aria-describedby={fe.postcode ? `${ids.postcode}-error` : undefined}
           className={inputClass(Boolean(fe.postcode))}

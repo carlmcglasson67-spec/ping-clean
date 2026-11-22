@@ -212,7 +212,7 @@ export function parseLaunchForm(fd: FormData): ParsedLaunch {
 
   const postcode = normalisePostcode(f.postcode);
   if (!f.postcode.trim()) fieldErrors.postcode = "Enter your postcode.";
-  else if (!postcode) fieldErrors.postcode = "Enter a full UK postcode, like CA14 3XX.";
+  else if (!postcode) fieldErrors.postcode = "Enter a full UK postcode, like CA1 2XX.";
 
   let email: string | null = null;
   let phone: string | null = null;
