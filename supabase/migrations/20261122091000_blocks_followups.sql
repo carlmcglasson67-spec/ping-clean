@@ -5,8 +5,9 @@
 
 -- ---------------------------------------------------------------- note 2: the overlap alert tells the truth
 -- As 20261107090000_blocks.sql, except: when the block in the way has gone, the rest of this
--- block is booked straight away (as claiming does), even on the nightly run's horizon, so
--- "every clean of this block is booked again" is true when the alert closes.
+-- block is booked straight away (as claiming does), even on the nightly run's horizon, and
+-- the overlap alert closes only once that booking has found nothing short, so "every clean
+-- of this block is booked again" is true when the alert closes.
 create or replace function private.generate_visits_for_series(p_series uuid, p_until date)
 returns integer
 language plpgsql security definer set search_path = '' as $$
@@ -70,13 +71,9 @@ begin
         values ('block_overlap', s.id, private.cut_short_message(lost));
       end if;
     else
-      -- The block in the way went (ended or cancelled): nothing is short any more, and the
-      -- rest of the block is booked below before this run finishes.
+      -- The block in the way went (ended or cancelled): the rest of the block is booked and
+      -- the alert settled below, once that booking confirms nothing is short.
       cleared := true;
-      update public.engine_alerts
-      set message = 'No longer short: the block in the way has gone, so every clean of this block is booked again.',
-          resolved_at = now()
-      where series_id = s.id and kind = 'block_overlap' and resolved_at is null;
     end if;
   end if;
 
@@ -88,20 +85,32 @@ begin
     update public.series set ends_on = new_end where id = s.id;
   end if;
 
-  -- The shortfall cleared on a run with a horizon: book the whole of the rest now (this call
-  -- sees cut_short_cleans = 0 already, so it changes no alert, and it sets ends_on itself).
-  if cleared and p_until is not null and r.room > 0 then
-    inserted := inserted + private.generate_visits_for_series(s.id, null);
+  if cleared then
+    -- On a run with a horizon, book the whole of the rest now. That call sees
+    -- cut_short_cleans = 0 already, so it opens no alert unless something is short again
+    -- (another block committed meanwhile), and it sets ends_on itself. It never recurses:
+    -- its p_until is null. A claim (p_until null) has booked the whole block above.
+    if p_until is not null and r.room > 0 then
+      inserted := inserted + private.generate_visits_for_series(s.id, null);
+    end if;
+    -- Close the alert only if the block still has nothing short after that booking.
+    if (select cut_short_cleans from public.series where id = s.id) = 0 then
+      update public.engine_alerts
+      set message = 'No longer short: the block in the way has gone, so every clean of this block is booked again.',
+          resolved_at = now()
+      where series_id = s.id and kind = 'block_overlap' and resolved_at is null;
+    end if;
   end if;
 
   return inserted;
 end $$;
 revoke all on function private.generate_visits_for_series(uuid, date) from public;
 
--- ---------------------------------------------------------------- note 3: engine closes settle old alerts
--- As 20261108130000_money_review_fixes.sql, except: when the engine closes a block (no admin),
--- its open overlap and stalled alerts are resolved (resolved_by stays empty) before the
--- block_closed alert is raised. An admin ending it settles them as before.
+-- ---------------------------------------------------------------- note 3: closes with no admin settle old alerts
+-- As 20261108130000_money_review_fixes.sql, except: when a block closes with no admin (the
+-- engine, a customer cancelling the rest, or a payment hold running out), its open overlap and
+-- stalled alerts are resolved (resolved_by stays empty) before the block_closed alert is
+-- raised. An admin ending it settles them as before.
 create or replace function private.close_block(p_series uuid, p_admin uuid, p_reason text) returns void
 language plpgsql security definer set search_path = '' as $$
 declare

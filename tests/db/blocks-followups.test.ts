@@ -1,4 +1,5 @@
 // Blocks follow-ups (issue #12 notes 1-4, last item of #60): intent/blocks-followups/plan.md.
+import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { as, cardsOnFile, IDS, pool, setupThen, U, type Query } from "./helpers";
 
@@ -83,7 +84,109 @@ describe("note 2: the overlap alert closes only when every clean really is booke
   });
 });
 
-describe("note 3: a block the engine closes leaves no old alerts open", () => {
+describe("note 2, end to end", () => {
+  const MESSAGE = "No longer short: the block in the way has gone, so every clean of this block is booked again.";
+  /** Block B at the property, claimed by Alex, starting the day after block A's 2nd clean. */
+  const insertBlockInTheWay = async (run: (sql: string, p: unknown[]) => Promise<{ id: string }[]>, property: string, a: string) =>
+    (await run(`insert into public.series (property_id, customer_id, cleaner_id, frequency, preferred_day, window_start, window_end,
+                  duration_minutes, price_per_hour_pence, commission_type, commission_value, status, starts_on, claimed_at, offering_since, block_size)
+                select $1, $2, $3, 'weekly', extract(isodow from d)::smallint, '10:00', '14:00', 120, 2000, 'percent', 2500, 'claimed', d, now(), null, 1
+                from (select private.block_first_date(starts_on, preferred_day) + 15 as d from public.series where id = $4) x
+                returning id`, [property, U.ben, U.alex, a]))[0]!.id;
+
+  it("the scheduler's nightly procedure books the whole block, closes the alert, and end_block_if_done leaves it running", async () => {
+    // CALL at top level, as pg_cron runs it, so this commits: its own home and blocks, removed after.
+    const c = await pool.connect();
+    const run = async (sql: string, p: unknown[] = []) => (await c.query(sql, p)).rows;
+    const property = randomUUID();
+    const a = randomUUID();
+    let b: string | null = null;
+    const anna = (await run(`select ends_on, cut_short_cleans from public.series where id = $1`, [IDS.annaSeries]))[0]!;
+    try {
+      await run("begin");
+      await run(`insert into public.properties (id, customer_id, address_line1, town, postcode, bedrooms, bathrooms)
+                 values ($1, $2, '3 Test Lane', 'Whitehaven', 'CA28 9ZZ', 2, 1)`, [property, U.ben]);
+      // Block A: 4 fortnightly cleans from tomorrow, held by Tara.
+      await run(`insert into public.series (id, property_id, customer_id, cleaner_id, frequency, preferred_day, window_start, window_end,
+                   duration_minutes, price_per_hour_pence, commission_type, commission_value, status, starts_on, claimed_at, offering_since, block_size)
+                 values ($1, $2, $3, $4, 'fortnightly', extract(isodow from private.london_today() + 1)::smallint, '10:00', '14:00',
+                   120, 2000, 'percent', 2500, 'claimed', private.london_today() + 1, now(), null, 4)`, [a, property, U.ben, U.tara]);
+      b = await insertBlockInTheWay(run, property, a);
+      await run(`select private.generate_visits_for_series($1, null)`, [a]);
+      await run("commit");
+      const before = (await run(`select cut_short_cleans as c, (select count(*)::int from public.visits where series_id = $1) as n
+                                   from public.series where id = $1`, [a]))[0];
+      await run(`update public.series set status = 'ended' where id = $1`, [b]);
+
+      await run(`call private.run_generate_visits(28)`);
+      await run(`reset search_path`);
+
+      const after = (await run(
+        `select status::text, cut_short_cleans as c, ends_on - private.london_today() as ends,
+                (select count(*)::int from public.visits where series_id = $1) as n,
+                (select count(distinct scheduled_date)::int from public.visits where series_id = $1) as dates,
+                (select max(scheduled_date) - private.london_today() from public.visits where series_id = $1) as last
+           from public.series where id = $1`, [a]))[0];
+      const alerts = await run(`select kind, resolved_at is not null as resolved, resolved_by, message from public.engine_alerts
+                                 where series_id = $1 or (kind = 'generate_failed' and series_id is null) order by kind`, [a]);
+      const ended = (await run(`select private.end_block_if_done($1) as e`, [a]))[0]!.e;
+      expect(before).toEqual({ c: 2, n: 2 });
+      expect(after).toEqual({ status: "claimed", c: 0, ends: 43, n: 4, dates: 4, last: 43 }); // past the 28-day horizon
+      expect(alerts).toEqual([{ kind: "block_overlap", resolved: true, resolved_by: null, message: MESSAGE }]);
+      expect(ended).toBe(false); // cleans still to come: the block carries on
+    } finally {
+      await run("rollback").catch(() => {});
+      await run(`reset search_path`);
+      await run(`delete from public.engine_alerts where series_id = any($1::uuid[])`, [[a, b].filter(Boolean)]);
+      await run(`delete from public.visits where series_id = any($1::uuid[])`, [[a, b].filter(Boolean)]);
+      await run(`delete from public.series where id = any($1::uuid[])`, [[a, b].filter(Boolean)]);
+      await run(`delete from public.properties where id = $1`, [property]);
+      // The run also booked Anna's seeded block ahead: put it back as seeded.
+      await run(`delete from public.visits where series_id = $1 and id not in ($2, $3, $4)`, [IDS.annaSeries, IDS.visitDone, IDS.visitToday, IDS.visitNextWeek]);
+      await run(`update public.series set ends_on = $2, cut_short_cleans = $3 where id = $1`, [IDS.annaSeries, anna.ends_on, anna.cut_short_cleans]);
+      c.release();
+    }
+  });
+
+  it("a claim after the block in the way has ended books the block once, with no second booking pass", async () => {
+    const r = await as("superuser", async (q) => {
+      const run = (sql: string, p: unknown[]) => q.rows<{ id: string }>(sql, p);
+      const b = await insertBlockInTheWay(run, IDS.benProperty, IDS.benSeries);
+      // Alex held Ben's block (cut short by B), then dropped out: back on the board, still short.
+      await q.actAs(U.admin);
+      await q.rows(`select public.admin_assign_series($1, $2)`, [IDS.benSeries, U.alex]);
+      await q.rows(`select public.admin_reopen_series($1)`, [IDS.benSeries]);
+      await q.rows(`reset role`);
+      const cut = (await q.rows<{ c: number }>(`select cut_short_cleans as c from public.series where id = $1`, [IDS.benSeries]))[0]!.c;
+      await q.rows(`update public.series set status = 'ended' where id = $1`, [b]);
+      await q.rows(`insert into public.job_offers (series_id, cleaner_id, tier, round, opens_at, status)
+                    select id, $2, 'top', offer_round, now(), 'open' from public.series where id = $1`, [IDS.benSeries, U.tara]);
+      const offer = (await q.rows<{ id: string }>(
+        `select o.id from public.job_offers o join public.series s on s.id = o.series_id and o.round = s.offer_round
+          where o.series_id = $1 and o.cleaner_id = $2`, [IDS.benSeries, U.tara]))[0]!.id;
+      await q.actAs(U.tara);
+      const claim = await q.attempt(`select public.claim_series($1)`, [offer]);
+      await q.rows(`reset role`);
+      const inserts = await q.count(`public.audit_log where entity = 'visits' and action = 'insert'
+                                       and entity_id in (select id from public.visits where series_id = '${IDS.benSeries}')`);
+      const after = (await q.rows(
+        `select cut_short_cleans as c,
+                (select count(*)::int from public.visits where series_id = $1 and status = 'scheduled') as n,
+                (select count(distinct scheduled_date)::int from public.visits where series_id = $1) as dates
+           from public.series where id = $1`, [IDS.benSeries]))[0];
+      const alerts = await q.rows(`select resolved_at is not null as resolved, message from public.engine_alerts
+                                    where series_id = $1 and kind = 'block_overlap'`, [IDS.benSeries]);
+      return { cut, claim, after, alerts, inserts };
+    });
+    expect(r.cut).toBe(2);
+    expect(r.claim).toBe("ok");
+    expect(r.after).toEqual({ c: 0, n: 4, dates: 4 });
+    expect(r.alerts).toEqual([{ resolved: true, message: MESSAGE }]);
+    expect(r.inserts).toBe(4); // each clean written once
+  });
+});
+
+describe("note 3: a block closed with no admin (engine, customer cancel-the-rest, payment hold) leaves no old alerts open", () => {
   it("resolves its overlap and stalled alerts with no admin named, and raises block_closed", async () => {
     const r = await as("superuser", async (q) => {
       await q.rows(`insert into public.engine_alerts (kind, series_id, message) values ('block_overlap', $1, 'short'), ('block_stalled', $1, 'stalled')`, [IDS.annaSeries]);
