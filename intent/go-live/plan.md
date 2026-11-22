@@ -28,7 +28,9 @@ here as they're done. **The order matters**: each step assumes the ones above it
 - [ ] **2. Merge the go-live pull request.** That is the first merge Supabase sees, so it
   loads every migration. Check afterwards: Supabase → Table Editor shows the tables;
   Database → Extensions shows `pg_cron` and `pg_net` on; Integrations → Cron shows seven
-  `ping-…` jobs. If a migration fails, the log is under Branches → main, and nothing from
+  `ping-…` jobs. The API roles can't use pg_net (#60): SQL Editor →
+  `select has_schema_privilege('anon', 'net', 'usage') or has_schema_privilege('authenticated', 'net', 'usage');`
+  must say `false` (a read, it changes nothing). If a migration fails, the log is under Branches → main, and nothing from
   the failed file is kept: correct **that file** in a new pull request and merge again. A
   migration that has already run is never edited: that one is fixed with a new migration.
 - [ ] **3. Leave the API's schemas alone.** Supabase → Project Settings → Data API →
