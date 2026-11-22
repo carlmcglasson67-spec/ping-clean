@@ -30,7 +30,7 @@ const ACCT = "acct_testCleaner0001";
 const row = (over: Record<string, unknown> = {}) => ({
   payment_id: PAYMENT, mode: "create", visit_id: VISIT, amount_pence: 5000, application_fee_pence: 1250,
   stripe_customer_id: "cus_testAnna000001", payment_method_id: "pm_testCard000001", cleaner_account_id: ACCT,
-  payment_intent_id: null, attempt: 1, idempotency_key: `payment:${PAYMENT}`, ...over,
+  payment_intent_id: null, attempt: 1, idempotency_key: `payment:${PAYMENT}`, try_sent_at: "2026-11-22T09:00:00.123456+00:00" as string | null, ...over,
 });
 
 async function card(behaviour: "ok" | "decline" | "auth", id = "pm_testCard000001") {
@@ -143,7 +143,8 @@ describe("the charge job", () => {
 
     const lostRun = db([check], undefined, "returned");
     const run = await runChargeJob();
-    expect(lostRun.lost).toEqual([{ p_payment: PAYMENT, p_charge_at: new Date(charge.created * 1000).toISOString() }]);
+    // Judged against the very try the check looked at.
+    expect(lostRun.lost).toEqual([{ p_payment: PAYMENT, p_charge_at: new Date(charge.created * 1000).toISOString(), p_try_sent_at: "2026-11-22T09:00:00.123456+00:00" }]);
     expect(lostRun.results).toEqual([]); // not recorded as a decline
     expect(run).toMatchObject({ waiting: 1, failed: 0, errors: 0 });
 

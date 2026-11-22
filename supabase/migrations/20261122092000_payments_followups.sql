@@ -19,11 +19,14 @@ alter table public.payments add column try_sent_at timestamptz;
 alter table public.payments add column try_by_customer boolean not null default false;
 update public.payments set try_sent_at = charge_started_at where charge_started_at is not null;
 
--- As 20261113100000_late_cancel.sql, plus: a sent try records when, and whose.
-create or replace function public.charge_claim(p_limit integer default 10)
+-- As 20261113100000_late_cancel.sql, plus: a sent try records when, and whose; and every row
+-- says which try it is (try_sent_at), so the check's answer is only ever judged against the
+-- try the check looked at.
+drop function public.charge_claim(integer);
+create function public.charge_claim(p_limit integer default 10)
 returns table (payment_id uuid, mode text, visit_id uuid, amount_pence integer, application_fee_pence integer,
                stripe_customer_id text, payment_method_id text, cleaner_account_id text, payment_intent_id text,
-               attempt integer, idempotency_key text)
+               attempt integer, idempotency_key text, try_sent_at timestamptz)
 language plpgsql volatile security definer set search_path = '' as $$
 declare
   p public.payments;
@@ -62,7 +65,7 @@ begin
         payment_id := p.id; mode := 'check'; visit_id := p.visit_id; amount_pence := p.amount_pence;
         application_fee_pence := p.application_fee_pence; stripe_customer_id := null; payment_method_id := null;
         cleaner_account_id := p.cleaner_account_id; payment_intent_id := p.stripe_payment_intent_id;
-        attempt := p.attempts; idempotency_key := p.idempotency_key;
+        attempt := p.attempts; idempotency_key := p.idempotency_key; try_sent_at := p.try_sent_at;
         return next;
         exit one_row;
       end if;
@@ -92,8 +95,9 @@ begin
       if p.status = 'processing' then
         -- Claimed before, never answered, no PaymentIntent recorded: send the same request
         -- again. Same key, so Stripe returns the same PaymentIntent if it did get there.
-        update public.payments set charge_started_at = clock_timestamp(), try_sent_at = clock_timestamp(), try_by_customer = false
-         where id = p.id;
+        update public.payments as pay set charge_started_at = clock_timestamp(), try_sent_at = clock_timestamp(), try_by_customer = false
+         where pay.id = p.id
+        returning * into p;
       elsif v_customer is null or v_card is null then
         -- No saved card: a failed try, on the same schedule as a declined card.
         update public.payments set attempts = attempts + 1 where id = p.id;
@@ -113,6 +117,7 @@ begin
       visit_id := p.visit_id; amount_pence := p.amount_pence; application_fee_pence := p.application_fee_pence;
       stripe_customer_id := v_customer; payment_method_id := v_card; cleaner_account_id := v_account;
       payment_intent_id := p.stripe_payment_intent_id; attempt := p.attempts; idempotency_key := p.idempotency_key;
+      try_sent_at := p.try_sent_at;
       return next;
     exception when others then
       -- One bad row never stops the run: it is set aside for an hour and the team is told.
@@ -183,12 +188,18 @@ end $$;
 
 -- The job's check found Stripe saying "failed", and the latest charge on the PaymentIntent
 -- was made at p_charge_at. If that is before the current try was sent, the try never reached
--- the card (lost on the way): the try is given back and the job sends it again, with the same
--- attempt number and so the same Stripe idempotency key. A customer's own lost try goes back
--- to the schedule it was on. Only for three days from when the charge first fell due, so a
--- try that keeps getting lost can't go round for ever; after that it counts as a decline.
---   'returned' (sent again) | 'not_lost' (record Stripe's answer as usual) | 'unknown'
-create function public.charge_try_lost(p_payment uuid, p_charge_at timestamptz) returns text
+-- the card (lost on the way): it isn't counted as a decline, and the payment goes back to
+-- being due. The next send always uses a NEW Stripe key (as charge_retry_not_sent does), so
+-- if the lost request did reach Stripe somehow, Stripe can't replay its old answer for a day.
+--   * the job's try: given back (attempts - 1) and due again now;
+--   * the customer's own try: back on the schedule it was on. Their try is NOT given back
+--     (customer_tries stays), so their next "Pay now" can never reuse a key either.
+-- p_try_sent_at is the try the check looked at (from charge_claim): if the row has moved on to
+-- a newer try since (a webhook and a fresh "Pay now" while the job was asking Stripe), it is
+-- not judged. Only for three days from when the charge first fell due, so a try that keeps
+-- getting lost can't go round for ever; after that it counts as a decline.
+--   'returned' (due again) | 'not_lost' (record Stripe's answer as usual) | 'unknown'
+create function public.charge_try_lost(p_payment uuid, p_charge_at timestamptz, p_try_sent_at timestamptz) returns text
 language plpgsql volatile security definer set search_path = '' as $$
 declare
   p public.payments;
@@ -196,15 +207,19 @@ begin
   perform set_config('app.actor', 'job:charge-visits', true);
   select * into p from public.payments where id = p_payment for update;
   if not found then return 'unknown'; end if;
+  -- Compared to the millisecond: the time makes a round trip through JSON.
   if p.status <> 'processing' or p.stripe_payment_intent_id is null or p.try_sent_at is null
+     or p_try_sent_at is null or date_trunc('milliseconds', p.try_sent_at) <> date_trunc('milliseconds', p_try_sent_at)
      or p_charge_at is null or p_charge_at >= date_trunc('second', p.try_sent_at)
      or p.created_at < now() - interval '3 days' then
     return 'not_lost';
   end if;
+  update public.payments
+     set idempotency_key = 'payment:' || p.id || ':l' || floor(extract(epoch from clock_timestamp()) * 1000)::bigint
+   where id = p.id;
   if p.try_by_customer then
-    -- Their try back; then where the schedule says (the emails for that try already went,
-    -- one per try: queue_notice's dedupe stops a second).
-    update public.payments set customer_tries = greatest(customer_tries - 1, 0) where id = p.id;
+    -- Where the schedule says (the email for this try number already went: queue_notice's
+    -- dedupe stops a second).
     perform private.payment_failed_now(p.id, coalesce(p.last_error_code, 'payment_failed'));
   else
     update public.payments
@@ -213,8 +228,8 @@ begin
   end if;
   return 'returned';
 end $$;
-revoke all on function public.charge_try_lost(uuid, timestamptz) from public, anon, authenticated;
-grant execute on function public.charge_try_lost(uuid, timestamptz) to service_role;
+revoke all on function public.charge_try_lost(uuid, timestamptz, timestamptz) from public, anon, authenticated;
+grant execute on function public.charge_try_lost(uuid, timestamptz, timestamptz) to service_role;
 
 -- ---------------------------------------------------------------- 2. what Stripe said (as payments_review_fixes, plus 1 and 2)
 create or replace function public.stripe_payment_result(
@@ -536,6 +551,8 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- grants
+revoke all on function public.charge_claim(integer) from public, anon, authenticated;
+grant execute on function public.charge_claim(integer) to service_role;
 revoke all on function public.notices_claim(integer) from public, anon, authenticated;
 grant execute on function public.notices_claim(integer) to service_role;
 revoke all on function public.stripe_card_saved(uuid, text, text, text, text, smallint, smallint, timestamptz)

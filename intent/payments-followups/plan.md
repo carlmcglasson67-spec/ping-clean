@@ -24,9 +24,12 @@ remembers when the lost try was sent.
 - The job's check asks Stripe for the PaymentIntent with its latest charge. When Stripe says
   "failed", the job first calls the new `charge_try_lost(payment, latest_charge_created)`:
   if that charge is older than the try, the try never reached the card. The database gives
-  the try back and the job sends the *same* try again (same attempt number, so the same
-  Stripe idempotency key). A customer's lost try is given back and the payment returns to
-  its schedule. Only within three days of the charge first falling due, so it can never loop.
+  the try back and the job sends the same try again (same attempt number) under a NEW Stripe
+  idempotency key, so Stripe can never replay an old answer. A customer's lost try isn't
+  counted as a decline: the payment returns to its schedule, but the try is not given back
+  (their next "Pay now" never reuses a key). `charge_claim` returns `try_sent_at` and the
+  check passes it back: a newer try than the one the check looked at is never judged. Only
+  within three days of the charge first falling due, so it can never loop.
 - `stripe_payment_result`'s "older try" test compares with `try_sent_at`, not the re-check time.
 
 ## 2. A spurious "confirm your payment" email
@@ -76,8 +79,10 @@ its card) and answers `older`.
 cron tick, before anything else, `kick_charge_job` / `kick_payout_job` read that call's answer
 from `net._http_response`. Anything but 200 (a 401, a redirect, a timeout, no answer after ten
 minutes) raises an office alert `job_call_failed`; a 200 closes it. A Vault value that's
-missing or mistyped (`not_set_up`) while work is due raises the same alert. One open alert
-per job.
+missing or mistyped (`not_set_up`) while work is due raises the same alert, which closes as
+soon as the set-up is right. One open alert per job (a unique index). An error while reading
+the last answer is itself an alert and never stops the job. The two job handlers now stop at
+50 seconds, inside pg_net's 55-second wait.
 
 ## Tests
 

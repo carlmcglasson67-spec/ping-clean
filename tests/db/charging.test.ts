@@ -127,7 +127,7 @@ describe("the job takes what's due", () => {
     });
     expect(r.first).toEqual([{ payment_id: r.p.id, mode: "create", visit_id: today, amount_pence: r.p.amount_pence,
       application_fee_pence: r.p.application_fee_pence, stripe_customer_id: CUS, payment_method_id: CARD, cleaner_account_id: r.tara,
-      payment_intent_id: null, attempt: 1, idempotency_key: `payment:${r.p.id}` }]);
+      payment_intent_id: null, attempt: 1, idempotency_key: `payment:${r.p.id}`, try_sent_at: expect.any(Date) }]);
     expect(r.p).toMatchObject({ status: "processing", attempts: 1, cleaner_account_id: r.tara });
     expect(r.again).toBe(0);
   });

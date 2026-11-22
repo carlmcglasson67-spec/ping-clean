@@ -189,7 +189,9 @@ describe("the limit on Stripe calls", () => {
     rpc.mockImplementationOnce(async () => ({ data: "pi_testSomething001", error: null })); // customer_payment_intent
     expect(await checkPayment(PAYMENT, ANNA)).toEqual({ state: "too_many" });
     d.calls.length = 0;
-    expect(await confirmCardChange("seti_testSomething01", ANNA)).toBe(false);
+    rpc.mockImplementation(async (fn: string) =>
+      fn === "stripe_customer_for" ? { data: CUS, error: null } : fn === "customer_stripe_call" ? { data: false, error: null } : { data: null, error: { code: "XX000" } });
+    expect(await confirmCardChange("seti_testSomething01", ANNA)).toBe("too_many");
     expect(stripeCalls()).toEqual([]);
   });
 
@@ -201,9 +203,16 @@ describe("the limit on Stripe calls", () => {
     expect(d.calls.filter((c) => c.fn === "customer_stripe_call").map((c) => c.args)).toEqual([{ p_customer: ANNA, p_kind: "check" }]);
   });
 
-  it("says no when the database can't answer", async () => {
-    rpc.mockImplementation(async () => ({ data: null, error: { code: "08006" } }));
+  it("when the database can't answer: no Stripe call, and a general problem, not \"too many\"", async () => {
     const { stripeCallAllowed } = await import("./pay");
-    expect(await stripeCallAllowed(ANNA, "check")).toBe(false);
+    rpc.mockImplementation(async () => ({ data: null, error: { code: "08006" } }));
+    expect(await stripeCallAllowed(ANNA, "check")).toBe("unavailable");
+    rpc.mockImplementation(async (fn: string) =>
+      fn === "customer_payment_intent" ? { data: "pi_testSomething001", error: null }
+      : fn === "customer_card_series" ? { data: SERIES, error: null }
+      : { data: null, error: { code: "08006" } });
+    expect(await checkPayment(PAYMENT, ANNA)).toEqual({ state: "unavailable" });
+    expect(await startCardChange(PAYMENT, { id: ANNA, email: null, fullName: null })).toBeNull();
+    expect(stripeCalls()).toEqual([]);
   });
 });

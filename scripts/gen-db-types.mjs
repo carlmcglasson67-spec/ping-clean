@@ -244,6 +244,8 @@ out += `${ind(2)}};
           payment_intent_id: string | null;
           attempt: number;
           idempotency_key: string;
+          /** When the try this row is about was sent (the check passes it back to charge_try_lost). */
+          try_sent_at: string | null;
         }[];
       };
       customer_pay_begin: {
@@ -305,7 +307,7 @@ out += `${ind(2)}};
         Returns: "returned" | "ignored" | "unknown";
       };
       charge_try_lost: {
-        Args: { p_payment: string; p_charge_at: string | null };
+        Args: { p_payment: string; p_charge_at: string | null; p_try_sent_at: string | null };
         Returns: "returned" | "not_lost" | "unknown";
       };
       customer_stripe_call: {

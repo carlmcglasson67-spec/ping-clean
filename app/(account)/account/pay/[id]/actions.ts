@@ -61,11 +61,12 @@ export async function startCardChangeAction(paymentId: string): Promise<CardChan
   }
 }
 
-export async function confirmCardChangeAction(paymentId: string, setupIntentId: string): Promise<{ ok: boolean }> {
+export async function confirmCardChangeAction(paymentId: string, setupIntentId: string): Promise<{ ok: boolean; tooMany?: true }> {
   const parsed = id.safeParse(paymentId);
   const me = await customer();
   if (!parsed.success || !me || typeof setupIntentId !== "string") return { ok: false };
-  const ok = await confirmCardChange(setupIntentId, me.userId);
-  if (ok) revalidatePath(`/account/pay/${parsed.data}`);
-  return { ok };
+  const saved = await confirmCardChange(setupIntentId, me.userId);
+  if (saved === "too_many") return { ok: false, tooMany: true };
+  if (saved) revalidatePath(`/account/pay/${parsed.data}`);
+  return { ok: saved };
 }

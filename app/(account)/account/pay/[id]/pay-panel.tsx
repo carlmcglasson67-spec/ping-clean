@@ -98,6 +98,13 @@ export function PayPanel({
 
   async function cardSaved(setupIntentId: string) {
     const r = await confirmCardChangeAction(paymentId, setupIntentId);
+    if (r.tooMany) {
+      // The bank took the card; Stripe tells Ping on its own, so it shows here shortly.
+      setStep({ at: "ready" });
+      setNote({ tone: "bad", text: "Your bank accepted the new card. You’ve done that quite a few times in the last hour, so we’ve paused checking it for a little while: it shows here within a few minutes, then press pay." });
+      router.refresh();
+      return true;
+    }
     if (!r.ok) return false;
     setStep({ at: "ready" });
     setNote({ tone: "ok", text: "New card saved. Press pay to use it." });

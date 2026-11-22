@@ -42,14 +42,17 @@ async function result(q: Query, outcome: string, at: Date | null = null) {
 }
 const claim = async (q: Query) => {
   await server(q);
-  const rows = await q.rows<{ mode: string; attempt: number }>(`select mode, attempt from public.charge_claim(10)`);
+  const rows = await q.rows<{ mode: string; attempt: number; try_sent_at: string | null; idempotency_key: string }>(
+    `select mode, attempt, try_sent_at::text, idempotency_key from public.charge_claim(10)`);
   await su(q);
   return rows;
 };
-const lost = async (q: Query, chargeAt: Date) => {
+/** The job's check asks: was the try it looked at (`tried`, from charge_claim) lost? */
+const lost = async (q: Query, chargeAt: Date, tried?: string | null) => {
   const p = await pay(q);
   await server(q);
-  const [r] = await q.rows<{ r: string }>(`select public.charge_try_lost($1, $2) as r`, [p.id, chargeAt]);
+  const [r] = await q.rows<{ r: string }>(`select public.charge_try_lost($1, $2, coalesce($3::timestamptz, (select try_sent_at from public.payments where id = $1))) as r`,
+    [p.id, chargeAt, tried ?? null]);
   await su(q);
   return r!.r;
 };
@@ -81,7 +84,7 @@ describe("1. a retry lost on its way to Stripe", () => {
       return { sent, check, afterSend, kept: after.try_sent_at!.getTime() === before.try_sent_at!.getTime(),
         checkMoved: after.charge_started_at!.getTime() > before.charge_started_at!.getTime() };
     });
-    expect(r.sent).toMatchObject({ mode: "retry", attempt: 2 });
+    expect(r.sent).toMatchObject({ mode: "retry", attempt: 2, try_sent_at: expect.any(String) });
     expect(r.afterSend).toMatchObject({ status: "processing", try_by_customer: false });
     expect(r.afterSend.try_sent_at).not.toBeNull();
     expect(r).toMatchObject({ check: { mode: "check" }, kept: true, checkMoved: true });
@@ -89,16 +92,18 @@ describe("1. a retry lost on its way to Stripe", () => {
 
   it("a failure whose latest charge is older than the try gives the try back, and the same try is sent again", async () => {
     const r = await as("superuser", async (q) => {
-      await retrySent(q);
+      const sent = await retrySent(q);
       await age(q, 11);
-      await claim(q); // the check
-      const answer = await lost(q, minutesAgo(60 * 24)); // the previous try's decline
+      const [check] = await claim(q);
+      const answer = await lost(q, minutesAgo(60 * 24), check!.try_sent_at); // the previous try's decline
       const back = await pay(q);
       const [again] = await claim(q);
       const notices = await q.rows(`select kind from private.customer_notices where kind = 'payment_failed'`);
-      return { answer, back: [back.status, back.attempts], due: back.next_retry_at!.getTime() <= Date.now(), again, notices: notices.length };
+      return { answer, back: [back.status, back.attempts], due: back.next_retry_at!.getTime() <= Date.now(), again: [again!.mode, again!.attempt],
+        newKey: again!.idempotency_key !== sent.idempotency_key && again!.idempotency_key.startsWith("payment:"), notices: notices.length };
     });
-    expect(r).toEqual({ answer: "returned", back: ["failed", 1], due: true, again: { mode: "retry", attempt: 2 }, notices: 1 });
+    // The same attempt again, under a new Stripe key, so Stripe can't replay an old answer.
+    expect(r).toEqual({ answer: "returned", back: ["failed", 1], due: true, again: ["retry", 2], newKey: true, notices: 1 });
   });
 
   it("a charge made after the try was sent is a real answer: not lost", async () => {
@@ -123,7 +128,20 @@ describe("1. a retry lost on its way to Stripe", () => {
     expect(r).toEqual({ outcome: "failed", status: "failed" });
   });
 
-  it("gives a customer's own lost try back to them, on the schedule it was on", async () => {
+  it("never judges a newer try than the one the check looked at", async () => {
+    const r = await as("superuser", async (q) => {
+      await retrySent(q);
+      await age(q, 11);
+      const [check] = await claim(q);
+      // Meanwhile a newer try went (a webhook failed the old one and a fresh send went out).
+      await q.rows(`update public.payments set try_sent_at = now() where visit_id = $1`, [today]);
+      const answer = await lost(q, minutesAgo(60 * 24), check!.try_sent_at);
+      return { answer, status: (await pay(q)).status };
+    });
+    expect(r).toEqual({ answer: "not_lost", status: "processing" });
+  });
+
+  it("puts a customer's own lost try back on its schedule, never under a key it used", async () => {
     const r = await as("superuser", async (q) => {
       await chargeSent(q);
       await result(q, "failed");
@@ -136,10 +154,16 @@ describe("1. a retry lost on its way to Stripe", () => {
       await claim(q);
       const answer = await lost(q, minutesAgo(60));
       const after = await pay(q);
+      await server(q);
+      const [next] = await q.rows<{ attempt: number; idempotency_key: string }>(`select attempt, idempotency_key from public.customer_pay_begin($1, $2)`, [before.id, U.anna]);
+      await su(q);
+      const key = `payment:${before.id}`;
       return { mid: [mid.customer_tries, mid.try_by_customer], answer, after: [after.status, after.attempts, after.customer_tries],
-        sameSchedule: after.next_retry_at!.getTime() === before.next_retry_at!.getTime() };
+        sameSchedule: after.next_retry_at!.getTime() === before.next_retry_at!.getTime(),
+        // Her next "Pay now" confirms under a key never used before.
+        next: [next!.attempt, next!.idempotency_key !== key] };
     });
-    expect(r).toEqual({ mid: [1, true], answer: "returned", after: ["failed", 1, 0], sameSchedule: true });
+    expect(r).toEqual({ mid: [1, true], answer: "returned", after: ["failed", 1, 1], sameSchedule: true, next: [102, true] });
   });
 
   it("stops giving tries back three days after the charge first fell due", async () => {
@@ -389,7 +413,7 @@ describe("#60. a job call that didn't come back 200 tells the office", () => {
       return { redirect, timeout, tooSoon, silent: (await open(q)).map((a) => a.message) };
     });
     expect(r.redirect).toEqual([expect.stringMatching(/payout job.*HTTP 308.*redirected.*\[payout job\]$/)]);
-    expect(r.timeout).toEqual([expect.stringMatching(/charge job.*timed out.*\[charge job\]$/)]);
+    expect(r.timeout).toEqual([expect.stringMatching(/charge job.*timed out.*may still have run, so check Stripe.*\[charge job\]$/)]);
     expect(r.tooSoon).toBe(0);
     expect(r.silent).toEqual([expect.stringMatching(/never heard back.*\[charge job\]$/)]);
   });
@@ -402,6 +426,56 @@ describe("#60. a job call that didn't come back 200 tells the office", () => {
       return { kicked: await kick(q), again: await kick(q), alerts: (await open(q)).map((a) => a.message) };
     });
     expect(r).toEqual({ kicked: "not_set_up", again: "not_set_up", alerts: [expect.stringMatching(/missing or mistyped.*\[charge job\]$/)] });
+  });
+
+  it("reading the last call's answer can't stop the job: an error there is an alert, and the job still runs", async () => {
+    const r = await as("superuser", async (q) => {
+      await liveLike(q);
+      await q.rows(`alter table net._http_response drop column status_code`); // forced: the answer can't be read
+      await q.rows(`insert into private.job_calls (job, request_id, called_at) values ('charge', 1, now()), ('payout', 2, now())`);
+      await chargeSent(q);
+      await q.rows(`update public.payments set status = 'failed', next_retry_at = now() - interval '1 minute' where visit_id = $1`, [today]);
+      return { charge: await kick(q), payout: await kick(q, "payout"), alerts: (await open(q)).map((a) => a.message).sort() };
+    });
+    expect(r.charge).toBe("kicked");
+    expect(r.payout).toBe("nothing_due");
+    expect(r.alerts).toEqual([
+      expect.stringMatching(/charge job.*couldn't read the answer to its last call \(42703\).*\[charge job\]$/),
+      expect.stringMatching(/payout job.*couldn't read.*\[payout job\]$/),
+    ]);
+  });
+
+  it("the 'can't call the app' alert closes once the Vault is right, even with no work due; an answer's alert doesn't", async () => {
+    const r = await as("superuser", async (q) => {
+      await liveLike(q, "https://ping.example.co.uk/api/stripe/charge-du");
+      await chargeSent(q);
+      await q.rows(`update public.payments set status = 'failed', next_retry_at = now() - interval '1 minute' where visit_id = $1`, [today]);
+      await kick(q);
+      const before = (await open(q)).length;
+      await q.rows(`update public.payments set next_retry_at = now() + interval '1 day' where visit_id = $1`, [today]); // nothing due now
+      await q.rows(`update vault.decrypted_secrets set decrypted_secret = 'https://ping.example.co.uk/api/stripe/charge-due' where name = 'ping_charge_job_url'`);
+      const idle = await kick(q);
+      const after = (await open(q)).length;
+      await q.rows(`insert into private.job_calls (job, request_id, called_at) values ('payout', 7, now())`);
+      await q.rows(`insert into net._http_response (id, status_code) values (7, 401)`);
+      await kick(q, "payout");
+      await kick(q, "payout");
+      return { before, idle, after, answerAlertStays: (await open(q)).length };
+    });
+    expect(r).toEqual({ before: 1, idle: "nothing_due", after: 0, answerAlertStays: 1 });
+  });
+
+  it("only one open alert per job, ever, and never over 500 characters", async () => {
+    const r = await as("superuser", async (q) => {
+      await q.rows(`select private.job_call_alert('charge', repeat('x', 600))`);
+      await q.rows(`select private.job_call_alert('charge', 'another problem')`);
+      await q.rows(`select private.job_call_alert('payout', 'a payout problem')`);
+      const direct = await q.attempt(`insert into public.engine_alerts (kind, message) values ('job_call_failed', 'sneaked in [charge job]')`);
+      const rows = await q.rows<{ len: number; tag: string }>(
+        `select char_length(message) as len, right(message, 13) as tag from public.engine_alerts where kind = 'job_call_failed' and resolved_at is null order by tag`);
+      return { direct, rows };
+    });
+    expect(r).toEqual({ direct: "23505", rows: [{ len: 500, tag: " [charge job]" }, { len: 29, tag: " [payout job]" }] });
   });
 
   it("nothing due and nothing called: no alert", async () => {
@@ -417,7 +491,7 @@ describe("who may do what", () => {
   it("only the server can give a try back or count a call", async () => {
     for (const who of ["tara", "anna", "admin", "anon"] as const) {
       const codes = await as(who, async (q) => [
-        await q.attempt(`select public.charge_try_lost(gen_random_uuid(), now())`),
+        await q.attempt(`select public.charge_try_lost(gen_random_uuid(), now(), now())`),
         await q.attempt(`select public.customer_stripe_call($1, 'check')`, [U.anna]),
         await q.attempt(`select private.check_job_call('charge')`),
         await q.attempt(`select private.queue_cleaner_notice('cleaner_block_on_hold', $1, 'x')`, [IDS.annaSeries]),
