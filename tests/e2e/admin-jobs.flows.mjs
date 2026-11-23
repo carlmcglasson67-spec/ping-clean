@@ -337,9 +337,18 @@ export default async function jobsFlows({ page, BASE, check, dir, sql, settle, s
                values ('visit_no_show', $1, $2, 'A booked clean passed without being started. Check with the cleaner and the customer.')`, [BLOCK4, fourth.id]);
     await sql(`update public.settings set no_access_rule = 'admin_decides'`);
     try {
+      const item = page.getByRole("region", { name: /^Alerts/ }).locator("li").filter({ hasText: "Clean missed" }).filter({ hasText: "Whitehaven CA28" });
+      // Still waiting for cover: the cleaner named on it wasn't the one at the door, so
+      // "Couldn't get in" isn't offered until the cover alert is sorted.
+      const [cover] = await sql(`insert into public.engine_alerts (kind, series_id, visit_id, message)
+                                 values ('visit_needs_cover', $1, $2, 'e2e: arrange cover for this clean.') returning id`, [BLOCK4, fourth.id]);
       await page.goto(`${BASE}/admin/jobs`);
       await settle(page);
-      const item = page.getByRole("region", { name: /^Alerts/ }).locator("li").filter({ hasText: "Clean missed" }).filter({ hasText: "Whitehaven CA28" });
+      await item.getByRole("button", { name: "It wasn’t done" }).waitFor();
+      assert.equal(await item.getByRole("button", { name: "Couldn’t get in" }).count(), 0, "not offered while it needs cover");
+      await sql(`update public.engine_alerts set resolved_at = now(), resolved_by = $2 where id = $1`, [cover.id, ADMIN]);
+      await page.goto(`${BASE}/admin/jobs`);
+      await settle(page);
       // Three answers on a missed clean: under the words on a phone, in the corner on a wide screen.
       assert.deepEqual(await item.getByRole("button").allInnerTexts(), ["It was done", "It wasn’t done", "Couldn’t get in"]);
       await shoot(page, dir, "admin-jobs-no-access-answers");

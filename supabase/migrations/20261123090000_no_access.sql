@@ -15,7 +15,8 @@
 -- The customer is emailed either way (the outbox, kind 'no_access_fee').
 --
 --   PC067 no_access_rule isn't set, or it needs the late-cancellation fee and that isn't set
---   PC068 the cost the office was shown isn't the cost now (a setting changed): look again
+--   PC068 the cost the office was shown (the fee, or the cleaner's part of it) isn't the
+--         cost now (a setting changed): look again
 --
 -- Schema changes (Carl signs off by merging): visit_settlements.outcome takes 'no_access';
 -- private.customer_notices gets a visit_id column and the kind 'no_access_fee'.
@@ -43,6 +44,9 @@ alter table private.customer_notices add constraint customer_notices_no_access_n
 -- cleaner holds, with no notice-time condition (the cleaner was at the door): the fee, never
 -- more than the clean's price, the cleaner's part rounded down, Ping takes the rest.
 -- For 'admin_decides' it gives the fee the office can choose to charge.
+-- The cleaner's part goes to the cleaner named on the clean whatever their status now: a
+-- cleaner suspended or removed since still made the trip (a choice for Carl to confirm,
+-- intent/no-access/plan.md).
 create function private.no_access_terms(
   p_visit uuid, out rule text, out fee_pence integer, out cleaner_pence integer, out ping_pence integer
 )
@@ -97,11 +101,12 @@ grant execute on function public.admin_no_access_quote(uuid) to authenticated;
 --   * only a missed clean ('no_show') with a cleaner, from a day that has gone; also one
 --     already marked as not done (the way back, p_was_not_done = true). Refused for a clean
 --     that was started (PC056: they got in) and one waiting for cover (PC058, as for done).
---   * p_fee_pence is the fee the office was shown (admin_no_access_quote's fee_pence); if
---     the terms now give another, nothing is done (PC068). p_charge is the office's choice
+--   * p_fee_pence and p_cleaner_pence are the fee and the cleaner's part of it the office was
+--     shown (admin_no_access_quote); if the terms now give another fee or another split,
+--     nothing is done (PC068). p_charge is the office's choice
 --     under 'admin_decides' and must be left out under any other rule (PC068 either way:
 --     the page didn't show the rule that holds now).
-create function private.settle_no_access(p_visit uuid, p_actor uuid, p_fee_pence integer, p_charge boolean)
+create function private.settle_no_access(p_visit uuid, p_actor uuid, p_fee_pence integer, p_cleaner_pence integer, p_charge boolean)
 returns void
 language plpgsql volatile security definer set search_path = '' as $$
 declare
@@ -113,6 +118,7 @@ begin
   select * into v from public.visits where id = p_visit;
   select * into t from private.no_access_terms(v.id);
   if t.fee_pence is distinct from p_fee_pence
+     or t.cleaner_pence is distinct from p_cleaner_pence
      or (t.rule = 'admin_decides') is distinct from (p_charge is not null) then
     raise exception 'The cost has changed, look again' using errcode = 'PC068';
   end if;
@@ -134,12 +140,12 @@ begin
   values (v.customer_id, 'no_access_fee', pid, v.series_id, v.id, 'no_access_fee:' || v.id)
   on conflict (dedupe) do nothing;
 end $$;
-revoke all on function private.settle_no_access(uuid, uuid, integer, boolean) from public, anon, authenticated;
+revoke all on function private.settle_no_access(uuid, uuid, integer, integer, boolean) from public, anon, authenticated;
 
 drop function public.admin_settle_visit(uuid, text, text, boolean);
 create function public.admin_settle_visit(
   p_visit uuid, p_outcome text, p_reason text, p_was_not_done boolean default false,
-  p_fee_pence integer default null, p_charge boolean default null
+  p_fee_pence integer default null, p_charge boolean default null, p_cleaner_pence integer default null
 )
 returns void
 language plpgsql security definer set search_path = '' as $$
@@ -160,6 +166,10 @@ begin
   end if;
   if reason_ is null or reason_ !~ '[[:alnum:]]{3,}' or char_length(reason_) > 300 then
     raise exception 'Say what happened (up to 300 characters)' using errcode = '22023';
+  end if;
+  -- The cost of no access is only for no access: done and not done charge what they always did.
+  if p_outcome <> 'no_access' and (p_fee_pence is not null or p_charge is not null or p_cleaner_pence is not null) then
+    raise exception 'A fee is only for a clean the cleaner couldn''t get in to' using errcode = '22023';
   end if;
 
   select series_id, cleaner_id into sid, cid from public.visits where id = p_visit;
@@ -228,7 +238,7 @@ begin
                 where a.visit_id = v.id and a.kind = 'visit_needs_cover' and a.resolved_at is null) then
       raise exception 'That clean was waiting for cover, so it can''t be marked as no access' using errcode = 'PC058';
     end if;
-    perform private.settle_no_access(v.id, me, p_fee_pence, p_charge);
+    perform private.settle_no_access(v.id, me, p_fee_pence, p_cleaner_pence, p_charge);
     perform private.end_block_if_done(sid);
   else
     if was_settled then
@@ -253,8 +263,8 @@ begin
    where visit_id = v.id and kind in ('visit_no_show', 'visit_unfinished') and resolved_at is null;
 end $$;
 
-revoke all on function public.admin_settle_visit(uuid, text, text, boolean, integer, boolean) from public, anon;
-grant execute on function public.admin_settle_visit(uuid, text, text, boolean, integer, boolean) to authenticated;
+revoke all on function public.admin_settle_visit(uuid, text, text, boolean, integer, boolean, integer) from public, anon;
+grant execute on function public.admin_settle_visit(uuid, text, text, boolean, integer, boolean, integer) to authenticated;
 
 -- ---------------------------------------------------------------- sending it
 -- As 20261122092000_payments_followups.sql, plus: a notice that names its clean (no access)

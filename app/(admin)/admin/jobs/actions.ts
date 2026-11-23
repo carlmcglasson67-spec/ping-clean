@@ -52,7 +52,7 @@ const whatHappened = z.string().trim().max(300, "Keep it to 300 characters.").re
  * cleaner couldn't get in. The database decides whether the clean can be settled and what
  * that does to the money (admin_settle_visit): "done" charges the customer and pays the
  * cleaner through the usual charge; "no access" charges the no-access fee settings say,
- * which the page was shown and sends back (feePence), with the office's choice when the
+ * which the page was shown and sends back (feePence, and the cleaner's part, cleanerPence), with the office's choice when the
  * rule is "decide each time" (charge). Nothing else charges anyone.
  * `stale` means the clean has moved on since the page loaded (someone else settled it):
  * the page should be read again rather than tried again. `changed` means the cost of no
@@ -68,19 +68,23 @@ export async function settleClean(raw: unknown): Promise<ActionResult & { stale?
     reason: whatHappened,
     wasNotDone: z.boolean(),
     feePence: z.number().int().min(0).max(1_000_000).optional(),
+    cleanerPence: z.number().int().min(0).max(1_000_000).optional(),
     charge: z.boolean().optional(),
   }).safeParse(raw);
   if (!p.success) return { ok: false, message: p.error.issues.find((i) => i.path[0] === "reason")?.message ?? NOT_SAVED };
   const noAccess = p.data.outcome === "no_access";
-  if (noAccess && p.data.feePence === undefined) return { ok: false, message: NOT_SAVED };
+  if (noAccess && (p.data.feePence === undefined || p.data.cleanerPence === undefined)) return { ok: false, message: NOT_SAVED };
   const supabase = await createClient();
   const { error } = await supabase.rpc("admin_settle_visit", {
     p_visit: p.data.visitId, p_outcome: p.data.outcome, p_reason: p.data.reason, p_was_not_done: p.data.wasNotDone,
-    ...(noAccess ? { p_fee_pence: p.data.feePence, ...(p.data.charge === undefined ? {} : { p_charge: p.data.charge }) } : {}),
+    ...(noAccess ? { p_fee_pence: p.data.feePence, p_cleaner_pence: p.data.cleanerPence, ...(p.data.charge === undefined ? {} : { p_charge: p.data.charge }) } : {}),
   });
   if (error?.code === "PC056") return { ok: false, stale: true, message: "Someone on the team has already dealt with that clean." };
   if (error?.code === "PC068") return { ok: false, changed: true, message: adminErrorMessage(error) };
   if (error?.code === "PC057" && noAccess) return { ok: false, message: "That clean had no cleaner, so nobody went to the door." };
+  if (error?.code === "PC058" && noAccess) {
+    return { ok: false, message: "That clean was waiting for cover, so the cleaner named on it wasn’t the one at the door. Sort the cover alert first, or mark it as not done." };
+  }
   if (error) return { ok: false, message: error.code === "22023" ? "Say what happened, in a few words (up to 300 characters)." : adminErrorMessage(error) };
   return done(p.data.outcome === "done" ? "Marked as done." : noAccess ? "Marked as couldn’t get in." : "Marked as not done.");
 }

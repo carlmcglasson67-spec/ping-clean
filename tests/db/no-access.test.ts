@@ -8,7 +8,8 @@ import { as, DENIED, IDS, pool, U, type Query } from "./helpers";
 afterAll(() => pool.end());
 
 const clean = IDS.visitToday; // Anna's clean, Tara's (seed): £50.00 = £37.50 Tara + £12.50 Ping. Moved to yesterday.
-const SETTLE = `select public.admin_settle_visit($1, 'no_access', $2, $3, $4, $5)`;
+/** clean, reason, was not done, fee shown, charge (decide each time), cleaner's part shown */
+const SETTLE = `select public.admin_settle_visit($1, 'no_access', $2, $3, $4, $5, $6)`;
 const QUOTE = `select rule, fee_pence, cleaner_pence, ping_pence from public.admin_no_access_quote($1)`;
 const WHY = "Tara knocked and rang; nobody was in and there was no key in the safe.";
 
@@ -36,9 +37,13 @@ async function quote(q: Query) {
   await su(q);
   return r[0]!;
 }
-async function settle(q: Query, fee: number | null, charge: boolean | null = null, wasNotDone = false) {
+/** Settles as no access. The cleaner's part sent is the one the quote gives now, unless given. */
+async function settle(q: Query, fee: number | null, charge: boolean | null = null, wasNotDone = false, cleaner?: number | null) {
   await q.actAs(U.admin);
-  const code = await q.attempt(SETTLE, [clean, WHY, wasNotDone, fee, charge]);
+  if (cleaner === undefined) {
+    cleaner = (await q.failure(QUOTE, [clean])) ? null : (await q.rows<{ cleaner_pence: number }>(QUOTE, [clean]))[0]!.cleaner_pence;
+  }
+  const code = await q.attempt(SETTLE, [clean, WHY, wasNotDone, fee, charge, cleaner]);
   await su(q);
   return code;
 }
@@ -95,7 +100,7 @@ describe("what no access costs, from settings.no_access_rule", () => {
       const out: Record<string, [string, string]> = {};
       const both = async (name: string) => {
         await q.actAs(U.admin);
-        out[name] = [await q.attempt(QUOTE, [clean]), await q.attempt(SETTLE, [clean, WHY, false, 1500, null])];
+        out[name] = [await q.attempt(QUOTE, [clean]), await q.attempt(SETTLE, [clean, WHY, false, 1500, null, 1125])];
         await su(q);
       };
       await rules(q, { rule: null });
@@ -200,6 +205,43 @@ describe("couldn't get in", () => {
       return { ...out, nowFree, status: (await visit(q)).status, payments: (await payments(q)).length, notices: (await notices(q)).length, record: (await record(q)).length };
     });
     expect(r).toEqual({ stale: "PC068", missing: "PC068", choiceNotAsked: "PC068", nowFree: "PC068", status: "no_show", payments: 0, notices: 0, record: 0 });
+  });
+
+  it("PC068 when the split changed and the fee didn't, or the cleaner's part shown is missing", async () => {
+    const r = await as("superuser", async (q) => {
+      await missed(q);
+      await rules(q, { rule: "late_cancel_fee", fee: 1500, split: "same_as_clean" });
+      const shown = await quote(q); // £15.00: £11.25 to Tara
+      await rules(q, { split: "fixed_share", bps: 5000 }); // now £7.50 to Tara, the fee unchanged
+      const now = await quote(q);
+      const splitMoved = await settle(q, shown.fee_pence, null, false, shown.cleaner_pence);
+      const noPart = await settle(q, now.fee_pence, null, false, null);
+      const before = { status: (await visit(q)).status, payments: (await payments(q)).length, record: (await record(q)).length };
+      const lookedAgain = await settle(q, now.fee_pence, null, false, now.cleaner_pence);
+      return { shown: shown.cleaner_pence, now: [now.fee_pence, now.cleaner_pence], splitMoved, noPart, before, lookedAgain,
+               paid: (await payments(q)).map((p) => [p.amount_pence, p.cleaner_amount_pence, p.application_fee_pence]) };
+    });
+    expect(r).toEqual({ shown: 1125, now: [1500, 750], splitMoved: "PC068", noPart: "PC068",
+      before: { status: "no_show", payments: 0, record: 0 }, lookedAgain: "ok", paid: [[1500, 750, 750]] });
+  });
+
+  it("done and not done take no fee, choice or cleaner's part (22023), and nothing changes", async () => {
+    const r = await as("superuser", async (q) => {
+      await missed(q);
+      await q.actAs(U.admin);
+      const out: Record<string, string> = {};
+      for (const outcome of ["done", "not_done"]) {
+        out[`${outcome}:fee`] = await q.attempt(`select public.admin_settle_visit($1, $2, $3, false, 1500)`, [clean, outcome, WHY]);
+        out[`${outcome}:charge`] = await q.attempt(`select public.admin_settle_visit($1, $2, $3, false, null, true)`, [clean, outcome, WHY]);
+        out[`${outcome}:cleaner`] = await q.attempt(`select public.admin_settle_visit($1, $2, $3, false, null, null, 1125)`, [clean, outcome, WHY]);
+      }
+      await su(q);
+      return { out, status: (await visit(q)).status, payments: (await payments(q)).length, record: (await record(q)).length };
+    });
+    expect(r).toEqual({
+      out: { "done:fee": "22023", "done:charge": "22023", "done:cleaner": "22023", "not_done:fee": "22023", "not_done:charge": "22023", "not_done:cleaner": "22023" },
+      status: "no_show", payments: 0, record: 0,
+    });
   });
 
   it("is refused for a clean that was started (they got in), one waiting for cover, one with no cleaner, and today's", async () => {

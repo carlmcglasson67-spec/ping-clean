@@ -49,6 +49,8 @@ export type NoticeFacts = {
   lateCancelFee?: boolean;
   /** The payment is a no-access fee (the cleaner couldn't get in), not a late cancellation. */
   noAccessFee?: boolean;
+  /** The cleaner's part of a no-access fee: the email only says they're paid from it when they are. */
+  cleanerSharePence?: number | null;
   /** The cleaner's emails: the block's town and day of the week (ISO, Monday = 1). */
   town?: string | null;
   weekday?: number | null;
@@ -112,13 +114,13 @@ export function noticeEmail(kind: NoticeKind, f: NoticeFacts): { subject: string
       lines = f.amountPence && f.amountPence > 0
         ? [
             `Your cleaner came for your clean${on} but couldn't get in, so the clean didn't go ahead.`,
-            `As our booking terms set out, a no-access fee of ${formatPence(f.amountPence)} is being taken from your saved card. Part of it goes to your cleaner for the journey.`,
-            "If you won't be in next time, leave a key or access details in your account, or cancel in good time, and there's nothing to pay.",
+            `As our booking terms set out, a no-access fee of ${formatPence(f.amountPence)} is being taken from your saved card.${f.cleanerSharePence && f.cleanerSharePence > 0 ? " Part of it goes to your cleaner for the journey." : ""}`,
+            "If you won't be in next time, reply to this email or get in touch with a key or access details before your next clean, or cancel in good time, and there's nothing to pay.",
           ]
         : [
             `Your cleaner came for your clean${on} but couldn't get in, so the clean didn't go ahead.`,
             "There's no charge this time.",
-            "If you won't be in next time, leave a key or access details in your account so your cleaner can let themselves in.",
+            "If you won't be in next time, reply to this email or get in touch with a key or access details before your next clean, so your cleaner can let themselves in.",
           ];
       action = "Go to your account";
       break;
@@ -163,14 +165,15 @@ export async function sendDueNotices(limit = 20, fetcher: typeof fetch = fetch):
       const link = cleaner ? `${site}/work` : n.payment_id && n.kind !== "block_ended_unpaid" && n.kind !== "no_access_fee" ? `${site}/account/pay/${n.payment_id}` : `${site}/account`;
       // A late-cancellation fee is worded as one: there was no clean to pay for. So is a
       // no-access fee (the same kind of payment, on a clean cancelled as no access).
-      const pay = n.payment_id && !cleaner ? (await db.from("payments").select("kind, visit_id").eq("id", n.payment_id).maybeSingle()).data : null;
+      const pay = n.payment_id && !cleaner ? (await db.from("payments").select("kind, visit_id, cleaner_amount_pence").eq("id", n.payment_id).maybeSingle()).data : null;
       const kind = pay?.kind ?? null;
       const noAccessFee = kind === "late_cancel" && !!pay?.visit_id
         && (await db.from("visits").select("cancel_reason").eq("id", pay.visit_id).maybeSingle()).data?.cancel_reason === "no_access";
       const firstName = n.full_name?.trim().split(/\s+/)[0] || null;
       const mail = cleaner
         ? noticeEmail(n.kind, { firstName, amountPence: null, cleanDate: null, link, town: n.town, weekday: n.weekday })
-        : noticeEmail(n.kind, { firstName, amountPence: n.amount_pence, cleanDate: n.clean_date, link, lateCancelFee: kind === "late_cancel", noAccessFee });
+        : noticeEmail(n.kind, { firstName, amountPence: n.amount_pence, cleanDate: n.clean_date, link, lateCancelFee: kind === "late_cancel", noAccessFee,
+            cleanerSharePence: pay?.cleaner_amount_pence ?? null });
       try {
         const res = await fetcher("https://api.resend.com/emails", {
           method: "POST",

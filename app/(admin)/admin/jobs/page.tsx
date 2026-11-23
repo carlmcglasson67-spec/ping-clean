@@ -69,7 +69,11 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
 
   // What "Couldn't get in" would cost each missed clean with a cleaner, as settings say now;
   // and, for one just settled that way, what was charged and the cleaner's part of it.
-  const missedIds = (cleans.data ?? []).filter((v) => v.status === "no_show" && v.cleaner_id && v.scheduled_date < today).map((v) => v.id);
+  // Not one still waiting for cover: the cleaner named on it wasn't the one at the door.
+  const needsCover = new Set((alerts.data ?? []).filter((a) => a.kind === "visit_needs_cover" && a.visit_id).map((a) => a.visit_id));
+  const missedIds = (cleans.data ?? [])
+    .filter((v) => v.status === "no_show" && v.cleaner_id && v.scheduled_date < today && !needsCover.has(v.id))
+    .map((v) => v.id);
   const lastId = justSettled.data?.[0]?.outcome === "no_access" ? justSettled.data[0].visit_id : null;
   const [quotes, lastFee] = await Promise.all([
     Promise.all(missedIds.map(async (id): Promise<[string, NoAccessQuote]> => {
@@ -77,7 +81,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       const q = data?.[0];
       if (error?.code === "PC067") return [id, { state: "unset" }];
       if (error || !q) return [id, { state: "error" }];
-      return [id, { state: "ready", rule: q.rule, feePence: q.fee_pence, fee: formatPence(q.fee_pence), cleaner: formatPence(q.cleaner_pence), ping: formatPence(q.ping_pence) }];
+      return [id, { state: "ready", rule: q.rule, feePence: q.fee_pence, cleanerPence: q.cleaner_pence, fee: formatPence(q.fee_pence), cleaner: formatPence(q.cleaner_pence), ping: formatPence(q.ping_pence) }];
     })),
     lastId
       ? supabase.from("payments").select("amount_pence, cleaner_amount_pence").eq("visit_id", lastId).eq("kind", "late_cancel").limit(1)

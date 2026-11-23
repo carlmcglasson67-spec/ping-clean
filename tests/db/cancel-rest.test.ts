@@ -106,7 +106,9 @@ describe("when it can't be done", () => {
       const told = await quote(q);
       const going = await cancel(q, 0);
       await q.rows(`update public.visits set status = 'scheduled', started_at = null where id = $1`, [IDS.visitToday]);
-      await todayStartsIn(q, -1);
+      // Today's clean whose time has begun: its window opened at midnight (London), so this
+      // holds at any time of day. (An hour ago was yesterday between midnight and 1am.)
+      await q.rows(`update public.visits set scheduled_date = private.london_today(), window_start = '00:00:00', window_end = '23:59:59' where id = $1`, [IDS.visitToday]);
       const started = await cancel(q, 0);
       return { told, going, started, after: await state(q) };
     });

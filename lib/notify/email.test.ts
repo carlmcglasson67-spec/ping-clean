@@ -86,23 +86,34 @@ describe("what the emails say", () => {
 });
 
 describe("the customer's email when their cleaner couldn't get in", () => {
-  const facts = { firstName: "Anna", amountPence: 1500, cleanDate: "2026-11-24", link: "https://pingclean.co.uk/account" };
+  const facts = { firstName: "Anna", amountPence: 1500, cleanDate: "2026-11-24", link: "https://pingclean.co.uk/account", cleanerSharePence: 1125 };
   it("with a fee: says what happened, without blame, the fee, why, and what to do next time", () => {
     const m = noticeEmail("no_access_fee", facts);
     expect(m.subject).toBe("Your cleaner couldn't get in");
     expect(m.text).toContain("Hello Anna,");
     expect(m.text).toMatch(/Your cleaner came for your clean on Tuesday 24 November.* but couldn't get in, so the clean didn't go ahead\./);
-    expect(m.text).toContain("As our booking terms set out, a no-access fee of £15.00 is being taken from your saved card.");
-    expect(m.text).toMatch(/leave a key or access details in your account/);
+    expect(m.text).toContain("As our booking terms set out, a no-access fee of £15.00 is being taken from your saved card. Part of it goes to your cleaner for the journey.");
+    // Customers can't change access details in the app after booking: they get in touch.
+    expect(m.text).toContain("reply to this email or get in touch with a key or access details before your next clean");
+    expect(m.text).not.toMatch(/in your account/);
     expect(m.text).toContain("Go to your account: https://pingclean.co.uk/account");
     expect(m.text).not.toMatch(/fault|failed to|you didn't/i);
+  });
+
+  it("only says the cleaner is paid from the fee when they are", () => {
+    for (const cleanerSharePence of [0, null, undefined]) {
+      const m = noticeEmail("no_access_fee", { ...facts, cleanerSharePence });
+      expect(m.text).toContain("is being taken from your saved card.");
+      expect(m.text).not.toMatch(/goes to your cleaner/);
+    }
   });
 
   it("with no fee: a short note that there's no charge this time", () => {
     for (const amountPence of [null, 0]) {
       const m = noticeEmail("no_access_fee", { ...facts, amountPence });
       expect(m.text).toContain("There's no charge this time.");
-      expect(m.text).not.toMatch(/£/);
+      expect(m.text).not.toMatch(/£|in your account/);
+      expect(m.text).toContain("reply to this email or get in touch with a key or access details before your next clean");
     }
   });
 

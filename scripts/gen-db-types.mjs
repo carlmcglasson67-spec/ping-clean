@@ -132,7 +132,7 @@ out += `${ind(2)}};
         Returns: undefined;
       };
       admin_settle_visit: {
-        Args: { p_visit: string; p_outcome: string; p_reason: string; p_was_not_done?: boolean; p_fee_pence?: number; p_charge?: boolean };
+        Args: { p_visit: string; p_outcome: string; p_reason: string; p_was_not_done?: boolean; p_fee_pence?: number; p_charge?: boolean; p_cleaner_pence?: number };
         Returns: undefined;
       };
       admin_no_access_quote: {

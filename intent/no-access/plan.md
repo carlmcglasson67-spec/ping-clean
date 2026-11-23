@@ -34,7 +34,12 @@ and links to Settings (PC067). If the cost changes while the step is open, nothi
 the new figure is shown and the office confirms again (PC068).
 
 It isn't offered for a clean that was started (they got in: done or not done), one with no
-cleaner, or one waiting for cover (the cleaner named on it wasn't the one at the door).
+cleaner, or one waiting for cover (the cleaner named on it wasn't the one at the door): the
+Jobs page leaves it out while the clean's "needs cover" alert is open, and the database
+refuses it (PC058).
+
+The Jobs page asks for the cost one clean at a time (`admin_no_access_quote` per missed
+clean). A batch quote isn't needed at Ping's volume yet; add one if the alerts list grows.
 
 ## The money, all in the database
 
@@ -42,8 +47,10 @@ cleaner, or one waiting for cover (the cleaner named on it wasn't the one at the
 (dropped and created again with two new parameters; every earlier call still works the same).
 
 - `private.no_access_terms(visit)` works the fee out from the settings (PC067 when it can't).
-- `p_fee_pence` must equal it (PC068); `p_charge` is given under `admin_decides` and only then
-  (PC068 otherwise: the page didn't show the rule that holds now).
+- `p_fee_pence` and `p_cleaner_pence` must equal the fee and the cleaner's part of it now
+  (PC068: a changed split is caught even when the fee is the same); `p_charge` is given under
+  `admin_decides` and only then (PC068 otherwise: the page didn't show the rule that holds now).
+- "It was done" and "It wasn't done" take none of the three (22023).
 - The clean becomes `cancelled`, `cancel_reason = 'no_access'`, `cancelled_by` the admin,
   `late_cancel_fee_pence` the fee. A fee is a `late_cancel` payment written exactly as
   `cancel_visit` writes one, so `check_payment_matches_visit` (which already allowed
@@ -60,9 +67,11 @@ Charging without a word would be wrong. The outbox (`private.customer_notices`, 
 `no_access_fee`, once per clean) emails the customer either way, linking to their account:
 
 - with a fee: their cleaner came on (day) and couldn't get in, so the clean didn't go ahead;
-  as the booking terms set out, a no-access fee of £X is being taken from their saved card,
-  part of it to the cleaner for the journey; next time leave a key or access details, or
-  cancel in good time;
+  as the booking terms set out, a no-access fee of £X is being taken from their saved card
+  ("part of it goes to your cleaner for the journey" only when the cleaner's part is above
+  zero); next time, reply or get in touch with a key or access details before the next
+  clean (customers can't change access details in the app after booking), or cancel in good
+  time;
 - with no fee: the same first line, then "There's no charge this time", and the tip.
 
 A failed no-access fee is worded as a no-access fee, not a late-cancellation fee.
@@ -75,6 +84,13 @@ A failed no-access fee is worded as a no-access fee, not a late-cancellation fee
 - New functions: `private.no_access_terms`, `private.settle_no_access`,
   `public.admin_no_access_quote` (Ping team only). `public.notices_claim` takes the clean's
   date from `visit_id`. No new tables.
+
+## For Carl to confirm
+
+- **A cleaner suspended or removed since the clean still gets their share.** The cleaner's
+  part goes to the cleaner named on the clean whatever their status now (they made the
+  trip), as "It was done" pays them. The charge itself still waits until their Stripe account
+  can take it. Say if a suspended cleaner's share should go to Ping instead.
 
 ## Not in this change
 

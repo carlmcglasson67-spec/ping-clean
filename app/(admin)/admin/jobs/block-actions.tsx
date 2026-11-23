@@ -126,7 +126,7 @@ export function ResolveAlert({ alertId }: { alertId: string }) {
 
 /** What "Couldn't get in" would cost, from admin_no_access_quote (settings.no_access_rule). */
 export type NoAccessQuote =
-  | { state: "ready"; rule: "no_charge" | "late_cancel_fee" | "admin_decides"; feePence: number; fee: string; cleaner: string; ping: string }
+  | { state: "ready"; rule: "no_charge" | "late_cancel_fee" | "admin_decides"; feePence: number; cleanerPence: number; fee: string; cleaner: string; ping: string }
   /** No rule set in Settings, or a fee rule with no late-cancellation fee set (PC067). */
   | { state: "unset" }
   | { state: "error" };
@@ -204,7 +204,7 @@ export function SettleClean({ info, wayBack }: { info: SettleInfo; wayBack?: boo
         r = await settleClean({
           visitId: info.visitId, outcome: mode, reason, wasNotDone: !!wayBack,
           ...(mode === "no_access" && na
-            ? { feePence: na.feePence, ...(na.rule === "admin_decides" ? { charge: decides && choice === "charge" } : {}) }
+            ? { feePence: na.feePence, cleanerPence: na.cleanerPence, ...(na.rule === "admin_decides" ? { charge: decides && choice === "charge" } : {}) }
             : {}),
         });
       } catch {
