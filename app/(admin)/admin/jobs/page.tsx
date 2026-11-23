@@ -9,7 +9,7 @@ import { FREQUENCY, TIER, VISIT_STATUS } from "@/lib/labels";
 import { formatDuration, formatPence } from "@/lib/money";
 import { ALERT_KIND, ALERT_ORDER, alertKind, firstSentence, todoBeyond } from "../_lib/alerts";
 import { pgUuid } from "../_lib/ids";
-import { BlockActions, ResolveAlert, SettleClean, type CleanerOption, type SettleInfo } from "./block-actions";
+import { BlockActions, ResolveAlert, SettleClean, type CleanerOption, type NoAccessQuote, type SettleInfo } from "./block-actions";
 
 export const metadata: Metadata = { title: "Jobs" };
 
@@ -61,11 +61,29 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const cleanIds = [...new Set([...settleIds, ...(notDone.data ?? []).map((n) => n.visit_id), ...(justSettled.data ?? []).map((j) => j.visit_id)])];
   const [cleans, skips] = await Promise.all([
     cleanIds.length
-      ? supabase.from("visits").select("id, series_id, customer_id, cleaner_id, scheduled_date, status, price_pence, cleaner_earnings_pence, ping_fee_pence").in("id", cleanIds)
+      ? supabase.from("visits").select("id, series_id, customer_id, cleaner_id, scheduled_date, status, price_pence, cleaner_earnings_pence, ping_fee_pence, cancel_reason, late_cancel_fee_pence").in("id", cleanIds)
       : none(),
     // Eleven rows a clean at most, and only for cleans waiting to be settled.
     settleIds.length ? supabase.from("checklist_items").select("visit_id, skipped_reason").in("visit_id", settleIds) : none(),
   ]);
+
+  // What "Couldn't get in" would cost each missed clean with a cleaner, as settings say now;
+  // and, for one just settled that way, what was charged and the cleaner's part of it.
+  const missedIds = (cleans.data ?? []).filter((v) => v.status === "no_show" && v.cleaner_id && v.scheduled_date < today).map((v) => v.id);
+  const lastId = justSettled.data?.[0]?.outcome === "no_access" ? justSettled.data[0].visit_id : null;
+  const [quotes, lastFee] = await Promise.all([
+    Promise.all(missedIds.map(async (id): Promise<[string, NoAccessQuote]> => {
+      const { data, error } = await supabase.rpc("admin_no_access_quote", { p_visit: id });
+      const q = data?.[0];
+      if (error?.code === "PC067") return [id, { state: "unset" }];
+      if (error || !q) return [id, { state: "error" }];
+      return [id, { state: "ready", rule: q.rule, feePence: q.fee_pence, fee: formatPence(q.fee_pence), cleaner: formatPence(q.cleaner_pence), ping: formatPence(q.ping_pence) }];
+    })),
+    lastId
+      ? supabase.from("payments").select("amount_pence, cleaner_amount_pence").eq("visit_id", lastId).eq("kind", "late_cancel").limit(1)
+      : none(),
+  ]);
+  const noAccessFor = new Map(quotes);
 
   // Blocks that alerts and those cleans point at but that aren't live any more (closed, ended).
   const liveIds = new Set((live.data ?? []).map((s) => s.id));
@@ -80,7 +98,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     peopleIds.length ? supabase.from("profiles").select("id, full_name").in("id", peopleIds) : Promise.resolve({ data: [], error: null }),
   ]);
 
-  if (failed || cleans.error || skips.error || extra.error || props.error || people.error) {
+  if (failed || cleans.error || skips.error || extra.error || props.error || people.error || lastFee.error) {
     return (
       <>
         <PageHeader eyebrow="Jobs" title="Every block, and what needs a hand." />
@@ -138,6 +156,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       : null,
     couldntDo: skipped.get(v.id) ?? 0,
     onHold: byId.get(v.series_id)?.status === "paused",
+    noAccess: noAccessFor.get(v.id) ?? null,
   });
   // A missed or unfinished clean from a day that has gone can be settled.
   const canSettle = (v: Clean | undefined): v is Clean => !!v && (v.status === "in_progress" || v.status === "no_show") && v.scheduled_date < today;
@@ -156,8 +175,10 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   // the colleague settled it: their own card has just vanished from under them.
   const settledNote = last && lastClean && (beatenToIt || withinLast(last.created_at, JUST_NOW_MS))
     ? (beatenToIt ? "Someone on the team had already dealt with this one. " : "") +
-      `${where(lastClean)}, ${formatDay(lastClean.scheduled_date)}: marked as ${last.outcome === "done" ? "done" : "not done"}. ` +
-      (last.outcome === "done"
+      `${where(lastClean)}, ${formatDay(lastClean.scheduled_date)}: marked as ${last.outcome === "done" ? "done" : last.outcome === "no_access" ? "couldn’t get in" : "not done"}. ` +
+      (last.outcome === "no_access"
+        ? noAccessNote(lastClean, lastFee.data?.[0] ?? null, name)
+        : last.outcome === "done"
         ? lastClean.price_pence > 0
           ? `${name.get(lastClean.customer_id) ?? "The customer"}’s card is charged ${formatPence(lastClean.price_pence)}; ${lastClean.cleaner_id ? name.get(lastClean.cleaner_id) ?? "the cleaner" : "the cleaner"} is paid ${formatPence(lastClean.cleaner_earnings_pence)} after the check period.`
           : "There was nothing to charge."
@@ -280,7 +301,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
             <div className="grid gap-1">
               <h3 id="not-done-title" className="text-lg font-semibold">Marked as not done</h3>
               <p className="max-w-prose text-sm text-navy-2">
-                Missed cleans the team said weren&rsquo;t done, from the last {NOT_DONE_DAYS} days. If one turns out to have happened, mark it as done here and it&rsquo;s charged and paid as usual.
+                Missed cleans the team said weren&rsquo;t done, from the last {NOT_DONE_DAYS} days. If one turns out to have happened, mark it as done here and it&rsquo;s charged and paid as usual. If the cleaner went and couldn&rsquo;t get in, say so here too.
               </p>
             </div>
             <ul className="grid gap-3">
@@ -292,7 +313,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                       <p className="text-sm text-navy-2">{cleanLine(n.clean, name)}</p>
                       <p className="text-sm text-navy-2">Marked as not done {formatStamp(n.created_at)}: &ldquo;{n.reason}&rdquo;</p>
                     </div>
-                    <SettleClean info={settleInfo(n.clean)} only="done" />
+                    <SettleClean info={settleInfo(n.clean)} wayBack />
                   </Card>
                 </li>
               ))}
@@ -324,6 +345,19 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       </Section>
     </>
   );
+}
+
+/** What a "couldn't get in" did, in the words the page says it with. */
+function noAccessNote(
+  v: { customer_id: string; cleaner_id: string | null; late_cancel_fee_pence: number },
+  paid: { amount_pence: number; cleaner_amount_pence: number } | null,
+  name: Map<string, string>,
+): string {
+  const customer = name.get(v.customer_id) ?? "The customer";
+  const cleaner = v.cleaner_id ? name.get(v.cleaner_id) ?? "the cleaner" : "the cleaner";
+  return paid && v.late_cancel_fee_pence > 0
+    ? `${customer}’s card is charged the ${formatPence(paid.amount_pence)} no-access fee; ${cleaner} is paid ${formatPence(paid.cleaner_amount_pence)} for the trip after the check period. ${customer} is emailed to say why.`
+    : `Nobody is charged. ${customer} is emailed to say ${cleaner} couldn’t get in.`;
 }
 
 /** The two alerts a person answers by settling the clean: missed, and started but never finished. */

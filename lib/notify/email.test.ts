@@ -85,6 +85,44 @@ describe("what the emails say", () => {
   });
 });
 
+describe("the customer's email when their cleaner couldn't get in", () => {
+  const facts = { firstName: "Anna", amountPence: 1500, cleanDate: "2026-11-24", link: "https://pingclean.co.uk/account" };
+  it("with a fee: says what happened, without blame, the fee, why, and what to do next time", () => {
+    const m = noticeEmail("no_access_fee", facts);
+    expect(m.subject).toBe("Your cleaner couldn't get in");
+    expect(m.text).toContain("Hello Anna,");
+    expect(m.text).toMatch(/Your cleaner came for your clean on Tuesday 24 November.* but couldn't get in, so the clean didn't go ahead\./);
+    expect(m.text).toContain("As our booking terms set out, a no-access fee of £15.00 is being taken from your saved card.");
+    expect(m.text).toMatch(/leave a key or access details in your account/);
+    expect(m.text).toContain("Go to your account: https://pingclean.co.uk/account");
+    expect(m.text).not.toMatch(/fault|failed to|you didn't/i);
+  });
+
+  it("with no fee: a short note that there's no charge this time", () => {
+    for (const amountPence of [null, 0]) {
+      const m = noticeEmail("no_access_fee", { ...facts, amountPence });
+      expect(m.text).toContain("There's no charge this time.");
+      expect(m.text).not.toMatch(/£/);
+    }
+  });
+
+  it("a failed no-access fee is worded as one", () => {
+    const m = noticeEmail("payment_failed", { ...facts, lateCancelFee: true, noAccessFee: true });
+    expect(m.subject).toBe("We couldn't take your no-access fee");
+    expect(m.text).toMatch(/the no-access fee for your clean/);
+  });
+
+  it("is sent with a link to their account, not the pay page", async () => {
+    db([notice({ kind: "no_access_fee", amount_pence: 1500, clean_date: "2026-11-24" })]);
+    const fetcher = vi.fn(async () => new Response("{}", { status: 200 }));
+    expect(await sendDueNotices(20, fetcher as unknown as typeof fetch)).toEqual({ claimed: 1, sent: 1, failed: 0 });
+    const body = JSON.parse((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+    expect(body.subject).toBe("Your cleaner couldn't get in");
+    expect(body.text).toContain("Go to your account: https://pingclean.co.uk/account\n");
+    expect(body.text).not.toContain("/account/pay/");
+  });
+});
+
 describe("the cleaner's emails about their block", () => {
   const facts = { firstName: "Tara", amountPence: null, cleanDate: null, link: "https://pingclean.co.uk/work", town: "Workington", weekday: 2 };
   it("names the block by its town and day, says what to do, and links to the cleaner app", () => {

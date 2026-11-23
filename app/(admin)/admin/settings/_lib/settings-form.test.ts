@@ -135,3 +135,27 @@ describe("settings form: the late-cancel split", () => {
     expect(parseSettings({ ...full, commission_type: "per_hour", commission_value: "abc" }).errors.commission_value).not.toMatch(/\d/);
   });
 });
+
+describe("settings form: when the cleaner can't get in (no_access_rule)", () => {
+  it("is one of three rules, or not set", () => {
+    for (const rule of ["no_charge", "late_cancel_fee", "admin_decides"]) {
+      expect(parseSettings({ ...full, no_access_rule: rule })).toMatchObject({ ok: true, data: { no_access_rule: rule } });
+    }
+    expect(parseSettings({ ...full, no_access_rule: "" })).toMatchObject({ ok: true, data: { no_access_rule: null } });
+    expect((parseSettings({ ...full, no_access_rule: "refund" }) as { errors: Record<string, string> }).errors.no_access_rule).toMatch(/Choose/);
+  });
+
+  it("a rule that uses the late fee needs the fee and its split; no charge doesn't", () => {
+    const err = (v: Values) => (parseSettings({ ...full, ...v }) as { errors: Record<string, string> }).errors.no_access_rule;
+    expect(err({ no_access_rule: "late_cancel_fee", late_cancel_fee_pence: "" })).toMatch(/set the fee/);
+    expect(err({ no_access_rule: "admin_decides", late_cancel_split: "" })).toMatch(/set the fee/);
+    expect(err({ no_access_rule: "no_charge", late_cancel_fee_pence: "" })).toBeUndefined();
+  });
+
+  it("is reviewed in words before it's saved", () => {
+    const next = parseSettings({ ...toValues(empty), no_access_rule: "late_cancel_fee", late_cancel_fee_pence: "15", late_cancel_split: "same_as_clean" });
+    const diff = changes(empty, next.data);
+    expect(diff.find((c) => c.key === "no_access_rule")).toEqual({ key: "no_access_rule", label: "When the cleaner can't get in", from: "Not set", to: "The late-cancellation fee" });
+    expect(FIELDS.find((f) => f.key === "no_access_rule")?.explain).not.toMatch(/£|\d/);
+  });
+});

@@ -23,10 +23,11 @@ export default async function EarningsPage() {
     supabase.from("visits").select("id, scheduled_date, cleaner_earnings_pence")
       .eq("cleaner_id", session.userId).eq("status", "completed").gte("scheduled_date", since)
       .order("scheduled_date", { ascending: false }).limit(200),
-    // Cleans a customer cancelled at short notice. They show only once the fee has been paid
-    // and this cleaner's part of it exists as a payout row: nothing is promised before then.
-    supabase.from("visits").select("id, scheduled_date")
-      .eq("cleaner_id", session.userId).eq("status", "cancelled").eq("cancel_reason", "customer_late").gte("scheduled_date", since)
+    // Cleans a customer cancelled at short notice, and cleans they went to and couldn't get
+    // in. They show only once the fee has been paid and this cleaner's part of it exists as a
+    // payout row: nothing is promised before then.
+    supabase.from("visits").select("id, scheduled_date, cancel_reason")
+      .eq("cleaner_id", session.userId).eq("status", "cancelled").in("cancel_reason", ["customer_late", "no_access"]).gte("scheduled_date", since)
       .order("scheduled_date", { ascending: false }).limit(100),
     supabase.from("payouts").select("visit_id, batch_id, amount_pence, status, available_after, paid_at")
       .eq("cleaner_id", session.userId).order("created_at", { ascending: false }).limit(400),
@@ -65,7 +66,7 @@ export default async function EarningsPage() {
     const p = payoutByVisit.get(v.id);
     if (!p) continue;
     rows.push({
-      visitId: v.id, cleanDate: v.scheduled_date, amountPence: p.amount_pence, lateCancel: true,
+      visitId: v.id, cleanDate: v.scheduled_date, amountPence: p.amount_pence, lateCancel: true, noAccess: v.cancel_reason === "no_access",
       payout: { status: p.status, available_after: p.available_after, paid_at: p.paid_at },
       batch: p.batch_id ? (batchById.get(p.batch_id) ?? null) : null,
     });
@@ -136,7 +137,7 @@ export default async function EarningsPage() {
                         <span className="text-lg font-semibold">{formatDay(r.cleanDate, now)}</span>
                         <Badge tone={copy.tone}>{copy.label}</Badge>
                       </div>
-                      <p className="text-navy-2">{r.lateCancel ? "Cancelled by the customer at short notice: your part of their fee. " : ""}{earningNote(r, step, day)}</p>
+                      <p className="text-navy-2">{r.noAccess ? "You couldn’t get in: your part of the no-access fee, for the trip. " : r.lateCancel ? "Cancelled by the customer at short notice: your part of their fee. " : ""}{earningNote(r, step, day)}</p>
                     </div>
                     <p className={`font-display text-2xl font-semibold tabular ${step === "cancelled" ? "text-navy-3 line-through" : ""}`}>{formatPence(r.amountPence)}</p>
                   </Card>

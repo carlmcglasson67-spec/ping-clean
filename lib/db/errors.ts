@@ -57,6 +57,9 @@ export const PING_ERRORS = {
   PC056: "That clean isn't waiting to be settled any more. Refresh to see where it stands.",
   PC057: "That clean had no cleaner, so it can't be marked as done.",
   PC058: "That clean was waiting for cover, so the cleaner named on it isn't the one who did it. Mark it as not done, and pay whoever covered outside Ping.",
+  // No access: the cleaner couldn't get in (the Ping team)
+  PC067: "Choose what a no-access visit costs in Settings first. It's under Cancellations and payouts.",
+  PC068: "The cost has changed since this page loaded, so nothing was done. Look again at the new figure, then confirm.",
   // Who is an admin (the Ping team)
   PC060: "There's no Ping account with that email that has finished signing up. Ask them to sign up and choose their password from the link in their email first.",
   PC061: "That's a cleaner's account. Ask them to sign up for the office with a different email.",

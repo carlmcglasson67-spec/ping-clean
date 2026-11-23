@@ -76,6 +76,9 @@ update public.settings set
   -- decided; 1500 is a test placeholder only.
   cancel_notice_hours = 24, late_cancel_fee_pence = 1500, late_cancel_cleaner_share_bps = null,
   dispute_window_hours = 72,
+  -- Carl's rule (23 Nov 2026): a cleaner who couldn't get in is a late cancellation, so the
+  -- customer pays the late fee above and the cleaner gets their share. A rule, not a price.
+  no_access_rule = 'late_cancel_fee',
   launch_districts = array['CA14', 'CA15', 'CA28', 'CA22', 'CA25', 'CA26']
 where id;
 

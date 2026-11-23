@@ -5,7 +5,8 @@ import { formatDay } from "@/lib/dates";
 import { formatPence } from "@/lib/money";
 
 // Emails to customers about a payment (payments PR 8), and to the cleaner when their block
-// goes on hold, comes back on or ends on hold (#44), sent through Resend's HTTP API.
+// goes on hold, comes back on or ends on hold (#44), and to the customer when their cleaner
+// couldn't get in (no access, 23 Nov 2026), sent through Resend's HTTP API.
 // The database queues them (private.customer_notices), once each; this file words and sends
 // them. Off until RESEND_API_KEY and PING_EMAIL_FROM are set: notices then simply wait.
 // Logs carry the notice id and kind only, never the address or the wording.
@@ -17,7 +18,8 @@ export type NoticeKind =
   | "block_ended_unpaid"
   | "cleaner_block_on_hold"
   | "cleaner_block_back_on"
-  | "cleaner_block_ended";
+  | "cleaner_block_ended"
+  | "no_access_fee";
 
 /** The cleaner's emails: about their block, never the customer's payment. */
 export const isCleanerNotice = (kind: NoticeKind) => kind.startsWith("cleaner_");
@@ -45,6 +47,8 @@ export type NoticeFacts = {
   cleanDate: string | null;
   link: string;
   lateCancelFee?: boolean;
+  /** The payment is a no-access fee (the cleaner couldn't get in), not a late cancellation. */
+  noAccessFee?: boolean;
   /** The cleaner's emails: the block's town and day of the week (ISO, Monday = 1). */
   town?: string | null;
   weekday?: number | null;
@@ -53,7 +57,7 @@ export type NoticeFacts = {
 /** The wording of each email. Plain, short, and never a promise Ping can't keep. */
 export function noticeEmail(kind: NoticeKind, f: NoticeFacts): { subject: string; text: string; html: string } {
   const hello = f.firstName ? `Hello ${f.firstName},` : "Hello,";
-  const what = f.lateCancelFee ? "the late-cancellation fee for your clean" : "your clean";
+  const what = f.noAccessFee ? "the no-access fee for your clean" : f.lateCancelFee ? "the late-cancellation fee for your clean" : "your clean";
   const clean = f.cleanDate ? `${what} on ${formatDay(f.cleanDate)}` : what;
   const amount = f.amountPence != null ? ` (${formatPence(f.amountPence)})` : "";
   // The cleaner's block, by its town and day only. Never the reason: the cleaner must not
@@ -70,7 +74,7 @@ export function noticeEmail(kind: NoticeKind, f: NoticeFacts): { subject: string
       action = "Confirm the payment";
       break;
     case "payment_failed":
-      subject = f.lateCancelFee ? "We couldn't take your late-cancellation fee" : "We couldn't take payment for your clean";
+      subject = f.noAccessFee ? "We couldn't take your no-access fee" : f.lateCancelFee ? "We couldn't take your late-cancellation fee" : "We couldn't take payment for your clean";
       lines = [`We couldn't take the payment for ${clean}${amount}. Your bank declined it.`, "You can pay now with the same card, or use a different one."];
       action = "Sort the payment";
       break;
@@ -101,6 +105,24 @@ export function noticeEmail(kind: NoticeKind, f: NoticeFacts): { subject: string
       lines = [`${cap(block)} has ended, so there are no more cleans to go to on it.`, "There's nothing you need to do. Thank you for the cleans you did."];
       action = "Open your jobs";
       break;
+    case "no_access_fee": {
+      // Said once, plainly, with no blame: the cleaner went, and nobody could let them in.
+      const on = f.cleanDate ? ` on ${formatDay(f.cleanDate)}` : "";
+      subject = "Your cleaner couldn't get in";
+      lines = f.amountPence && f.amountPence > 0
+        ? [
+            `Your cleaner came for your clean${on} but couldn't get in, so the clean didn't go ahead.`,
+            `As our booking terms set out, a no-access fee of ${formatPence(f.amountPence)} is being taken from your saved card. Part of it goes to your cleaner for the journey.`,
+            "If you won't be in next time, leave a key or access details in your account, or cancel in good time, and there's nothing to pay.",
+          ]
+        : [
+            `Your cleaner came for your clean${on} but couldn't get in, so the clean didn't go ahead.`,
+            "There's no charge this time.",
+            "If you won't be in next time, leave a key or access details in your account so your cleaner can let themselves in.",
+          ];
+      action = "Go to your account";
+      break;
+    }
     default:
       subject = "Your cleans have been cancelled";
       lines = ["A payment for one of your cleans is still unpaid, so the rest of your cleans have been cancelled and your cleaner has been released.", "The unpaid clean is still owed. Once it's paid you're welcome to book again."];
@@ -138,13 +160,17 @@ export async function sendDueNotices(limit = 20, fetcher: typeof fetch = fetch):
     if (!n.email) problem = "no_email_address";
     else {
       const cleaner = isCleanerNotice(n.kind);
-      const link = cleaner ? `${site}/work` : n.payment_id && n.kind !== "block_ended_unpaid" ? `${site}/account/pay/${n.payment_id}` : `${site}/account`;
-      // A late-cancellation fee is worded as one: there was no clean to pay for.
-      const kind = n.payment_id && !cleaner ? (await db.from("payments").select("kind").eq("id", n.payment_id).maybeSingle()).data?.kind : null;
+      const link = cleaner ? `${site}/work` : n.payment_id && n.kind !== "block_ended_unpaid" && n.kind !== "no_access_fee" ? `${site}/account/pay/${n.payment_id}` : `${site}/account`;
+      // A late-cancellation fee is worded as one: there was no clean to pay for. So is a
+      // no-access fee (the same kind of payment, on a clean cancelled as no access).
+      const pay = n.payment_id && !cleaner ? (await db.from("payments").select("kind, visit_id").eq("id", n.payment_id).maybeSingle()).data : null;
+      const kind = pay?.kind ?? null;
+      const noAccessFee = kind === "late_cancel" && !!pay?.visit_id
+        && (await db.from("visits").select("cancel_reason").eq("id", pay.visit_id).maybeSingle()).data?.cancel_reason === "no_access";
       const firstName = n.full_name?.trim().split(/\s+/)[0] || null;
       const mail = cleaner
         ? noticeEmail(n.kind, { firstName, amountPence: null, cleanDate: null, link, town: n.town, weekday: n.weekday })
-        : noticeEmail(n.kind, { firstName, amountPence: n.amount_pence, cleanDate: n.clean_date, link, lateCancelFee: kind === "late_cancel" });
+        : noticeEmail(n.kind, { firstName, amountPence: n.amount_pence, cleanDate: n.clean_date, link, lateCancelFee: kind === "late_cancel", noAccessFee });
       try {
         const res = await fetcher("https://api.resend.com/emails", {
           method: "POST",

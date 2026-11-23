@@ -36,19 +36,23 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
   const isFee = p.kind === "late_cancel";
 
   const [{ data: v }, { data: cards }] = await Promise.all([
-    supabase.from("visits").select("scheduled_date, series_id").eq("id", p.visit_id).maybeSingle(),
+    supabase.from("visits").select("scheduled_date, series_id, cancel_reason").eq("id", p.visit_id).maybeSingle(),
     supabase.rpc("my_saved_card"),
   ]);
   const { data: s } = v ? await supabase.from("series").select("status").eq("id", v.series_id).maybeSingle() : { data: null };
   const card = cards?.[0]?.brand && cards[0].last4 ? { brand: cards[0].brand, last4: cards[0].last4 } : null;
   const amount = formatPence(p.amount_pence);
-  const clean = v ? `${isFee ? "Late cancellation of your clean" : "Clean"} on ${formatDay(v.scheduled_date)}` : isFee ? "A late cancellation" : "Your clean";
+  // The same kind of fee, charged when the cleaner came and couldn't get in.
+  const noAccess = isFee && v?.cancel_reason === "no_access";
+  const clean = v
+    ? `${noAccess ? "No-access fee for your clean" : isFee ? "Late cancellation of your clean" : "Clean"} on ${formatDay(v.scheduled_date)}`
+    : noAccess ? "A no-access fee" : isFee ? "A late cancellation" : "Your clean";
 
   const summary = (
     <div className="relative overflow-hidden rounded-xl signal-waves p-8 text-on-navy sm:p-12 lg:col-span-5 lg:self-start">
       <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal">{clean}</p>
       <p className="mt-8 font-display text-[clamp(3rem,2.2rem+3.4vw,5rem)] font-semibold leading-none tabular">{amount}</p>
-      <p className="mt-5 text-lg text-on-navy-2">{isFee ? "The fee for cancelling at short notice. The cleaner who had kept the time for you is paid from it." : "One clean, charged after it was finished. Your cleaner is paid from this."}</p>
+      <p className="mt-5 text-lg text-on-navy-2">{noAccess ? "Your cleaner came and couldn’t get in, so the clean didn’t go ahead. They’re paid for the trip from this fee." : isFee ? "The fee for cancelling at short notice. The cleaner who had kept the time for you is paid from it." : "One clean, charged after it was finished. Your cleaner is paid from this."}</p>
     </div>
   );
 

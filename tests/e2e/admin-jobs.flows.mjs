@@ -299,8 +299,85 @@ export default async function jobsFlows({ page, BASE, check, dir, sql, settle, s
     assert.equal(b.status, "claimed");
   });
 
-  // Leave nothing of these blocks on Alex's calendar for the flows that follow.
-  await asAdmin(`select public.admin_end_block('${BLOCK3}', 'e2e: settle flow finished')`);
+  await check("couldn't get in, the way back: the step names the no-access fee, who pays and what the cleaner gets, then charges it once and tells the customer", async () => {
+    // The clean a colleague marked as not done, above. Settings (seed): Carl's rule, the
+    // late-cancellation fee of £15.00, split as a clean (Alex keeps 75%).
+    const kept = page.getByRole("group", { name: "Marked as not done" }).locator("li").filter({ hasText: "Whitehaven CA28" });
+    const [visit] = await sql(`select v.id from public.visits v join public.visit_settlements s on s.visit_id = v.id
+                                where v.series_id = $1 and v.status = 'no_show'`, [BLOCK3]);
+    await kept.getByRole("button", { name: "Couldn’t get in" }).click();
+    const step = kept.getByRole("group", { name: /^Alex Test couldn’t get in for the Whitehaven CA28 clean of .*\?$/ });
+    assert.match(await step.innerText(),
+      /Charged to Ben Test’s card, now\s+£15\.00\s+Paid to Alex Test for the trip, after the check period\s+£11\.25\s+Ping’s part\s+£3\.75/);
+    await step.getByText(/Ben Test is emailed to say Alex Test couldn’t get in, with a link to their account\./).waitFor();
+    await page.waitForFunction(() => /couldn’t get in for the Whitehaven CA28 clean/.test(document.activeElement?.textContent ?? ""), null, { timeout: 5000 });
+    assert.ok(await step.getByRole("button", { name: "Yes, charge £15.00" }).isDisabled(), "nothing is sent without a reason");
+    await step.getByLabel(/What happened at the door/).fill("Alex knocked and rang for ten minutes; nobody in and no key in the safe.");
+    await shoot(page, dir, "admin-jobs-no-access");
+    await step.getByRole("button", { name: "Yes, charge £15.00" }).click();
+    await kept.waitFor({ state: "detached" });
+    const said = await page.getByRole("region", { name: /^Alerts/ }).getByRole("status").innerText();
+    assert.match(said, /^Whitehaven CA28, .*: marked as couldn’t get in\. Ben Test’s card is charged the £15\.00 no-access fee; Alex Test is paid £11\.25 for the trip after the check period\. Ben Test is emailed to say why\.$/);
+    const [v] = await sql(`select status::text, cancel_reason, cancelled_by, late_cancel_fee_pence from public.visits where id = $1`, [visit.id]);
+    const pays = await sql(`select kind, status::text, amount_pence, application_fee_pence, cleaner_amount_pence from public.payments where visit_id = $1`, [visit.id]);
+    const notes = await sql(`select kind from private.customer_notices where visit_id = $1`, [visit.id]);
+    const recs = await sql(`select outcome from public.visit_settlements where visit_id = $1 order by created_at`, [visit.id]);
+    assert.deepEqual({ v, pays, notes, recs: recs.map((r) => r.outcome) }, {
+      v: { status: "cancelled", cancel_reason: "no_access", cancelled_by: ADMIN, late_cancel_fee_pence: 1500 },
+      pays: [{ kind: "late_cancel", status: "pending", amount_pence: 1500, application_fee_pence: 375, cleaner_amount_pence: 1125 }],
+      notes: [{ kind: "no_access_fee" }],
+      recs: ["not_done", "no_access"],
+    });
+  });
+
+  await check("couldn't get in, decide each time: a choice is needed, a changed fee is caught, and no charge charges nothing", async () => {
+    const [fourth] = await sql(`select id from public.visits where series_id = $1 and status = 'scheduled' order by scheduled_date limit 1`, [BLOCK4]);
+    await sql(`update public.visits set scheduled_date = (now() at time zone 'Europe/London')::date - 4, status = 'no_show' where id = $1`, [fourth.id]);
+    await sql(`insert into public.engine_alerts (kind, series_id, visit_id, message)
+               values ('visit_no_show', $1, $2, 'A booked clean passed without being started. Check with the cleaner and the customer.')`, [BLOCK4, fourth.id]);
+    await sql(`update public.settings set no_access_rule = 'admin_decides'`);
+    try {
+      await page.goto(`${BASE}/admin/jobs`);
+      await settle(page);
+      const item = page.getByRole("region", { name: /^Alerts/ }).locator("li").filter({ hasText: "Clean missed" }).filter({ hasText: "Whitehaven CA28" });
+      // Three answers on a missed clean: under the words on a phone, in the corner on a wide screen.
+      assert.deepEqual(await item.getByRole("button").allInnerTexts(), ["It was done", "It wasn’t done", "Couldn’t get in"]);
+      await shoot(page, dir, "admin-jobs-no-access-answers");
+      await item.getByRole("button", { name: "Couldn’t get in" }).click();
+      await item.getByText("Settings say you decide each time. Does Ben Test pay the no-access fee?").waitFor();
+      await item.getByLabel(/What happened at the door/).fill("Ben was away and forgot to say.");
+      assert.ok(await item.getByRole("button", { name: "Yes, cancel with no charge" }).isDisabled(), "a choice is needed first");
+      await item.getByText("Charge the £15.00 fee").click();
+      await item.getByText(/Paid to Alex Test for the trip, after the check period\s*£11\.25/).waitFor();
+      // The fee changes in Settings while this step is open: nothing is charged, the new
+      // figure is shown, and the choice is asked again.
+      await sql(`update public.settings set late_cancel_fee_pence = 2000`);
+      await item.getByRole("button", { name: "Yes, charge £15.00" }).click();
+      await item.getByText("The cost has changed since this page loaded, so nothing was done. Look again at the new figure, then confirm.").waitFor();
+      await item.getByText("Charge the £20.00 fee").waitFor();
+      const [{ n: none }] = await sql(`select count(*)::int as n from public.payments where visit_id = $1`, [fourth.id]);
+      assert.equal(none, 0);
+      await item.getByText("No charge this time").click();
+      await item.getByText("No charge", { exact: true }).waitFor();
+      // A new choice is a fresh look: the old "cost has changed" line goes.
+      assert.equal(await item.getByText(/The cost has changed since this page loaded/).count(), 0);
+      await shoot(page, dir, "admin-jobs-no-access-decide");
+      await item.getByRole("button", { name: "Yes, cancel with no charge" }).click();
+      await item.waitFor({ state: "detached" });
+      const said = await page.getByRole("region", { name: /^Alerts/ }).getByRole("status").innerText();
+      assert.match(said, /^Whitehaven CA28, .*: marked as couldn’t get in\. Nobody is charged\. Ben Test is emailed to say Alex Test couldn’t get in\.$/);
+      const [v] = await sql(`select status::text, cancel_reason, late_cancel_fee_pence from public.visits where id = $1`, [fourth.id]);
+      const [{ n: charges }] = await sql(`select count(*)::int as n from public.payments where visit_id = $1`, [fourth.id]);
+      const notes = await sql(`select kind, payment_id from private.customer_notices where visit_id = $1`, [fourth.id]);
+      assert.deepEqual({ v, charges, notes }, { v: { status: "cancelled", cancel_reason: "no_access", late_cancel_fee_pence: 0 }, charges: 0, notes: [{ kind: "no_access_fee", payment_id: null }] });
+    } finally {
+      await sql(`update public.settings set no_access_rule = 'late_cancel_fee', late_cancel_fee_pence = 1500`);
+    }
+  });
+
+  // Leave nothing of these blocks on Alex's calendar for the flows that follow. (Settling
+  // a block's last clean ends it, so either may have ended already.)
+  await asAdmin(`select public.admin_end_block('${BLOCK3}', 'e2e: settle flow finished')`).catch(() => {});
   // (The second block only exists if the check above got as far as making it.)
   await asAdmin(`select public.admin_end_block('${BLOCK4}', 'e2e: settle flow finished')`).catch(() => {});
 
