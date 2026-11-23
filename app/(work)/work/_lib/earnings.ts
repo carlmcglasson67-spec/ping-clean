@@ -12,6 +12,8 @@ export type EarningRow = {
   batch: { status: string; arrival_date: string | null } | null;
   /** A clean the customer cancelled at short notice: the cleaner's part of the fee, not a clean's pay. */
   lateCancel?: boolean;
+  /** Of those, one the cleaner went to and couldn't get in (a no-access fee, same payment kind). */
+  noAccess?: boolean;
 };
 
 export type EarningStep = "awaiting_payment" | "checking" | "next_payout" | "sent" | "paid" | "bank_refused" | "held" | "cancelled";

@@ -15,12 +15,13 @@ export type Values = Partial<Record<SettingKey, string>>;
 type Parsed = SettingsRow[SettingKey];
 
 type Unit = "pounds" | "half_hours" | "minutes" | "hours" | "percent" | "months" | "districts" | "commission_type" | "commission_value"
-  | "late_cancel_split";
+  | "late_cancel_split" | "no_access_rule";
 
 /** Fields picked from a short list, with the values the database's check allows ("" = not set). */
 export const CHOICES = {
   commission_type: [["percent", "A percentage"], ["per_hour", "Per hour"], ["", "Not set"]],
   late_cancel_split: [["same_as_clean", "Same split as a clean"], ["fixed_share", "A fixed share"], ["", "Not set"]],
+  no_access_rule: [["no_charge", "No charge"], ["late_cancel_fee", "The late-cancellation fee"], ["admin_decides", "Decide each time"], ["", "Not set"]],
 } as const satisfies Partial<Record<Unit, readonly (readonly [string, string])[]>>;
 type ChoiceUnit = keyof typeof CHOICES;
 export const isChoice = (u: Unit): u is ChoiceUnit => u in CHOICES;
@@ -91,6 +92,8 @@ export const GROUPS: Group[] = [
         explain: "The same split as a normal clean (the cleaner keeps what they'd earn, Ping keeps its commission), or a fixed share you set." },
       { key: "late_cancel_cleaner_share_bps", label: "Fixed share for the cleaner", unit: "percent", suffix: "% of the fee",
         explain: "The part of the late fee that goes to the cleaner who lost the work." },
+      { key: "no_access_rule", label: "When the cleaner can't get in", unit: "no_access_rule",
+        explain: "No key, nobody home. The late-cancellation fee charges the customer that fee, and the cleaner gets their share for the trip. Decide each time lets the office choose, clean by clean." },
       { key: "dispute_window_hours", label: "Hold a cleaner's pay for", unit: "hours", required: true, suffix: "hours after the clean", max: 720,
         explain: "Time for the customer to raise a problem before the cleaner is paid." },
     ],
@@ -202,8 +205,14 @@ export function parseSettings(values: Values): ParseResult {
   if (split !== "" && split !== "same_as_clean" && split !== "fixed_share") errors.late_cancel_split = "Choose the same split as a clean, or a fixed share.";
   set("late_cancel_split", split === "same_as_clean" || split === "fixed_share" ? split : null);
 
+  const noAccess = text("no_access_rule");
+  const NO_ACCESS = ["no_charge", "late_cancel_fee", "admin_decides"] as const;
+  const isNoAccess = (v: string): v is (typeof NO_ACCESS)[number] => (NO_ACCESS as readonly string[]).includes(v);
+  if (noAccess !== "" && !isNoAccess(noAccess)) errors.no_access_rule = "Choose no charge, the late-cancellation fee, or decide each time.";
+  set("no_access_rule", isNoAccess(noAccess) ? noAccess : null);
+
   for (const f of FIELDS) {
-    if (f.unit === "commission_type" || f.unit === "late_cancel_split") continue;
+    if (f.unit === "commission_type" || f.unit === "late_cancel_split" || f.unit === "no_access_rule") continue;
     // A fixed share only means something with a fixed split; otherwise it's cleared (the
     // database refuses a share alongside "same split as a clean").
     if (f.key === "late_cancel_cleaner_share_bps" && data.late_cancel_split !== "fixed_share") {
@@ -273,6 +282,11 @@ export function parseSettings(values: Values): ParseResult {
   if (data.late_cancel_split === "fixed_share" && data.late_cancel_cleaner_share_bps == null && !errors.late_cancel_cleaner_share_bps) {
     errors.late_cancel_cleaner_share_bps = "Type the cleaner's share, or choose the same split as a clean.";
   }
+  // A rule that charges the late-cancellation fee needs that fee, and how it's split.
+  if ((data.no_access_rule === "late_cancel_fee" || data.no_access_rule === "admin_decides") && !errors.no_access_rule
+      && (!data.late_cancel_fee_pence || !data.late_cancel_split) && !errors.late_cancel_fee_pence && !errors.late_cancel_split) {
+    errors.no_access_rule = "This uses the late-cancellation fee: set the fee and the cleaner's share above first, or choose no charge.";
+  }
   // Both halves of the commission, or neither.
   if (data.commission_type && (data.commission_value === null || data.commission_value === undefined) && !errors.commission_value) {
     errors.commission_value = "Type the commission, or clear the type too.";
@@ -313,6 +327,8 @@ export function describe(key: SettingKey, v: Parsed, commissionType: SettingsRow
       return v === "percent" ? "A percentage of the price" : "A fixed amount per hour";
     case "late_cancel_split":
       return v === "same_as_clean" ? "The same split as a clean" : "A fixed share";
+    case "no_access_rule":
+      return v === "no_charge" ? "No charge" : v === "late_cancel_fee" ? "The late-cancellation fee" : "Decide each time";
     case "commission_value":
       return commissionType === "percent" ? `${bpsToText(n)}% of the price` : `${formatPence(n)} per hour cleaned`;
   }

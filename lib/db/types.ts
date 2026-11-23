@@ -1195,8 +1195,12 @@ export type Database = {
         Returns: undefined;
       };
       admin_settle_visit: {
-        Args: { p_visit: string; p_outcome: string; p_reason: string; p_was_not_done?: boolean };
+        Args: { p_visit: string; p_outcome: string; p_reason: string; p_was_not_done?: boolean; p_fee_pence?: number; p_charge?: boolean; p_cleaner_pence?: number };
         Returns: undefined;
+      };
+      admin_no_access_quote: {
+        Args: { p_visit: string };
+        Returns: { rule: "no_charge" | "late_cancel_fee" | "admin_decides"; fee_pence: number; cleaner_pence: number; ping_pence: number }[];
       };
       admin_add_admin: {
         Args: { p_email: string; p_reason: string };
@@ -1355,7 +1359,8 @@ export type Database = {
             | "block_ended_unpaid"
             | "cleaner_block_on_hold"
             | "cleaner_block_back_on"
-            | "cleaner_block_ended";
+            | "cleaner_block_ended"
+            | "no_access_fee";
           email: string | null;
           full_name: string | null;
           payment_id: string | null;

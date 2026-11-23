@@ -26,12 +26,14 @@ describe("Carl's money settings (8 Nov 2026)", () => {
   it("sets his numbers and leaves every undecided one empty", async () => {
     // Read straight from the migration's result, before the seed's test placeholders: the
     // seed overwrites some columns, so check the ones it doesn't touch, and the migration text.
+    // (no_access_rule is Carl's later decision, 23 Nov 2026: the seed sets it, the live row is
+    // set in the admin console.)
     const [s] = await as("superuser", (q) => q.rows(
       `select late_cancel_split, payment_retry_hours, failed_payment_pauses_block, couldnt_do_rule, no_access_rule,
               card_expiry_notice_days, late_cancel_when_unclaimed from public.settings`));
     expect(s).toEqual({
       late_cancel_split: "same_as_clean", payment_retry_hours: [24, 72], failed_payment_pauses_block: true,
-      couldnt_do_rule: null, no_access_rule: null, card_expiry_notice_days: null, late_cancel_when_unclaimed: null,
+      couldnt_do_rule: null, no_access_rule: "late_cancel_fee", card_expiry_notice_days: null, late_cancel_when_unclaimed: null,
     });
     const fs = await import("node:fs");
     const sql = fs.readFileSync(new URL("../../supabase/migrations/20261108100100_money_schema.sql", import.meta.url), "utf8");

@@ -83,8 +83,8 @@ reason. No change to any existing table.
 
 ## Not in this change
 
-- **No access** (cleaner turned up and couldn't get in) and whether that carries a fee:
-  waits for Carl's `no_access_rule`. Until then the office uses "wasn't done".
+- **No access** (cleaner turned up and couldn't get in): now a third answer, "Couldn't get
+  in" (Carl, 23 Nov 2026). See intent/no-access/plan.md.
 - Part-charging a clean that was half done: mark it done, then refund part.
 - Telling the cleaner or customer that the office settled it. Nothing is sent.
 

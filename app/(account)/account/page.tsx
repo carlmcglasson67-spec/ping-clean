@@ -36,10 +36,17 @@ export default async function AccountHome({ searchParams }: { searchParams: Prom
     supabase.from("properties").select("id, address_line1, town, postcode"),
     supabase.from("payments").select("id").eq("status", "succeeded"),
     // Payments waiting on the customer: a failed card, or a bank that wants them to confirm.
-    supabase.from("payments").select("id, amount_pence, status, kind").in("status", ["requires_action", "failed", "failed_final"]).order("created_at"),
+    supabase.from("payments").select("id, amount_pence, status, kind, visit_id").in("status", ["requires_action", "failed", "failed_final"]).order("created_at"),
     supabase.rpc("my_saved_card"),
   ]);
 
+  // An unpaid fee is worded for what it was: a late cancellation, or the cleaner couldn't get in.
+  const feeVisits = (unpaid.data ?? []).filter((u) => u.kind === "late_cancel").map((u) => u.visit_id);
+  const noAccess = new Set(
+    feeVisits.length
+      ? ((await supabase.from("visits").select("id, cancel_reason").in("id", feeVisits)).data ?? []).filter((v) => v.cancel_reason === "no_access").map((v) => v.id)
+      : [],
+  );
   const failed = series.error || visits.error || properties.error || payments.error;
   const propertyById = new Map((properties.data ?? []).map((p) => [p.id, p]));
   const active = series.data ?? [];
@@ -93,7 +100,7 @@ export default async function AccountHome({ searchParams }: { searchParams: Prom
               {u.status === "requires_action" ? "Your bank needs you to confirm a payment." : "A payment didn’t go through."}
             </p>
             <p className="text-lg text-navy-2">
-              {formatPence(u.amount_pence)} {u.kind === "late_cancel" ? "for a clean cancelled at short notice." : "for a finished clean."}{" "}
+              {formatPence(u.amount_pence)}{noAccess.has(u.visit_id) ? ", the no-access fee from when your cleaner couldn’t get in." : u.kind === "late_cancel" ? " for a clean cancelled at short notice." : " for a finished clean."}{" "}
               {u.status === "failed_final" ? "Sort it to keep your cleans going." : "It takes a minute to sort."}
             </p>
           </div>

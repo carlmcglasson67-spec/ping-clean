@@ -82,7 +82,7 @@ export function SettingsForm({ current, initial, lastChanged }: { current: Setti
         }}
       >
         {GROUPS.map((g) => (
-          <Card key={g.id} className="grid gap-6">
+          <Card key={g.id} id={g.id} className="grid scroll-mt-28 gap-6">
             <div className="grid gap-1.5">
               <h2 className="text-xl font-semibold">{g.title}</h2>
               <p className="max-w-2xl text-navy-2">{g.lede}</p>
@@ -258,6 +258,15 @@ function Example({ data, errors }: { data: ReturnType<typeof parseSettings>["dat
           ) : data.late_cancel_fee_pence != null && data.late_cancel_split === "same_as_clean" ? (
             <p className="rounded-md bg-mist/70 px-4 py-3 text-sm text-navy-2">
               A late cancellation costs the customer {formatPence(data.late_cancel_fee_pence)}, split between the cleaner and Ping like a clean.
+            </p>
+          ) : null}
+          {data.no_access_rule ? (
+            <p className="rounded-md bg-mist/70 px-4 py-3 text-sm text-navy-2">
+              {data.no_access_rule === "no_charge"
+                ? "When the cleaner can’t get in, nobody is charged."
+                : data.no_access_rule === "late_cancel_fee"
+                  ? `When the cleaner can’t get in, the customer pays the late-cancellation fee${data.late_cancel_fee_pence ? ` (${formatPence(data.late_cancel_fee_pence)})` : ""} and the cleaner gets their share.`
+                  : "When the cleaner can’t get in, the office chooses each time: the late-cancellation fee, or no charge."}
             </p>
           ) : null}
         </>
