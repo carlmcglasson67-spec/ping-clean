@@ -7,11 +7,11 @@ here as they're done. **The order matters**: each step assumes the ones above it
 
 ## Where things stand
 
-| Thing | State on 21 Nov |
+| Thing | State on 23 Nov |
 | --- | --- |
-| Code on `main` | Everything through #58. Lint, types, unit, database and end-to-end checks pass. |
-| Vercel project `ping-clean` | Deploys `main` to `ping-clean.vercel.app`. **No settings on it yet**, so the launch page says "We're not taking names just now". |
-| Supabase project `ping-clean` | Created 21 Nov (London, ref `cqymfeumtvafrarmumkw`, Postgres 17). **Empty: no tables yet.** |
+| Code on `main` | Everything through #71: every code item on #60 is built and merged. Lint, types, unit, database and end-to-end checks pass. |
+| Vercel project `ping-clean` | Deploys `main` to `ping-clean.vercel.app` (#71 is live there). **No settings on it yet**, so the launch page says "We're not taking names just now". |
+| Supabase project `ping-clean` | Created 21 Nov (London, ref `cqymfeumtvafrarmumkw`, Postgres 17). **Still empty on 23 Nov: no migrations applied, because step 1 hasn't been done.** |
 | `pingclean.co.uk` | DNS is at Hostinger. It points at `185.41.148.1`, not at Vercel. |
 | Stripe | Nothing set up. The app only accepts **test** keys and refuses a live one. |
 | Preview deployments | No database behind them. Public pages only. |
@@ -25,8 +25,11 @@ here as they're done. **The order matters**: each step assumes the ones above it
   costs money per branch). From then on, merging a pull request is what changes the live
   database: every migration it hasn't had is applied, in order. Nobody pastes SQL.
   **Merge nothing else between this step and the next.**
-- [ ] **2. Merge the go-live pull request.** That is the first merge Supabase sees, so it
-  loads every migration. Check afterwards: Supabase → Table Editor shows the tables;
+- [ ] **2. Merge one pull request after connecting.** The go-live pull request (#59) and
+  everything since were merged *before* Supabase was connected, so connecting alone loads
+  nothing: Supabase acts when `main` changes. The first merge after step 1 is what loads
+  every migration, all 45 in order. Keep one small pull request open for this (the one that
+  brought this list up to date was kept for it). Order: step 1, then merge. Check afterwards: Supabase → Table Editor shows the tables;
   Database → Extensions shows `pg_cron` and `pg_net` on; Integrations → Cron shows seven
   `ping-…` jobs. The API roles can't use pg_net (#60): SQL Editor →
   `select has_schema_privilege('anon', 'net', 'usage') or has_schema_privilege('authenticated', 'net', 'usage');`
@@ -54,8 +57,7 @@ pages are live. So the sign-in settings and the email sender come first.
   - Emails → SMTP Settings: Resend's SMTP details from step 4. Supabase's own sender only
     manages a few emails an hour. **Required before real people sign up.**
   - **Leave CAPTCHA protection (Attack Protection) OFF for now.** It goes on at step 9a,
-    once the Turnstile pull request (`main-session/auth-turnstile`) is merged and the site
-    key is live. Turn it on before then and nobody can sign in, including you.
+    once the site key is live (the Turnstile code is merged, #62). Turn it on before then and nobody can sign in, including you.
 - [ ] **6. Cloudflare → Turnstile:** add a widget for `pingclean.co.uk` (free), mode
   Managed. It gives a site key and a secret. The same pair does the interest form and
   sign-in: the secret goes in Vercel (step 7) and in Supabase (step 9a).
@@ -93,8 +95,8 @@ pages are live. So the sign-in settings and the email sender come first.
 - [ ] **9. Redeploy and check.** Vercel → Deployments → Redeploy the latest (settings only
   take effect on a new deployment). Then on `https://pingclean.co.uk/launch`: register as a
   customer and as a cleaner with your own details. Each should end on the thank-you panel.
-- [ ] **9a. Switch on the human check for sign-in** (only once the Turnstile pull request
-  is merged and step 9 shows the check box on `/login`). Supabase → Authentication →
+- [ ] **9a. Switch on the human check for sign-in** (the Turnstile code is merged, #62;
+  wait until step 9 shows the check box on `/login`). Supabase → Authentication →
   Attack Protection → Enable CAPTCHA protection → provider **Turnstile** → paste the secret
   from step 6 → Save. Then sign out and sign in on `pingclean.co.uk`. If you can't, switch
   it straight back off and tell me.
@@ -120,8 +122,8 @@ pages are live. So the sign-in settings and the email sender come first.
     signature or the job secret before it touches the database.
 
   If the Vercel plan allows one rate-limit rule only, use "Everything else" and widen it to
-  cover the signed-in areas at 120. The remaining gap closes when Turnstile goes on the
-  sign-in forms ("Still to build").
+  cover the signed-in areas at 120. Turnstile on the sign-in forms (step 9a) covers the
+  rest.
 
 ## Stage 4: the office signs in
 
@@ -145,7 +147,11 @@ pages are live. So the sign-in settings and the email sender come first.
   price per hour* `£25.00`, shortest clean* `2 hours`, commission*, the two offer windows*
   and the unclaimed alert*, the postcode districts you're open in*: **Carlisle is
   `CA1, CA2, CA3, CA4, CA5, CA6, CA7, CA8`** (Carl, 21 Nov), plus whichever West Cumbria
-  districts you open (`CA14` Workington, `CA28` Whitehaven …). Only listed districts can book. Already set by the
+  districts you open (`CA14` Workington, `CA28` Whitehaven …). Only listed districts can book.
+  Not needed to open booking, but set them before the first clean: the **late-cancellation
+  fee** and the cleaner's share of it (with no fee set, a late cancellation costs nothing),
+  and **No access → "The late-cancellation fee"** (Carl, 23 Nov). The office's "Couldn't
+  get in" answer on a missed clean is refused until both are set. Already set by the
   database: 24 hours' cancellation notice, 72-hour check period before a cleaner is paid,
   payment retries at 24 and 72 hours then the block pauses for up to 7 days.
 
@@ -209,8 +215,8 @@ pages are live. So the sign-in settings and the email sender come first.
 5. **Late-cancellation fee:** the amount. None is set, so a late cancellation costs nothing.
 6. **A clean with "couldn't do" items:** charge in full, or hold for the office to decide.
    Not set, so today it is held.
-7. **No access** (cleaner turns up, can't get in): no charge, the late-cancellation fee, or
-   the office decides each time. Not set, and nothing in the app records it yet.
+7. ~~**No access**~~: decided 23 Nov, the late-cancellation fee, with the cleaner's share
+   for the trip. Built in #71; set it at step 12.
 8. **Rebooking:** how long the previous cleaner gets first refusal (you said 2 hours for
    changeovers; say if that's the number here too).
 9. **Wording** still waiting from #56 and #57: "One rate, set by Ping", "Ping finds your
@@ -219,18 +225,17 @@ pages are live. So the sign-in settings and the email sender come first.
 
 ## Still to build before the public launch (not the pilot)
 
-- ~~Turnstile on sign-up, sign-in and password reset~~: built in `main-session/auth-turnstile`.
-  Merge it, then step 9a.
-- **Someone registering your email before you do.** Supabase keeps the first password
-  given for an address that hasn't been confirmed yet. Step 11 guards the admin accounts
-  against it by hand; customers and cleaners need the same guard built in (a confirmed
-  sign-up should always end with the password that person just chose).
-- ~~A proper way to make an admin~~: admin console → Team (`main-session/make-admin`).
+All of #60's code is built and merged (23 Nov): Turnstile on the sign-in forms (#62),
+nobody claiming someone else's email first (#65), admin console → Team (#67), the job
+failures raising an alert (#66), `pg_net` taken from the API roles (#68), the block alert
+wording (#64), and "Couldn't get in" (#71). What's left:
+
 - **A second Supabase project for previews**, so pull requests can be tried with test
-  logins before merging (#19 explains why previews can never share the live one).
-- **No access** (the cleaner turned up and couldn't get in): recording it, and whether it
-  carries a fee. Waits for decision 7 above. Until then the office marks the clean "wasn't done".
-- The follow-ups in #12, #21 and #44.
+  logins before merging (#19 explains why previews can never share the live one). Carl,
+  23 Nov: not now, look again after the pilot.
+- **The real run** (step 16): the one thing the tests can't stand in for.
+- Decisions on #21 notes 5, 6 and 8 (deleting and suppressing interest contacts, the
+  privacy notice, double opt-in), for Carl and his advisers.
 
 ## Things that will bite if forgotten
 
