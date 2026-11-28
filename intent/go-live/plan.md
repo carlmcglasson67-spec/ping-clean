@@ -7,11 +7,11 @@ here as they're done. **The order matters**: each step assumes the ones above it
 
 ## Where things stand
 
-| Thing | State on 23 Nov |
+| Thing | State on 28 Nov |
 | --- | --- |
 | Code on `main` | Everything through #71: every code item on #60 is built and merged. Lint, types, unit, database and end-to-end checks pass. |
 | Vercel project `ping-clean` | Deploys `main` to `ping-clean.vercel.app` (#71 is live there). **No settings on it yet**, so the launch page says "We're not taking names just now". |
-| Supabase project `ping-clean` | Created 21 Nov (London, ref `cqymfeumtvafrarmumkw`, Postgres 17). **Still empty on 23 Nov: no migrations applied, because step 1 hasn't been done.** |
+| Supabase project `ping-clean` | Created 21 Nov (London, ref `cqymfeumtvafrarmumkw`, Postgres 17). **Still empty on 28 Nov: no migrations applied.** #72 was merged on 24 Nov before step 1 was done, so it loaded nothing. The pull request that adds this line is the one to merge after step 1. |
 | `pingclean.co.uk` | DNS is at Hostinger. It points at `185.41.148.1`, not at Vercel. |
 | Stripe | Nothing set up. The app only accepts **test** keys and refuses a live one. |
 | Preview deployments | No database behind them. Public pages only. |
@@ -28,8 +28,8 @@ here as they're done. **The order matters**: each step assumes the ones above it
 - [ ] **2. Merge one pull request after connecting.** The go-live pull request (#59) and
   everything since were merged *before* Supabase was connected, so connecting alone loads
   nothing: Supabase acts when `main` changes. The first merge after step 1 is what loads
-  every migration, all 45 in order. Keep one small pull request open for this (the one that
-  brought this list up to date was kept for it). Order: step 1, then merge. Check afterwards: Supabase → Table Editor shows the tables;
+  every migration, all 45 in order. Keep one small pull request open for this (`main-session/db-load-trigger`, which only
+  changes this file, is kept for it). Order: step 1, then merge. Check afterwards: Supabase → Table Editor shows the tables;
   Database → Extensions shows `pg_cron` and `pg_net` on; Integrations → Cron shows seven
   `ping-…` jobs. The API roles can't use pg_net (#60): SQL Editor →
   `select has_schema_privilege('anon', 'net', 'usage') or has_schema_privilege('authenticated', 'net', 'usage');`
